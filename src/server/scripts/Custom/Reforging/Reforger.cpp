@@ -46,6 +46,7 @@ static const uint8 stat_type_max = sizeof(statTypes) / sizeof(*statTypes);
 
 static const char* GetStatName(uint32 ItemStatType)
 {
+
     switch (ItemStatType)
     {
         case ITEM_MOD_SPIRIT: return "Spirit"; break;
