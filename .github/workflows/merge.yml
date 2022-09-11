@@ -77,9 +77,9 @@ jobs:
     env:
       BRANCH: ${{ matrix.branch }}
       PCH: ${{ matrix.pch }}
-      SQL_WORLD: ${{ matrix.world }}
-      SQL_CHAR: ${{ matrix.char }}
-      SQL_AUTH: ${{ matrix.auth }}
+      SQL_WORLD: ${{ join( matrix.world, ' ' ) }}
+      SQL_CHAR: ${{ join( matrix.char, ' ' ) }}
+      SQL_AUTH: ${{ join( matrix.auth, ' ' ) }}
 
     runs-on: ubuntu-20.04
     steps:
