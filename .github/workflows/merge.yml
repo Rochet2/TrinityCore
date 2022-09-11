@@ -12,12 +12,29 @@ jobs:
       matrix:
         branch: [master, dressnpcs_master, gomove_master, multivendor_master, objscale_master, playeritemgossip_master]
         pch: [ON, OFF]
+        include:
+          - branch: objscale_master
+            world:
+              - src/server/scripts/Custom/objscale/sql/2016_11_10_00_world_objscale.sql
+        include:
+          - branch: multivendor_master
+            world:
+              - src/server/scripts/Custom/Multivendor/MultivendorExample.sql
+        include:
+          - branch: dressnpcs_master
+            world:
+              - src/server/scripts/Custom/DressNPCs/sql/world.sql
+              - src/server/scripts/Custom/DressNPCs/Example.sql
+              # - src/server/scripts/Custom/DressNPCs/CopyPlayer.sql
+            hotfixes:
+              - src/server/scripts/Custom/DressNPCs/sql/hotfixes.sql
     env:
       BRANCH: ${{ matrix.branch }}
       PCH: ${{ matrix.pch }}
-      SQL_WORLD: ${{ matrix.world }}
-      SQL_CHAR: ${{ matrix.char }}
-      SQL_AUTH: ${{ matrix.auth }}
+      SQL_WORLD: ${{ join( matrix.world, ' ' ) }}
+      SQL_CHAR: ${{ join( matrix.char, ' ' ) }}
+      SQL_AUTH: ${{ join( matrix.auth, ' ' ) }}
+      SQL_HOTFIX: ${{ join( matrix.hotfix, ' ' ) }}
 
     runs-on: ubuntu-20.04
     steps:
@@ -58,6 +75,47 @@ jobs:
         cd bin/check_install/bin
         ./bnetserver --version
         ./worldserver --version
+    - name: Find latest DB release tag
+      id: find_matching_tags
+      uses: Rochet2/find-matching-tags-ghapi@v1.1
+      with:
+        regex: ^TDB\d+\.\d+$
+        sort: desc
+        owner: TrinityCore
+        repo: TrinityCore
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Download latest DB
+      uses: i3h/download-release-asset@6a9870c8f1c561f9e67550d6177c31c2b1c49fef
+      with:
+        owner: TrinityCore
+        repo: TrinityCore
+        tag: ${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}
+        file: /TDB_full.*\.7z/
+        path: bin/check_install/bin
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Set configs
+      run: |
+        cd bin/check_install/etc
+        sed "s/127.0.0.1;3306;trinity;trinity;/localhost;3306;root;;/g" worldserver.conf.dist > worldserver.conf
+    - name: Build DB
+      run: |
+        echo "start mysql"
+        sudo systemctl start mysql.service
+        echo "remove user password"
+        mysql -uroot -proot -e 'SET PASSWORD FOR root@localhost="";'
+        echo "create databases"
+        mysql -uroot -e 'create database test_mysql;'
+        cd bin/check_install/bin
+        7z x ./*.7z
+        ./worldserver --update-databases-only
+
+    - name: Run SQLs
+      if: matrix.pch == 'ON'
+      run: |
+        for f in $SQL_WORLD; do echo "$f"; cat "$f" | mysql -uroot world; done
+        for f in $SQL_CHAR; do echo "$f"; cat "$f" | mysql -uroot characters; done
+        for f in $SQL_AUTH; do echo "$f"; cat "$f" | mysql -uroot auth; done
+        for f in $SQL_HOTFIX; do echo "$f"; cat "$f" | mysql -uroot hotfixes; done
 
     - name: Push changes
       if: matrix.pch == 'ON'
@@ -74,6 +132,25 @@ jobs:
           - branch: transmog_3.3.5
             world:
               - src/server/scripts/Custom/Transmog/sql/world_NPC.sql
+          - branch: transmogvendor_3.3.5
+            world:
+              - src/server/scripts/Custom/TransmogDisplayVendor/sql/world_NPC.sql
+          - branch: transmog_legion_3.3.5
+            world:
+              - src/server/scripts/Custom/Transmog/sql/world_NPC.sql
+              # - src/server/scripts/Custom/Transmog/sql/completed_quest_items_to_transmog_collection.sql
+          - branch: reforging_3.3.5
+            world:
+              - src/server/scripts/Custom/Reforging/sql/world_npc.sql
+          - branch: multivendor_3.3.5
+            world:
+              - src/server/scripts/Custom/Multivendor/MultivendorExample.sql
+          - branch: multitrainer_3.3.5
+            world:
+              - src/server/scripts/Custom/multitrainer/MultitrainerExample.sql
+          - branch: dressnpcs_3.3.5
+            world:
+              - src/server/scripts/Custom/DressNPCs/Example.sql
     env:
       BRANCH: ${{ matrix.branch }}
       PCH: ${{ matrix.pch }}
