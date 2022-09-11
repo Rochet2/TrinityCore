@@ -15,6 +15,9 @@ jobs:
     env:
       BRANCH: ${{ matrix.branch }}
       PCH: ${{ matrix.pch }}
+      SQL_WORLD: ${{ matrix.world }}
+      SQL_CHAR: ${{ matrix.char }}
+      SQL_AUTH: ${{ matrix.auth }}
 
     runs-on: ubuntu-20.04
     steps:
@@ -92,27 +95,6 @@ jobs:
         git submodule update --init --recursive
         git status
 
-    - name: Check database
-      run: |
-        echo "start mysql"
-        sudo systemctl start mysql.service
-        echo "remove user password"
-        mysql -uroot -proot -e 'SET PASSWORD FOR root@localhost="";'
-        echo "create databases"
-        mysql -uroot -e 'create database test_mysql;'
-        mysql -uroot < sql/create/create_mysql.sql
-        mysql -uroot auth < sql/base/auth_database.sql
-        mysql -uroot characters < sql/base/characters_database.sql
-        mysql -uroot world < sql/base/dev/world_database.sql
-        echo "run updates"
-        chmod +x contrib/check_updates.sh
-        ./contrib/check_updates.sh auth 3.3.5 auth localhost
-        ./contrib/check_updates.sh characters 3.3.5 characters localhost
-        cat sql/updates/world/3.3.5/*.sql | mysql -uroot world
-        echo "custom/auth"; cat sql/custom/auth/*.sql | mysql -uroot auth
-        echo "custom/characters"; cat sql/custom/characters/*.sql | mysql -uroot characters
-        echo "custom/world"; cat sql/custom/world/*.sql | mysql -uroot world
-
     - name: Dependencies
       run: |
         sudo apt-get update && sudo apt-get install -yq libboost-all-dev g++-8
@@ -136,6 +118,53 @@ jobs:
         cd bin/check_install/bin
         ./authserver --version
         ./worldserver --version
+    - name: Find latest DB release tag
+      id: find_matching_tags
+      uses: Rochet2/find-matching-tags-ghapi@v1.1
+      with:
+        regex: ^TDB335\.\d+$
+        sort: desc
+        owner: TrinityCore
+        repo: TrinityCore
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Download latest DB
+      uses: i3h/download-release-asset@6a9870c8f1c561f9e67550d6177c31c2b1c49fef
+      with:
+        owner: TrinityCore
+        repo: TrinityCore
+        tag: ${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}
+        file: /TDB_full.*\.7z/
+        path: bin/check_install/bin
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Set configs
+      run: |
+        cd bin/check_install/etc
+        sed "s/127.0.0.1;3306;trinity;trinity;/localhost;3306;root;;/g" worldserver.conf.dist > worldserver.conf
+    - name: Build DB
+      run: |
+        echo "start mysql"
+        sudo systemctl start mysql.service
+        echo "remove user password"
+        mysql -uroot -proot -e 'SET PASSWORD FOR root@localhost="";'
+        echo "create databases"
+        mysql -uroot -e 'create database test_mysql;'
+        cd bin/check_install/bin
+        7z x ./*.7z
+        ./worldserver --update-databases-only
+
+    - name: Run SQLs
+      if: matrix.pch == 'ON'
+      run: |
+        for f in $SQL_WORLD; do echo "$f"; cat "$f" | mysql -uroot world; done
+        for f in $SQL_CHAR; do echo "$f"; cat "$f" | mysql -uroot characters; done
+        for f in $SQL_AUTH; do echo "$f"; cat "$f" | mysql -uroot auth; done
+
+    - name: Run External SQLs
+      if: matrix.pch == 'ON' and matrix.branch == 3.3.5
+      run: |
+        echo 'Trinity_Jukebox' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Jukebox.sql | mysql -uroot world
+        echo 'Trinity_Portal_Master' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Portal_Master.sql | mysql -uroot world
+        echo 'Trinity_Portal_Master_Option' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Portal_Master_Option.sql | mysql -uroot world
 
     - name: Push changes
       if: matrix.pch == 'ON'
