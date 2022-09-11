@@ -16,17 +16,15 @@ jobs:
           - branch: objscale_master
             world:
               - src/server/scripts/Custom/objscale/sql/2016_11_10_00_world_objscale.sql
-        include:
           - branch: multivendor_master
             world:
               - src/server/scripts/Custom/Multivendor/MultivendorExample.sql
-        include:
           - branch: dressnpcs_master
             world:
               - src/server/scripts/Custom/DressNPCs/sql/world.sql
               - src/server/scripts/Custom/DressNPCs/Example.sql
               # - src/server/scripts/Custom/DressNPCs/CopyPlayer.sql
-            hotfixes:
+            hotfix:
               - src/server/scripts/Custom/DressNPCs/sql/hotfixes.sql
     env:
       BRANCH: ${{ matrix.branch }}
