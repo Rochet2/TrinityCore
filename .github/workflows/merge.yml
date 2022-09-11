@@ -160,7 +160,7 @@ jobs:
         for f in $SQL_AUTH; do echo "$f"; cat "$f" | mysql -uroot auth; done
 
     - name: Run External SQLs
-      if: matrix.pch == 'ON' and matrix.branch == 3.3.5
+      if: matrix.pch == 'ON' && matrix.branch == 3.3.5
       run: |
         echo 'Trinity_Jukebox' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Jukebox.sql | mysql -uroot world
         echo 'Trinity_Portal_Master' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Portal_Master.sql | mysql -uroot world
