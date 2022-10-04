@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [master, dressnpcs_master, gomove_master, multivendor_master, objscale_master, playeritemgossip_master]
+        branch: [master, dressnpcs_master, dressnpcs_master_sql_ci, gomove_master, multivendor_master, objscale_master, playeritemgossip_master]
         pch: [ON, OFF]
         include:
           - branch: objscale_master
