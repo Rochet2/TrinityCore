@@ -77,7 +77,7 @@ jobs:
       id: find_matching_tags
       uses: Rochet2/find-matching-tags-ghapi@v1.1
       with:
-        regex: ^TDB\d+\.\d+$
+        regex: ^TDB\d{4,}\.\d+$
         sort: desc
         owner: TrinityCore
         repo: TrinityCore
