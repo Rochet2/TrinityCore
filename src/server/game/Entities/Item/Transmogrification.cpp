@@ -207,13 +207,20 @@ std::string Transmogrification::GetItemName(Item const* item, WorldSession* sess
     return name;
 }
 
-std::string Transmogrification::GetItemLink(Item* item, WorldSession* session)
+std::string Transmogrification::GetItemLink(Item* item, WorldSession* session, bool isGossipMenu)
 {
     TC_LOG_DEBUG("custom.transmog", "Transmogrification::GetItemLink");
 
     const ItemTemplate* temp = item->GetTemplate();
+    uint32 color;
+
+    if (isGossipMenu && UseRetailStyleLinks)
+        color = 0xffff80ff;
+    else
+        color = ItemQualityColors[temp->Quality];
+
     std::ostringstream oss;
-    oss << "|c" << std::hex << ItemQualityColors[temp->Quality] << std::dec <<
+    oss << "|c" << std::hex << color << std::dec <<
         "|Hitem:" << temp->ItemId << ":" <<
         item->GetEnchantmentId(PERM_ENCHANTMENT_SLOT) << ":" <<
         item->GetEnchantmentId(SOCK_ENCHANTMENT_SLOT) << ":" <<
@@ -226,13 +233,20 @@ std::string Transmogrification::GetItemLink(Item* item, WorldSession* session)
     return oss.str();
 }
 
-std::string Transmogrification::GetItemLink(uint32 entry, WorldSession* session)
+std::string Transmogrification::GetItemLink(uint32 entry, WorldSession* session, bool isGossipMenu)
 {
     TC_LOG_DEBUG("custom.transmog", "Transmogrification::GetItemLink");
 
     const ItemTemplate* temp = sObjectMgr->GetItemTemplate(entry);
+    uint32 color;
+
+    if (isGossipMenu && UseRetailStyleLinks)
+        color = 0xffff80ff;
+    else
+        color = ItemQualityColors[temp->Quality];
+
     std::ostringstream oss;
-    oss << "|c" << std::hex << ItemQualityColors[temp->Quality] << std::dec <<
+    oss << "|c" << std::hex << color << std::dec <<
         "|Hitem:" << entry << ":0:0:0:0:0:0:0:0:0|h[" << GetItemName(temp, session) << "]|h|r";
 
     return oss.str();
@@ -475,6 +489,8 @@ void Transmogrification::LoadConfig(bool /*reload*/)
 
     EnableTransmogInfo = sConfigMgr->GetBoolDefault("Transmogrification.EnableTransmogInfo", true);
     TransmogNpcText = uint32(sConfigMgr->GetIntDefault("Transmogrification.TransmogNpcText", 65000));
+
+    UseRetailStyleLinks = sConfigMgr->GetBoolDefault("Transmogrification.UseRetailStyleLinks", false);
 
     std::istringstream issAllowed(sConfigMgr->GetStringDefault("Transmogrification.Allowed", ""));
     std::istringstream issNotAllowed(sConfigMgr->GetStringDefault("Transmogrification.NotAllowed", ""));
