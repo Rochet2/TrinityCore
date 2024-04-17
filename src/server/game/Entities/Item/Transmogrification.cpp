@@ -214,7 +214,7 @@ std::string Transmogrification::GetItemLink(Item* item, WorldSession* session, b
     const ItemTemplate* temp = item->GetTemplate();
     uint32 color;
 
-    if (isGossipMenu && UseRetailStyleLinks)
+    if (!isGossipMenu && UseRetailStyleLinks)
         color = 0xffff80ff;
     else
         color = ItemQualityColors[temp->Quality];
@@ -240,7 +240,7 @@ std::string Transmogrification::GetItemLink(uint32 entry, WorldSession* session,
     const ItemTemplate* temp = sObjectMgr->GetItemTemplate(entry);
     uint32 color;
 
-    if (isGossipMenu && UseRetailStyleLinks)
+    if (!isGossipMenu && UseRetailStyleLinks)
         color = 0xffff80ff;
     else
         color = ItemQualityColors[temp->Quality];
