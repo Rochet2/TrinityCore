@@ -4104,6 +4104,10 @@ PacketSpoof.BanDuration = 86400
 #        Description: A list of item entries that are NOT allowed for transmogrification
 #                     Example: "25 35674 5623"
 #        Default:    ""
+#
+#    Transmogrification.UseRetailStyleLinks
+#        Description: Enables / Disables retail style pink item link in "%s has been added to your appearance collection" message.
+#        Default:    0
 
 Logger.custom.transmog = 3, Console Server
 
@@ -4112,6 +4116,8 @@ Transmogrification.TransmogNpcText = 65000
 
 Transmogrification.Allowed = ""
 Transmogrification.NotAllowed = ""
+
+Transmogrification.UseRetailStyleLinks = 0
 
 #
 #    COPPER COST
