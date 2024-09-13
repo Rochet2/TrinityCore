@@ -41,6 +41,8 @@ enum WarlockSpells
 {
     SPELL_WARLOCK_ABSOLUTE_CORRUPTION               = 196103,
     SPELL_WARLOCK_AGONY                             = 980,
+    SPELL_WARLOCK_CONFLAGRATE_DEBUFF                = 265931,
+    SPELL_WARLOCK_CONFLAGRATE_ENERGIZE              = 245330,
     SPELL_WARLOCK_CORRUPTION_DAMAGE                 = 146739,
     SPELL_WARLOCK_CREATE_HEALTHSTONE                = 23517,
     SPELL_WARLOCK_CURSE_OF_EXHAUSTION               = 334275,
@@ -63,6 +65,7 @@ enum WarlockSpells
     SPELL_WARLOCK_PERPETUAL_UNSTABILITY_DAMAGE      = 459461,
     SPELL_WARLOCK_RAIN_OF_FIRE                      = 5740,
     SPELL_WARLOCK_RAIN_OF_FIRE_DAMAGE               = 42223,
+    SPELL_WARLOCK_ROARING_BLAZE                     = 205184,
     SPELL_WARLOCK_SEED_OF_CORRUPTION_DAMAGE         = 27285,
     SPELL_WARLOCK_SEED_OF_CORRUPTION_GENERIC        = 32865,
     SPELL_WARLOCK_SHADOW_BOLT_ENERGIZE              = 194192,
@@ -245,6 +248,28 @@ class spell_warl_chaotic_energies : public AuraScript
     void Register() override
     {
         OnEffectAbsorb += AuraEffectAbsorbFn(spell_warl_chaotic_energies::HandleAbsorb, EFFECT_2);
+    }
+};
+
+// 17962 - Conflagrate
+class spell_warl_conflagrate : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo ({ SPELL_WARLOCK_CONFLAGRATE_ENERGIZE });
+    }
+
+    void HandleAfterCast(SpellEffIndex /*effIndex*/) const
+    {
+        GetCaster()->CastSpell(GetCaster(), SPELL_WARLOCK_CONFLAGRATE_ENERGIZE, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_warl_conflagrate::HandleAfterCast, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
     }
 };
 
@@ -711,6 +736,33 @@ class spell_warl_random_sayaad : public SpellScript
     void Register() override
     {
         OnEffectHit += SpellEffectFn(spell_warl_random_sayaad::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// Called by 17962 - Conflagrate
+class spell_warl_roaring_blaze : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo ({ SPELL_WARLOCK_ROARING_BLAZE, SPELL_WARLOCK_CONFLAGRATE_DEBUFF });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_WARLOCK_ROARING_BLAZE);
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/) const
+    {
+        GetCaster()->CastSpell(GetHitUnit(), SPELL_WARLOCK_CONFLAGRATE_DEBUFF, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_warl_roaring_blaze::HandleDummy, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
     }
 };
 
@@ -1346,6 +1398,7 @@ void AddSC_warlock_spell_scripts()
     RegisterSpellScript(spell_warl_chaos_bolt);
     RegisterSpellScript(spell_warl_chaotic_energies);
     RegisterSpellScript(spell_warl_absolute_corruption);
+    RegisterSpellScript(spell_warl_conflagrate);
     RegisterSpellScript(spell_warl_create_healthstone);
     RegisterSpellScript(spell_warl_dark_pact);
     RegisterSpellScript(spell_warl_deaths_embrace);
@@ -1363,6 +1416,7 @@ void AddSC_warlock_spell_scripts()
     RegisterSpellScript(spell_warl_perpetual_unstability);
     RegisterSpellScript(spell_warl_rain_of_fire);
     RegisterSpellScript(spell_warl_random_sayaad);
+    RegisterSpellScript(spell_warl_roaring_blaze);
     RegisterSpellScript(spell_warl_sayaad_precast_disorientation);
     RegisterSpellScript(spell_warl_seduction);
     RegisterSpellScript(spell_warl_seed_of_corruption);
