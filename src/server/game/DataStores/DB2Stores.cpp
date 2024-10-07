@@ -141,6 +141,7 @@ DB2Storage<ExpectedStatEntry>                   sExpectedStatStore("ExpectedStat
 DB2Storage<ExpectedStatModEntry>                sExpectedStatModStore("ExpectedStatMod.db2", &ExpectedStatModLoadInfo::Instance);
 DB2Storage<FactionEntry>                        sFactionStore("Faction.db2", &FactionLoadInfo::Instance);
 DB2Storage<FactionTemplateEntry>                sFactionTemplateStore("FactionTemplate.db2", &FactionTemplateLoadInfo::Instance);
+DB2Storage<FlightCapabilityEntry>               sFlightCapabilityStore("FlightCapability.db2", &FlightCapabilityLoadInfo::Instance);
 DB2Storage<FriendshipRepReactionEntry>          sFriendshipRepReactionStore("FriendshipRepReaction.db2", &FriendshipRepReactionLoadInfo::Instance);
 DB2Storage<FriendshipReputationEntry>           sFriendshipReputationStore("FriendshipReputation.db2", &FriendshipReputationLoadInfo::Instance);
 DB2Storage<GameObjectArtKitEntry>               sGameObjectArtKitStore("GameObjectArtKit.db2", &GameobjectArtKitLoadInfo::Instance);
@@ -753,6 +754,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sExpectedStatModStore);
     LOAD_DB2(sFactionStore);
     LOAD_DB2(sFactionTemplateStore);
+    LOAD_DB2(sFlightCapabilityStore);
     LOAD_DB2(sFriendshipRepReactionStore);
     LOAD_DB2(sFriendshipReputationStore);
     LOAD_DB2(sGameObjectsStore);
@@ -1011,13 +1013,14 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     }
 
     // Check loaded DB2 files proper version
-    if (!sAreaTableStore.LookupEntry(15151) ||               // last area added in 10.2.5 (53007)
-        !sCharTitlesStore.LookupEntry(805) ||                // last char title added in 10.2.5 (53007)
-        !sGemPropertiesStore.LookupEntry(4081) ||            // last gem property added in 10.2.5 (53007)
-        !sItemStore.LookupEntry(215160) ||                   // last item added in 10.2.5 (53007)
-        !sItemExtendedCostStore.LookupEntry(8510) ||         // last item extended cost added in 10.2.5 (53007)
-        !sMapStore.LookupEntry(2708) ||                      // last map added in 10.2.5 (53007)
-        !sSpellNameStore.LookupEntry(438878))                // last spell added in 10.2.5 (53007)
+    if (!sAreaTableStore.LookupEntry(15786) ||               // last area added in 11.0.2 (56647)
+        !sCharTitlesStore.LookupEntry(854) ||                // last char title added in 11.0.2 (56647)
+        !sFlightCapabilityStore.LookupEntry(1) ||            // default flight capability (required)
+        !sGemPropertiesStore.LookupEntry(4251) ||            // last gem property added in 11.0.2 (56647)
+        !sItemStore.LookupEntry(232498) ||                   // last item added in 11.0.2 (56647)
+        !sItemExtendedCostStore.LookupEntry(9369) ||         // last item extended cost added in 11.0.2 (56647)
+        !sMapStore.LookupEntry(2786) ||                      // last map added in 11.0.2 (56647)
+        !sSpellNameStore.LookupEntry(471174))                // last spell added in 11.0.2 (56647)
     {
         TC_LOG_FATAL("misc", "You have _outdated_ DB2 files. Please extract correct versions from current using client.");
         return 0;
