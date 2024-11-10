@@ -43,7 +43,7 @@
 #include "PhasingHandler.h"
 #include "Player.h"
 #include "RaceMask.h"
-#include "Realm.h"
+#include "RealmList.h"
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
@@ -1014,7 +1014,11 @@ bool ConditionMgr::IsObjectMeetToConditionList(ConditionSourceInfo& sourceInfo, 
                 auto ref = ConditionStore[CONDITION_SOURCE_TYPE_REFERENCE_CONDITION].find({ condition.ReferenceId, 0, 0 });
                 if (ref != ConditionStore[CONDITION_SOURCE_TYPE_REFERENCE_CONDITION].end())
                 {
-                    if (!IsObjectMeetToConditionList(sourceInfo, *ref->second))
+                    bool condMeets = IsObjectMeetToConditionList(sourceInfo, *ref->second);
+                    if (condition.NegativeCondition)
+                        condMeets = !condMeets;
+
+                    if (!condMeets)
                         itr->second = false;
                 }
                 else
@@ -1337,8 +1341,6 @@ void ConditionMgr::LoadConditions(bool isReload)
                 TC_LOG_ERROR("sql.sql", "Condition {} {} has useless data in value2 ({})!", rowType, iSourceTypeOrReferenceId, cond.ConditionValue2);
             if (cond.ConditionValue3)
                 TC_LOG_ERROR("sql.sql", "Condition {} {} has useless data in value3 ({})!", rowType, iSourceTypeOrReferenceId, cond.ConditionValue3);
-            if (cond.NegativeCondition)
-                TC_LOG_ERROR("sql.sql", "Condition {} {} has useless data in NegativeCondition ({})!", rowType, iSourceTypeOrReferenceId, cond.NegativeCondition);
         }
         else if (!isConditionTypeValid(&cond))//doesn't have reference, validate ConditionType
             continue;
@@ -1710,14 +1712,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `creature_loot_template`, ignoring.", cond->ToString());
                 return false;
             }
-
-            LootTemplate* loot = LootTemplates_Creature.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
-                return false;
-            }
             break;
         }
         case CONDITION_SOURCE_TYPE_DISENCHANT_LOOT_TEMPLATE:
@@ -1725,14 +1719,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
             if (!LootTemplates_Disenchant.HaveLootFor(cond->SourceGroup))
             {
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `disenchant_loot_template`, ignoring.", cond->ToString());
-                return false;
-            }
-
-            LootTemplate* loot = LootTemplates_Disenchant.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
                 return false;
             }
             break;
@@ -1744,14 +1730,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `fishing_loot_template`, ignoring.", cond->ToString());
                 return false;
             }
-
-            LootTemplate* loot = LootTemplates_Fishing.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
-                return false;
-            }
             break;
         }
         case CONDITION_SOURCE_TYPE_GAMEOBJECT_LOOT_TEMPLATE:
@@ -1759,14 +1737,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
             if (!LootTemplates_Gameobject.HaveLootFor(cond->SourceGroup))
             {
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `gameobject_loot_template`, ignoring.", cond->ToString());
-                return false;
-            }
-
-            LootTemplate* loot = LootTemplates_Gameobject.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
                 return false;
             }
             break;
@@ -1778,14 +1748,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `item_loot_template`, ignoring.", cond->ToString());
                 return false;
             }
-
-            LootTemplate* loot = LootTemplates_Item.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
-                return false;
-            }
             break;
         }
         case CONDITION_SOURCE_TYPE_MAIL_LOOT_TEMPLATE:
@@ -1793,14 +1755,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
             if (!LootTemplates_Mail.HaveLootFor(cond->SourceGroup))
             {
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `mail_loot_template`, ignoring.", cond->ToString());
-                return false;
-            }
-
-            LootTemplate* loot = LootTemplates_Mail.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
                 return false;
             }
             break;
@@ -1812,14 +1766,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `milling_loot_template`, ignoring.", cond->ToString());
                 return false;
             }
-
-            LootTemplate* loot = LootTemplates_Milling.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
-                return false;
-            }
             break;
         }
         case CONDITION_SOURCE_TYPE_PICKPOCKETING_LOOT_TEMPLATE:
@@ -1827,14 +1773,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
             if (!LootTemplates_Pickpocketing.HaveLootFor(cond->SourceGroup))
             {
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `pickpocketing_loot_template`, ignoring.", cond->ToString());
-                return false;
-            }
-
-            LootTemplate* loot = LootTemplates_Pickpocketing.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
                 return false;
             }
             break;
@@ -1846,14 +1784,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `prospecting_loot_template`, ignoring.", cond->ToString());
                 return false;
             }
-
-            LootTemplate* loot = LootTemplates_Prospecting.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
-                return false;
-            }
             break;
         }
         case CONDITION_SOURCE_TYPE_REFERENCE_LOOT_TEMPLATE:
@@ -1861,14 +1791,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
             if (!LootTemplates_Reference.HaveLootFor(cond->SourceGroup))
             {
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `reference_loot_template`, ignoring.", cond->ToString());
-                return false;
-            }
-
-            LootTemplate* loot = LootTemplates_Reference.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
                 return false;
             }
             break;
@@ -1880,14 +1802,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `skinning_loot_template`, ignoring.", cond->ToString());
                 return false;
             }
-
-            LootTemplate* loot = LootTemplates_Skinning.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
-                return false;
-            }
             break;
         }
         case CONDITION_SOURCE_TYPE_SPELL_LOOT_TEMPLATE:
@@ -1895,14 +1809,6 @@ bool ConditionMgr::isSourceTypeValid(Condition* cond) const
             if (!LootTemplates_Spell.HaveLootFor(cond->SourceGroup))
             {
                 TC_LOG_ERROR("sql.sql", "{} SourceGroup in `condition` table, does not exist in `spell_loot_template`, ignoring.", cond->ToString());
-                return false;
-            }
-
-            LootTemplate* loot = LootTemplates_Spell.GetLootForConditionFill(cond->SourceGroup);
-            ItemTemplate const* pItemProto = sObjectMgr->GetItemTemplate(cond->SourceEntry);
-            if (!pItemProto && !loot->isReference(cond->SourceEntry))
-            {
-                TC_LOG_ERROR("sql.sql", "{} SourceType, SourceEntry in `condition` table, item does not exist, ignoring.", cond->ToString());
                 return false;
             }
             break;
@@ -2888,7 +2794,7 @@ bool ConditionMgr::IsPlayerMeetingCondition(Player const* player, uint32 conditi
 
 bool ConditionMgr::IsPlayerMeetingCondition(Player const* player, PlayerConditionEntry const* condition)
 {
-    if (Optional<ContentTuningLevels> levels = sDB2Manager.GetContentTuningData(condition->ContentTuningID, player->m_playerData->CtrOptions->ContentTuningConditionMask))
+    if (Optional<ContentTuningLevels> levels = sDB2Manager.GetContentTuningData(condition->ContentTuningID, player->m_playerData->CtrOptions->ConditionalFlags))
     {
         uint8 minLevel = condition->Flags & 0x800 ? levels->MinLevelWithDelta : levels->MinLevel;
         uint8 maxLevel = 0;
@@ -3396,7 +3302,7 @@ static int32(* const WorldStateExpressionFunctions[WSE_FUNCTION_MAX])(Map const*
     // WSE_FUNCTION_REGION
     [](Map const* /*map*/, uint32 /*arg1*/, uint32 /*arg2*/) -> int32
     {
-        return realm.Id.Region;
+        return sRealmList->GetCurrentRealmId().Region;
     },
 
     // WSE_FUNCTION_CLOCK_HOUR
@@ -3444,7 +3350,7 @@ static int32(* const WorldStateExpressionFunctions[WSE_FUNCTION_MAX])(Map const*
     {
         time_t now = GameTime::GetGameTime();
         uint32 raidOrigin = 1135695600;
-        if (Cfg_RegionsEntry const* region = sCfgRegionsStore.LookupEntry(realm.Id.Region))
+        if (Cfg_RegionsEntry const* region = sCfgRegionsStore.LookupEntry(sRealmList->GetCurrentRealmId().Region))
             raidOrigin = region->Raidorigin;
 
         return (now - raidOrigin) / WEEK;

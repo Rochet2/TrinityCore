@@ -575,27 +575,6 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
             }
             break;
         }
-        case SMART_ACTION_CALL_AREAEXPLOREDOREVENTHAPPENS:
-        {
-            for (WorldObject* target : targets)
-            {
-                // Special handling for vehicles
-                if (IsUnit(target))
-                    if (Vehicle* vehicle = target->ToUnit()->GetVehicleKit())
-                        for (std::pair<int8 const, VehicleSeat>& seat : vehicle->Seats)
-                            if (Player* player = ObjectAccessor::GetPlayer(*target, seat.second.Passenger.Guid))
-                                player->AreaExploredOrEventHappens(e.action.quest.quest);
-
-                if (IsPlayer(target))
-                {
-                    target->ToPlayer()->AreaExploredOrEventHappens(e.action.quest.quest);
-
-                    TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction:: SMART_ACTION_CALL_AREAEXPLOREDOREVENTHAPPENS: Player {} credited quest {}",
-                        target->GetGUID().ToString(), e.action.quest.quest);
-                }
-            }
-            break;
-        }
         case SMART_ACTION_CAST:
         {
             if (targets.empty())
@@ -867,27 +846,6 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
                 CreatureTextMgr::SendChatPacket(me, builder, CHAT_MSG_MONSTER_EMOTE);
             }
             TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction:: SMART_ACTION_FLEE_FOR_ASSIST: Creature {} DoFleeToGetAssistance", me->GetGUID().ToString());
-            break;
-        }
-        case SMART_ACTION_CALL_GROUPEVENTHAPPENS:
-        {
-            if (!unit)
-                break;
-
-            // If invoker was pet or charm
-            Player* playerCharmed = unit->GetCharmerOrOwnerPlayerOrPlayerItself();
-            if (playerCharmed && GetBaseObject())
-            {
-                playerCharmed->GroupEventHappens(e.action.quest.quest, GetBaseObject());
-                TC_LOG_DEBUG("scripts.ai", "SmartScript::ProcessAction: SMART_ACTION_CALL_GROUPEVENTHAPPENS: Player {}, group credit for quest {}",
-                    unit->GetGUID().ToString(), e.action.quest.quest);
-            }
-
-            // Special handling for vehicles
-            if (Vehicle* vehicle = unit->GetVehicleKit())
-                for (std::pair<int8 const, VehicleSeat>& seat : vehicle->Seats)
-                    if (Player* passenger = ObjectAccessor::GetPlayer(*unit, seat.second.Passenger.Guid))
-                        passenger->GroupEventHappens(e.action.quest.quest, GetBaseObject());
             break;
         }
         case SMART_ACTION_COMBAT_STOP:
@@ -2637,6 +2595,49 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
 
             break;
         }
+        case SMART_ACTION_COMPLETE_QUEST:
+        {
+            uint32 questId = e.action.quest.quest;
+            Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+            if (!quest)
+                break;
+
+            for (WorldObject* target : targets)
+            {
+                Player* player = Object::ToPlayer(target);
+                if (!player)
+                    continue;
+
+                QuestStatus questStatus = player->GetQuestStatus(questId);
+                if (questStatus == QUEST_STATUS_REWARDED)
+                    continue;
+
+                if (quest->HasFlag(QUEST_FLAGS_COMPLETION_EVENT) || quest->HasFlag(QUEST_FLAGS_COMPLETION_AREA_TRIGGER))
+                {
+                    if (questStatus == QUEST_STATUS_INCOMPLETE)
+                        player->AreaExploredOrEventHappens(questId);
+                }
+                else if (quest->HasFlag(QUEST_FLAGS_TRACKING_EVENT)) // Check if the quest is used as a serverside flag
+                    player->CompleteQuest(questId);
+            }
+
+            break;
+        }
+        case SMART_ACTION_CREDIT_QUEST_OBJECTIVE_TALK_TO:
+        {
+            if (!me)
+                break;
+
+            for (WorldObject* target : targets)
+            {
+                Player* player = Object::ToPlayer(target);
+                if (!player)
+                    continue;
+
+                player->TalkedToCreature(me->GetEntry(), me->GetGUID());
+            }
+            break;
+        }
         default:
             TC_LOG_ERROR("sql.sql", "SmartScript::ProcessAction: Entry {} SourceType {}, Event {}, Unhandled Action type {}", e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType());
             break;
@@ -3249,17 +3250,19 @@ void SmartScript::ProcessEvent(SmartScriptHolder& e, Unit* unit, uint32 var0, ui
         case SMART_EVENT_DEATH:
         case SMART_EVENT_EVADE:
         case SMART_EVENT_REACHED_HOME:
+        case SMART_EVENT_RESET:
         case SMART_EVENT_CORPSE_REMOVED:
         case SMART_EVENT_AI_INIT:
         case SMART_EVENT_TRANSPORT_ADDPLAYER:
         case SMART_EVENT_TRANSPORT_REMOVE_PLAYER:
+        case SMART_EVENT_AREATRIGGER_ENTER:
         case SMART_EVENT_JUST_SUMMONED:
-        case SMART_EVENT_RESET:
         case SMART_EVENT_JUST_CREATED:
         case SMART_EVENT_FOLLOW_COMPLETED:
         case SMART_EVENT_ON_SPELLCLICK:
         case SMART_EVENT_ON_DESPAWN:
         case SMART_EVENT_SEND_EVENT_TRIGGER:
+        case SMART_EVENT_AREATRIGGER_EXIT:
             ProcessAction(e, unit, var0, var1, bvar, spell, gob);
             break;
         case SMART_EVENT_GOSSIP_HELLO:
@@ -3464,13 +3467,6 @@ void SmartScript::ProcessEvent(SmartScriptHolder& e, Unit* unit, uint32 var0, ui
         case SMART_EVENT_TRANSPORT_ADDCREATURE:
         {
             if (e.event.transportAddCreature.creature && var0 != e.event.transportAddCreature.creature)
-                return;
-            ProcessAction(e, unit, var0);
-            break;
-        }
-        case SMART_EVENT_AREATRIGGER_ONTRIGGER:
-        {
-            if (e.event.areatrigger.id && var0 != e.event.areatrigger.id)
                 return;
             ProcessAction(e, unit, var0);
             break;

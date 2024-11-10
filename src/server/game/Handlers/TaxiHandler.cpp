@@ -139,7 +139,7 @@ bool WorldSession::SendLearnNewTaxiNode(Creature* unit)
 
     if (GetPlayer()->m_taxi.SetTaximaskNode(curloc))
     {
-        SendPacket(WorldPackets::Taxi::NewTaxiPath().Write());
+        SendPacket(WorldPackets::Taxi::NewTaxiPath(curloc).Write());
 
         WorldPackets::Taxi::TaxiNodeStatus data;
         data.Unit = unit->GetGUID();
@@ -156,7 +156,7 @@ bool WorldSession::SendLearnNewTaxiNode(Creature* unit)
 void WorldSession::SendDiscoverNewTaxiNode(uint32 nodeid)
 {
     if (GetPlayer()->m_taxi.SetTaximaskNode(nodeid))
-        SendPacket(WorldPackets::Taxi::NewTaxiPath().Write());
+        SendPacket(WorldPackets::Taxi::NewTaxiPath(nodeid).Write());
 }
 
 void WorldSession::HandleActivateTaxiOpcode(WorldPackets::Taxi::ActivateTaxi& activateTaxi)
