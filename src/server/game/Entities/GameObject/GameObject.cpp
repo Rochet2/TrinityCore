@@ -701,38 +701,56 @@ public:
         HandleUnitEnterExit(targetList);
     }
 
-    float CalculatePointsPerSecond(std::vector<Player*> const& targetList)
+    float CalculatePointsPerSecond(std::vector<Player*> const& targetList) const
     {
-        int32 delta = 0;
+        int32 hordePlayers = 0;
+        int32 alliancePlayers = 0;
 
-        for (Player* player : targetList)
+        for (Player const* player : targetList)
         {
             if (!player->IsOutdoorPvPActive())
                 continue;
 
             if (player->GetTeamId() == TEAM_HORDE)
-                delta--;
+                hordePlayers++;
             else
-                delta++;
+                alliancePlayers++;
         }
 
-        uint32 minTime = _owner.GetGOInfo()->controlZone.minTime;
-        uint32 maxTime = _owner.GetGOInfo()->controlZone.maxTime;
-        uint32 minSuperiority = _owner.GetGOInfo()->controlZone.minSuperiority;
-        uint32 maxSuperiority = _owner.GetGOInfo()->controlZone.maxSuperiority;
+        int8 factionCoefficient = 0; // alliance superiority = 1; horde superiority = -1
 
-        if (static_cast<uint32>(std::abs(delta)) < minSuperiority)
-            return 0;
+        if (alliancePlayers > hordePlayers)
+            factionCoefficient = 1;
+        else if (hordePlayers > alliancePlayers)
+            factionCoefficient = -1;
 
-        float slope = (static_cast<float>(minTime) - maxTime) / (maxSuperiority - minSuperiority);
-        float intercept = maxTime - slope * minSuperiority;
-        float timeNeeded = slope * std::abs(delta) + intercept;
-        float percentageIncrease = 100.0f / timeNeeded;
+        float const timeNeeded = CalculateTimeNeeded(hordePlayers, alliancePlayers);
+        if (timeNeeded == 0.0f)
+            return 0.0f;
 
-        if (delta < 0)
-            percentageIncrease *= -1;
+        return 100.0f / timeNeeded * static_cast<float>(factionCoefficient);
+    }
 
-        return percentageIncrease;
+    float CalculateTimeNeeded(int32 hordePlayers, int32 alliancePlayers) const
+    {
+        uint32 const uncontestedTime = _owner.GetGOInfo()->controlZone.UncontestedTime;
+        uint32 const delta = std::abs(alliancePlayers - hordePlayers);
+        uint32 const minSuperiority = _owner.GetGOInfo()->controlZone.minSuperiority;
+
+        if (delta < minSuperiority)
+            return 0.0f;
+
+        // return the uncontested time if controlzone is not contested
+        if (uncontestedTime && (hordePlayers == 0 || alliancePlayers == 0))
+            return static_cast<float>(uncontestedTime);
+
+        uint32 const minTime = _owner.GetGOInfo()->controlZone.minTime;
+        uint32 const maxTime = _owner.GetGOInfo()->controlZone.maxTime;
+        uint32 const maxSuperiority = _owner.GetGOInfo()->controlZone.maxSuperiority;
+
+        float const slope = static_cast<float>(minTime - maxTime) / static_cast<float>(std::max<uint32>(maxSuperiority - minSuperiority, 1));
+        float const intercept = static_cast<float>(maxTime) - slope * static_cast<float>(minSuperiority);
+        return slope * static_cast<float>(delta) + intercept;
     }
 
     void HandleUnitEnterExit(std::vector<Player*> const& newTargetList)
@@ -825,6 +843,8 @@ GameObject::GameObject() : WorldObject(false), MapObject(),
 
     m_updateFlag.Stationary = true;
     m_updateFlag.Rotation = true;
+
+    m_entityFragments.Add(WowCS::EntityFragment::Tag_GameObject, false);
 
     m_respawnTime = 0;
     m_respawnDelayTime = 300;
@@ -1084,6 +1104,7 @@ bool GameObject::Create(uint32 entry, Map* map, Position const& pos, QuaternionD
         }
         case GAMEOBJECT_TYPE_TRANSPORT:
         {
+            m_updateFlag.GameObject = true;
             m_goTypeImpl = std::make_unique<GameObjectType::Transport>(*this);
             if (goInfo->transport.startOpen)
                 SetGoState(GO_STATE_TRANSPORT_STOPPED);
@@ -2194,7 +2215,7 @@ uint8 GameObject::GetLevelForTarget(WorldObject const* target) const
     if (GetGoType() == GAMEOBJECT_TYPE_TRAP)
     {
         if (Player const* player = target->ToPlayer())
-            if (Optional<ContentTuningLevels> userLevels = sDB2Manager.GetContentTuningData(GetGOInfo()->ContentTuningId, player->m_playerData->CtrOptions->ContentTuningConditionMask))
+            if (Optional<ContentTuningLevels> userLevels = sDB2Manager.GetContentTuningData(GetGOInfo()->ContentTuningId, player->m_playerData->CtrOptions->ConditionalFlags))
                 return uint8(std::clamp<int16>(player->GetLevel(), userLevels->MinLevel, userLevels->MaxLevel));
 
         if (Unit const* targetUnit = target->ToUnit())
@@ -3115,11 +3136,11 @@ void GameObject::Use(Unit* user)
                 return;
 
             //required lvl checks!
-            if (Optional<ContentTuningLevels> userLevels = sDB2Manager.GetContentTuningData(info->ContentTuningId, player->m_playerData->CtrOptions->ContentTuningConditionMask))
+            if (Optional<ContentTuningLevels> userLevels = sDB2Manager.GetContentTuningData(info->ContentTuningId, player->m_playerData->CtrOptions->ConditionalFlags))
                 if (player->GetLevel() < userLevels->MaxLevel)
                     return;
 
-            if (Optional<ContentTuningLevels> targetLevels = sDB2Manager.GetContentTuningData(info->ContentTuningId, targetPlayer->m_playerData->CtrOptions->ContentTuningConditionMask))
+            if (Optional<ContentTuningLevels> targetLevels = sDB2Manager.GetContentTuningData(info->ContentTuningId, targetPlayer->m_playerData->CtrOptions->ConditionalFlags))
                 if (targetPlayer->GetLevel() < targetLevels->MaxLevel)
                     return;
 
@@ -3143,9 +3164,16 @@ void GameObject::Use(Unit* user)
                 if (player->GetVehicle())
                     return;
 
+                if (HasFlag(GO_FLAG_IN_USE))
+                    return;
+
+                if (!MeetsInteractCondition(player))
+                    return;
+
                 player->RemoveAurasByType(SPELL_AURA_MOD_STEALTH);
                 player->RemoveAurasByType(SPELL_AURA_MOD_INVISIBILITY);
-                return;                                     //we don;t need to delete flag ... it is despawned!
+                spellId = GetGOInfo()->flagStand.pickupSpell;
+                spellCaster = nullptr;
             }
             break;
         }
@@ -3473,8 +3501,21 @@ void GameObject::Use(Unit* user)
         SpellCastResult castResult = CastSpell(user, spellId);
         if (castResult == SPELL_FAILED_SUCCESS)
         {
-            if (GetGoType() == GAMEOBJECT_TYPE_NEW_FLAG)
-                HandleCustomTypeCommand(GameObjectType::SetNewFlagState(FlagState::Taken, user->ToPlayer()));
+            switch (GetGoType())
+            {
+                case GAMEOBJECT_TYPE_NEW_FLAG:
+                    HandleCustomTypeCommand(GameObjectType::SetNewFlagState(FlagState::Taken, user->ToPlayer()));
+                    break;
+                case GAMEOBJECT_TYPE_FLAGSTAND:
+                    SetFlag(GO_FLAG_IN_USE);
+                    if (ZoneScript* zonescript = GetZoneScript())
+                        zonescript->OnFlagTaken(this, Object::ToPlayer(user));
+
+                    Delete();
+                    break;
+                default:
+                    break;
+            }
         }
     }
 }
@@ -3974,8 +4015,8 @@ Loot* GameObject::GetLootForPlayer(Player const* player) const
     if (m_personalLoot.empty())
         return m_loot.get();
 
-    if (std::unique_ptr<Loot> const* loot = Trinity::Containers::MapGetValuePtr(m_personalLoot, player->GetGUID()))
-        return loot->get();
+    if (Loot* loot = Trinity::Containers::MapGetValuePtr(m_personalLoot, player->GetGUID()))
+        return loot;
 
     return nullptr;
 }
@@ -3985,22 +4026,14 @@ GameObject* GameObject::GetLinkedTrap()
     return ObjectAccessor::GetGameObject(*this, m_linkedTrap);
 }
 
-void GameObject::BuildValuesCreate(ByteBuffer* data, Player const* target) const
+void GameObject::BuildValuesCreate(ByteBuffer* data, UF::UpdateFieldFlag flags, Player const* target) const
 {
-    UF::UpdateFieldFlag flags = GetUpdateFieldFlagsFor(target);
-    std::size_t sizePos = data->wpos();
-    *data << uint32(0);
-    *data << uint8(flags);
     m_objectData->WriteCreate(*data, flags, this, target);
     m_gameObjectData->WriteCreate(*data, flags, this, target);
-    data->put<uint32>(sizePos, data->wpos() - sizePos - 4);
 }
 
-void GameObject::BuildValuesUpdate(ByteBuffer* data, Player const* target) const
+void GameObject::BuildValuesUpdate(ByteBuffer* data, UF::UpdateFieldFlag flags, Player const* target) const
 {
-    UF::UpdateFieldFlag flags = GetUpdateFieldFlagsFor(target);
-    std::size_t sizePos = data->wpos();
-    *data << uint32(0);
     *data << uint32(m_values.GetChangedObjectTypeMask());
 
     if (m_values.HasChanged(TYPEID_OBJECT))
@@ -4008,13 +4041,12 @@ void GameObject::BuildValuesUpdate(ByteBuffer* data, Player const* target) const
 
     if (m_values.HasChanged(TYPEID_GAMEOBJECT))
         m_gameObjectData->WriteUpdate(*data, flags, this, target);
-
-    data->put<uint32>(sizePos, data->wpos() - sizePos - 4);
 }
 
 void GameObject::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::Mask const& requestedObjectMask,
     UF::GameObjectData::Mask const& requestedGameObjectMask, Player const* target) const
 {
+    UF::UpdateFieldFlag flags = GetUpdateFieldFlagsFor(target);
     UpdateMask<NUM_CLIENT_OBJECT_TYPES> valuesMask;
     if (requestedObjectMask.IsAnySet())
         valuesMask.Set(TYPEID_OBJECT);
@@ -4025,6 +4057,7 @@ void GameObject::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::Object
     ByteBuffer& buffer = PrepareValuesUpdateBuffer(data);
     std::size_t sizePos = buffer.wpos();
     buffer << uint32(0);
+    BuildEntityFragmentsForValuesUpdateForPlayerWithMask(&buffer, flags);
     buffer << uint32(valuesMask.GetBlock(0));
 
     if (valuesMask[TYPEID_OBJECT])
@@ -4065,20 +4098,7 @@ std::vector<uint32> const* GameObject::GetPauseTimes() const
 
 void GameObject::SetPathProgressForClient(float progress)
 {
-    DoWithSuppressingObjectUpdates([&]()
-    {
-        UF::ObjectData::Base dynflagMask;
-        dynflagMask.MarkChanged(&UF::ObjectData::DynamicFlags);
-        bool marked = (m_objectData->GetChangesMask() & dynflagMask.GetChangesMask()).IsAnySet();
-
-        uint32 dynamicFlags = GetDynamicFlags();
-        dynamicFlags &= 0xFFFF; // remove high bits
-        dynamicFlags |= uint32(progress * 65535.0f) << 16;
-        ReplaceAllDynamicFlags(dynamicFlags);
-
-        if (!marked)
-            const_cast<UF::ObjectData&>(*m_objectData).ClearChanged(&UF::ObjectData::DynamicFlags);
-    });
+    m_transportPathProgress = progress;
 }
 
 void GameObject::GetRespawnPosition(float &x, float &y, float &z, float* ori /* = nullptr*/) const
@@ -4475,6 +4495,18 @@ void GameObject::HandleCustomTypeCommand(GameObjectTypeBase::CustomCommand const
 {
     if (m_goTypeImpl)
         command.Execute(*m_goTypeImpl);
+}
+
+TeamId GameObject::GetControllingTeam() const
+{
+    if (GetGoType() != GAMEOBJECT_TYPE_CONTROL_ZONE)
+        return TEAM_NEUTRAL;
+
+    GameObjectType::ControlZone const* controlZone = dynamic_cast<GameObjectType::ControlZone const*>(m_goTypeImpl.get());
+    if (!controlZone)
+        return TEAM_NEUTRAL;
+
+    return controlZone->GetControllingTeam();
 }
 
 void GameObject::CreateModel()

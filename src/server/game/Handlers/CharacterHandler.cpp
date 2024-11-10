@@ -55,7 +55,7 @@
 #include "PlayerDump.h"
 #include "QueryHolder.h"
 #include "QueryPackets.h"
-#include "Realm.h"
+#include "RealmList.h"
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
 #include "SocialMgr.h"
@@ -392,7 +392,7 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
     WorldPackets::Character::EnumCharactersResult charEnum;
     charEnum.Success = true;
     charEnum.IsDeletedCharacters = static_cast<EnumCharactersQueryHolder const&>(holder).IsDeletedCharacters();
-    charEnum.DisabledClassesMask = sWorld->getIntConfig(CONFIG_CHARACTER_CREATING_DISABLED_CLASSMASK);
+    charEnum.ClassDisableMask = sWorld->getIntConfig(CONFIG_CHARACTER_CREATING_DISABLED_CLASSMASK);
 
     if (!charEnum.IsDeletedCharacters)
         _legitCharacters.clear();
@@ -416,7 +416,7 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
         {
             charEnum.Characters.emplace_back(result->Fetch());
 
-            WorldPackets::Character::EnumCharactersResult::CharacterInfo& charInfo = charEnum.Characters.back();
+            WorldPackets::Character::EnumCharactersResult::CharacterInfoBasic& charInfo = charEnum.Characters.back().Basic;
 
             if (std::vector<UF::ChrCustomizationChoice>* customizationsForChar = Trinity::Containers::MapGetValuePtr(customizations, charInfo.Guid.GetCounter()))
                 charInfo.Customizations = std::move(*customizationsForChar);
@@ -458,8 +458,8 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
     {
         WorldPackets::Character::EnumCharactersResult::RaceUnlock raceUnlock;
         raceUnlock.RaceID = requirement.first;
-        raceUnlock.HasExpansion = GetAccountExpansion() >= requirement.second.Expansion;
-        raceUnlock.HasAchievement = requirement.second.AchievementId != 0
+        raceUnlock.HasUnlockedLicense = GetAccountExpansion() >= requirement.second.Expansion;
+        raceUnlock.HasUnlockedAchievement = requirement.second.AchievementId != 0
             && (sWorld->getBoolConfig(CONFIG_CHARACTER_CREATING_DISABLE_ALLIED_RACE_ACHIEVEMENT_REQUIREMENT)
                 /* || HasAccountAchievement(requirement.second.AchievementId)*/);
         charEnum.RaceUnlockData.push_back(raceUnlock);
@@ -967,15 +967,15 @@ void WorldSession::HandleCharCreateOpcode(WorldPackets::Character::CreateCharact
             LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_REP_REALM_CHARACTERS);
             stmt->setUInt32(0, createInfo->CharCount);
             stmt->setUInt32(1, GetAccountId());
-            stmt->setUInt32(2, realm.Id.Realm);
+            stmt->setUInt32(2, sRealmList->GetCurrentRealmId().Realm);
             trans->Append(stmt);
 
-            LoginDatabase.CommitTransaction(trans);
-
-            AddTransactionCallback(CharacterDatabase.AsyncCommitTransaction(characterTransaction)).AfterComplete([this, newChar = std::move(newChar)](bool success)
+            AddTransactionCallback(CharacterDatabase.AsyncCommitTransaction(characterTransaction)).AfterComplete([this, newChar = std::move(newChar), trans](bool success)
             {
                 if (success)
                 {
+                    LoginDatabase.CommitTransaction(trans);
+
                     TC_LOG_INFO("entities.player.character", "Account: {} (IP: {}) Create Character: {} {}", GetAccountId(), GetRemoteAddress(), newChar->GetName(), newChar->GetGUID().ToString());
                     sScriptMgr->OnPlayerCreate(newChar.get());
                     sCharacterCache->AddCharacterCacheEntry(newChar->GetGUID(), GetAccountId(), newChar->GetName(), newChar->GetNativeGender(), newChar->GetRace(), newChar->GetClass(), newChar->GetLevel(), false);
@@ -1205,6 +1205,8 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
         pCurrChar->SetGuildRank(0);
         pCurrChar->SetGuildLevel(0);
     }
+
+    SendAuctionFavoriteList();
 
     pCurrChar->GetSession()->GetBattlePetMgr()->SendJournalLockStatus();
 
@@ -1471,25 +1473,25 @@ void WorldSession::SendFeatureSystemStatus()
     features.ComplaintStatus = COMPLAINT_ENABLED_WITH_AUTO_IGNORE;
     features.CfgRealmID = 2;
     features.CfgRealmRecID = 0;
-    features.TokenPollTimeSeconds = 300;
+    features.CommercePricePollTimeSeconds = 300;
     features.VoiceEnabled = false;
     features.BrowserEnabled = false; // Has to be false, otherwise client will crash if "Customer Support" is opened
 
     // Enable guilds only.
     // This is required to restore old guild channel behavior for GMs.
     // The new club streams do not support sending messages through the guild channel when you are not in a guild.
-    features.ClubsEnabled = true;
-    features.ClubsBattleNetClubTypeAllowed = false;
-    features.ClubsCharacterClubTypeAllowed = false;
-    features.ClubsPresenceUpdateEnabled = true;
-    features.HiddenUIClubsPresenceUpdateTimer = 60000;
+    features.CommunitiesEnabled = true;
+    features.BnetGroupsEnabled = false;
+    features.CharacterCommunitiesEnabled = false;
+    features.ClubPresenceAllowSubscribeAll = true;
+    features.ClubPresenceUnsubscribeDelay = 60000;
 
     features.EuropaTicketSystemStatus.emplace();
     features.EuropaTicketSystemStatus->ThrottleState.MaxTries = 10;
     features.EuropaTicketSystemStatus->ThrottleState.PerMilliseconds = 60000;
     features.EuropaTicketSystemStatus->ThrottleState.TryCount = 1;
     features.EuropaTicketSystemStatus->ThrottleState.LastResetTimeBeforeNow = 111111;
-    features.TutorialsEnabled = true;
+    features.TutorialEnabled = true;
     features.NPETutorialsEnabled = true;
     /// END OF DUMMY VALUES
 
@@ -1500,9 +1502,9 @@ void WorldSession::SendFeatureSystemStatus()
 
     features.CharUndeleteEnabled = sWorld->getBoolConfig(CONFIG_FEATURE_SYSTEM_CHARACTER_UNDELETE_ENABLED);
     features.BpayStoreEnabled = sWorld->getBoolConfig(CONFIG_FEATURE_SYSTEM_BPAY_STORE_ENABLED);
-    features.IsMuted = !CanSpeak();
+    features.IsChatMuted = !CanSpeak();
 
-    features.TextToSpeechFeatureEnabled = false;
+    features.SpeakForMeAllowed = false;
 
     SendPacket(features.Write());
 }
@@ -1556,11 +1558,6 @@ void WorldSession::HandleSetWatchedFactionOpcode(WorldPackets::Character::SetWat
 void WorldSession::HandleSetFactionInactiveOpcode(WorldPackets::Character::SetFactionInactive& packet)
 {
     _player->GetReputationMgr().SetInactive(packet.Index, packet.State);
-}
-
-void WorldSession::HandleRequestForcedReactionsOpcode(WorldPackets::Reputation::RequestForcedReactions& /*requestForcedReactions*/)
-{
-    _player->GetReputationMgr().SendForceReactions();
 }
 
 void WorldSession::HandleCheckCharacterNameAvailability(WorldPackets::Character::CheckCharacterNameAvailability& checkCharacterNameAvailability)
@@ -2328,13 +2325,18 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
                 case RACE_VULPERA:
                     stmt->setUInt16(1, 2776);
                     break;
-                case LANG_PANDAREN_ALLIANCE:
-                case LANG_PANDAREN_HORDE:
+                case RACE_PANDAREN_NEUTRAL:
+                case RACE_PANDAREN_ALLIANCE:
+                case RACE_PANDAREN_HORDE:
                     stmt->setUInt16(1, 905);
                     break;
                 case RACE_DRACTHYR_ALLIANCE:
                 case RACE_DRACTHYR_HORDE:
                     stmt->setUInt16(1, 138);
+                    break;
+                case RACE_EARTHEN_DWARF_HORDE:
+                case RACE_EARTHEN_DWARF_ALLIANCE:
+                    stmt->setUInt16(1, 140);
                     break;
                 default:
                     TC_LOG_ERROR("entities.player", "Could not find language data for race ({}).", factionChangeInfo->RaceID);

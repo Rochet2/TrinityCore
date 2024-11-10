@@ -566,7 +566,7 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPackets::AreaTrigger::AreaTrigge
     {
         // set resting flag we are in the inn
         if (packet.Entered)
-            player->GetRestMgr().SetRestFlag(REST_FLAG_IN_TAVERN, atEntry->ID);
+            player->GetRestMgr().SetInnTriggerID(atEntry->ID);
         else
             player->GetRestMgr().RemoveRestFlag(REST_FLAG_IN_TAVERN);
 
@@ -706,19 +706,17 @@ void WorldSession::HandleUpdateAccountData(WorldPackets::ClientConfig::UserClien
         return;
     }
 
-    ByteBuffer dest(packet.Size, ByteBuffer::Resize{});
+    std::string dest;
+    dest.resize(packet.Size);
 
     uLongf realSize = packet.Size;
-    if (uncompress(dest.contents(), &realSize, packet.CompressedData.contents(), packet.CompressedData.size()) != Z_OK)
+    if (uncompress(reinterpret_cast<Bytef*>(dest.data()), &realSize, packet.CompressedData.contents(), packet.CompressedData.size()) != Z_OK)
     {
         TC_LOG_ERROR("network", "UAD: Failed to decompress account data");
         return;
     }
 
-    std::string adata;
-    dest >> adata;
-
-    SetAccountData(AccountDataType(packet.DataType), packet.Time, adata);
+    SetAccountData(AccountDataType(packet.DataType), packet.Time, dest);
 }
 
 void WorldSession::HandleRequestAccountData(WorldPackets::ClientConfig::RequestAccountData& request)
