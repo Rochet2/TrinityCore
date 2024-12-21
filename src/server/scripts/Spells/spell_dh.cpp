@@ -58,6 +58,10 @@ enum DemonHunterSpells
     SPELL_DH_CHAOS_STRIKE_OH                       = 199547,
     SPELL_DH_CHAOTIC_TRANSFORMATION                = 388112,
     SPELL_DH_CHARRED_WARBLADES_HEAL                = 213011,
+    SPELL_DH_COLLECTIVE_ANGUISH                    = 390152,
+    SPELL_DH_COLLECTIVE_ANGUISH_EYE_BEAM           = 391057,
+    SPELL_DH_COLLECTIVE_ANGUISH_EYE_BEAM_DAMAGE    = 391058,
+    SPELL_DH_COLLECTIVE_ANGUISH_FEL_DEVASTATION    = 393831,
     SPELL_DH_CONSUME_SOUL_HAVOC                    = 228542,
     SPELL_DH_CONSUME_SOUL_HAVOC_DEMON              = 228556,
     SPELL_DH_CONSUME_SOUL_HAVOC_SHATTERED          = 228540,
@@ -107,6 +111,8 @@ enum DemonHunterSpells
     SPELL_DH_FIRST_BLOOD                           = 206416,
     SPELL_DH_FLAME_CRASH                           = 227322,
     SPELL_DH_FRAILTY                               = 224509,
+    SPELL_DH_FURIOUS_GAZE                          = 343311,
+    SPELL_DH_FURIOUS_GAZE_BUFF                     = 343312,
     SPELL_DH_GLIDE                                 = 131347,
     SPELL_DH_GLIDE_DURATION                        = 197154,
     SPELL_DH_GLIDE_KNOCKBACK                       = 196353,
@@ -281,6 +287,67 @@ class spell_dh_charred_warblades : public AuraScript
 
 private:
     uint32 _healAmount = 0;
+};
+
+// Called by 212084 - Fel Devastation and 198013 - Eye Beam
+class spell_dh_collective_anguish : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DH_COLLECTIVE_ANGUISH, SPELL_DH_FEL_DEVASTATION, SPELL_DH_COLLECTIVE_ANGUISH_EYE_BEAM, SPELL_DH_COLLECTIVE_ANGUISH_FEL_DEVASTATION });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_DH_COLLECTIVE_ANGUISH);
+    }
+
+    void HandleEyeBeam() const
+    {
+        GetCaster()->CastSpell(GetCaster(), SPELL_DH_COLLECTIVE_ANGUISH_EYE_BEAM, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void HandleFelDevastation() const
+    {
+        GetCaster()->CastSpell(GetCaster(), SPELL_DH_COLLECTIVE_ANGUISH_FEL_DEVASTATION, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void Register() override
+    {
+        if (m_scriptSpellId == SPELL_DH_FEL_DEVASTATION)
+            AfterCast += SpellCastFn(spell_dh_collective_anguish::HandleEyeBeam);
+        else
+            AfterCast += SpellCastFn(spell_dh_collective_anguish::HandleFelDevastation);
+    }
+};
+
+// 391057 - Eye Beam
+class spell_dh_collective_anguish_eye_beam : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DH_COLLECTIVE_ANGUISH_EYE_BEAM_DAMAGE });
+    }
+
+    void HandleEffectPeriodic(AuraEffect const* aurEff) const
+    {
+        if (Unit* caster = GetCaster())
+            caster->CastSpell(nullptr, SPELL_DH_COLLECTIVE_ANGUISH_EYE_BEAM_DAMAGE, CastSpellExtraArgsInit{
+                .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+                .TriggeringAura = aurEff
+            });
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_dh_collective_anguish_eye_beam::HandleEffectPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL);
+    }
 };
 
 // Called by 212084 - Fel Devastation
@@ -548,6 +615,37 @@ private:
 
 private:
     ObjectGuid _firstTargetGUID;
+};
+
+// Called by 198013 - Eye Beam
+class spell_dh_furious_gaze : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DH_FURIOUS_GAZE, SPELL_DH_FURIOUS_GAZE_BUFF });
+    }
+
+    bool Load() override
+    {
+        return GetUnitOwner()->HasAura(SPELL_DH_FURIOUS_GAZE);
+    }
+
+    void HandleAfterRemove(AuraEffect const* aurEff, AuraEffectHandleModes /*mode*/) const
+    {
+        if (GetTargetApplication()->GetRemoveMode() != AURA_REMOVE_BY_EXPIRE)
+            return;
+
+        Unit* target = GetTarget();
+        target->CastSpell(target, SPELL_DH_FURIOUS_GAZE_BUFF, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringAura = aurEff
+        });
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(spell_dh_furious_gaze::HandleAfterRemove, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL, AURA_EFFECT_HANDLE_REAL);
+    }
 };
 
 // 188499 - Blade Dance
@@ -867,6 +965,8 @@ void AddSC_demon_hunter_spell_scripts()
     RegisterSpellScript(spell_dh_chaos_strike);
     RegisterSpellScript(spell_dh_chaotic_transformation);
     RegisterSpellScript(spell_dh_charred_warblades);
+    RegisterSpellScript(spell_dh_collective_anguish);
+    RegisterSpellScript(spell_dh_collective_anguish_eye_beam);
     RegisterSpellScript(spell_dh_darkglare_boon);
     RegisterSpellScript(spell_dh_darkness);
     RegisterSpellScript(spell_dh_eye_beam);
@@ -875,6 +975,7 @@ void AddSC_demon_hunter_spell_scripts()
     RegisterSpellScript(spell_dh_felblade);
     RegisterSpellScript(spell_dh_felblade_charge);
     RegisterSpellScript(spell_dh_felblade_cooldown_reset_proc);
+    RegisterSpellScript(spell_dh_furious_gaze);
     RegisterSpellScript(spell_dh_sigil_of_chains);
     RegisterSpellScript(spell_dh_tactical_retreat);
     RegisterSpellScript(spell_dh_vengeful_retreat_damage);
