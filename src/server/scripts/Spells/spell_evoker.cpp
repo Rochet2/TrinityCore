@@ -21,6 +21,8 @@
  * Scriptnames of files in this file should be prefixed with "spell_evo_".
  */
 
+#include "AreaTrigger.h"
+#include "AreaTriggerAI.h"
 #include "Containers.h"
 #include "DB2Stores.h"
 #include "Player.h"
@@ -30,6 +32,7 @@
 #include "SpellHistory.h"
 #include "SpellMgr.h"
 #include "SpellScript.h"
+#include "TaskScheduler.h"
 
 enum EvokerSpells
 {
@@ -48,6 +51,7 @@ enum EvokerSpells
     SPELL_EVOKER_BLESSING_OF_THE_BRONZE_WARLOCK = 381757,
     SPELL_EVOKER_BLESSING_OF_THE_BRONZE_WARRIOR = 381758,
     SPELL_EVOKER_ENERGIZING_FLAME               = 400006,
+    SPELL_EVOKER_FIRESTORM_DAMAGE               = 369374,
     SPELL_EVOKER_FIRE_BREATH_DAMAGE             = 357209,
     SPELL_EVOKER_GLIDE_KNOCKBACK                = 358736,
     SPELL_EVOKER_HOVER                          = 358267,
@@ -56,7 +60,9 @@ enum EvokerSpells
     SPELL_EVOKER_LIVING_FLAME_HEAL              = 361509,
     SPELL_EVOKER_PERMEATING_CHILL_TALENT        = 370897,
     SPELL_EVOKER_PYRE_DAMAGE                    = 357212,
+    SPELL_EVOKER_RUBY_EMBERS                    = 365937,
     SPELL_EVOKER_SCOURING_FLAME                 = 378438,
+    SPELL_EVOKER_SNAPFIRE                       = 370818,
     SPELL_EVOKER_SOAR_RACIAL                    = 369536,
     SPELL_EVOKER_VERDANT_EMBRACE_HEAL           = 361195,
     SPELL_EVOKER_VERDANT_EMBRACE_JUMP           = 373514
@@ -219,6 +225,54 @@ class spell_evo_fire_breath_damage : public SpellScript
     }
 };
 
+// 369372 - Firestorm (Red)
+struct at_evo_firestorm : AreaTriggerAI
+{
+    using AreaTriggerAI::AreaTriggerAI;
+
+    struct extra_create_data
+    {
+        float SnapshotDamageMultipliers = 1.0f;
+    };
+
+    static extra_create_data& GetOrCreateExtraData(Spell* firestorm)
+    {
+        if (firestorm->m_customArg.type() != typeid(extra_create_data))
+            return firestorm->m_customArg.emplace<extra_create_data>();
+
+        return *std::any_cast<extra_create_data>(&firestorm->m_customArg);
+    }
+
+    void OnCreate(Spell const* creatingSpell) override
+    {
+        _damageSpellCustomArg = creatingSpell->m_customArg;
+
+        _scheduler.Schedule(0ms, [this](TaskContext task)
+        {
+            std::chrono::duration<float> period = 2s; // 2s, affected by haste
+            if (Unit* caster = at->GetCaster())
+            {
+                period *= *caster->m_unitData->ModCastingSpeed;
+                caster->CastSpell(at->GetPosition(), SPELL_EVOKER_FIRESTORM_DAMAGE, CastSpellExtraArgsInit{
+                    .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+                    .CustomArg = _damageSpellCustomArg
+                });
+            }
+
+            task.Repeat(duration_cast<Milliseconds>(period));
+        });
+    }
+
+    void OnUpdate(uint32 diff) override
+    {
+        _scheduler.Update(diff);
+    }
+
+private:
+    TaskScheduler _scheduler;
+    std::any _damageSpellCustomArg;
+};
+
 // 358733 - Glide (Racial)
 class spell_evo_glide : public SpellScript
 {
@@ -268,7 +322,7 @@ class spell_evo_living_flame : public SpellScript
     {
         Unit* caster = GetCaster();
         Unit* hitUnit = GetHitUnit();
-        if (caster->IsFriendlyTo(hitUnit))
+        if (caster->IsValidAssistTarget(hitUnit))
             caster->CastSpell(hitUnit, SPELL_EVOKER_LIVING_FLAME_HEAL, true);
         else
             caster->CastSpell(hitUnit, SPELL_EVOKER_LIVING_FLAME_DAMAGE, true);
@@ -277,7 +331,7 @@ class spell_evo_living_flame : public SpellScript
     void HandleLaunchTarget(SpellEffIndex /*effIndex*/)
     {
         Unit* caster = GetCaster();
-        if (caster->IsFriendlyTo(GetHitUnit()))
+        if (caster->IsValidAssistTarget(GetHitUnit()))
             return;
 
         if (AuraEffect* auraEffect = caster->GetAuraEffect(SPELL_EVOKER_ENERGIZING_FLAME, EFFECT_0))
@@ -344,6 +398,35 @@ class spell_evo_pyre : public SpellScript
     }
 };
 
+// 361500 Living Flame (Red)
+// 361509 Living Flame (Red)
+class spell_evo_ruby_embers : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({ SPELL_EVOKER_RUBY_EMBERS })
+            && ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } })
+            && spellInfo->GetEffect(EFFECT_1).IsEffect(SPELL_EFFECT_APPLY_AURA)
+            && spellInfo->GetEffect(EFFECT_1).ApplyAuraPeriod != 0;
+    }
+
+    bool Load() override
+    {
+        return !GetCaster()->HasAura(SPELL_EVOKER_RUBY_EMBERS);
+    }
+
+    static void PreventPeriodic(WorldObject*& target)
+    {
+        target = nullptr;
+    }
+
+    void Register() override
+    {
+        OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_evo_ruby_embers::PreventPeriodic, EFFECT_1,
+            m_scriptSpellId == SPELL_EVOKER_LIVING_FLAME_DAMAGE ? TARGET_UNIT_TARGET_ENEMY : TARGET_UNIT_TARGET_ALLY);
+    }
+};
+
 // 357209 Fire Breath (Red)
 class spell_evo_scouring_flame : public SpellScript
 {
@@ -368,6 +451,44 @@ class spell_evo_scouring_flame : public SpellScript
     {
         OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_evo_scouring_flame::HandleScouringFlame, EFFECT_3, TARGET_UNIT_CONE_CASTER_TO_DEST_ENEMY);
         OnEffectHitTarget += SpellEffectFn(spell_evo_scouring_flame::CalcDispelCount, EFFECT_3, SPELL_EFFECT_DISPEL);
+    }
+};
+
+// Called by 368847 - Firestorm (Red)
+class spell_evo_snapfire : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_EVOKER_SNAPFIRE, EFFECT_1 } });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_EVOKER_SNAPFIRE);
+    }
+
+    void OnPrecast() override
+    {
+        if (AuraEffect const* snapfire = GetCaster()->GetAuraEffect(SPELL_EVOKER_SNAPFIRE, EFFECT_1))
+            if (GetSpell()->m_appliedMods.contains(snapfire->GetBase()))
+                AddPct(at_evo_firestorm::GetOrCreateExtraData(GetSpell()).SnapshotDamageMultipliers, snapfire->GetAmount());
+    }
+
+    void Register() override { }
+};
+
+// Called by 369374 - Firestorm (Red)
+class spell_evo_snapfire_bonus_damage : public SpellScript
+{
+    void CalculateDamageBonus(SpellEffectInfo const& /*spellEffectInfo*/, Unit* /*victim*/, int32& /*damage*/, int32& /*flatMod*/, float& pctMod) const
+    {
+        if (at_evo_firestorm::extra_create_data const* bonus = std::any_cast<at_evo_firestorm::extra_create_data>(&GetSpell()->m_customArg))
+            pctMod *= bonus->SnapshotDamageMultipliers;
+    }
+
+    void Register() override
+    {
+        CalcDamage += SpellCalcDamageFn(spell_evo_snapfire_bonus_damage::CalculateDamageBonus);
     }
 };
 
@@ -430,13 +551,17 @@ void AddSC_evoker_spell_scripts()
     RegisterSpellScript(spell_evo_azure_strike);
     RegisterSpellScript(spell_evo_blessing_of_the_bronze);
     RegisterSpellScript(spell_evo_charged_blast);
+    RegisterAreaTriggerAI(at_evo_firestorm);
     RegisterSpellScript(spell_evo_fire_breath);
     RegisterSpellScript(spell_evo_fire_breath_damage);
     RegisterSpellScript(spell_evo_glide);
     RegisterSpellScript(spell_evo_living_flame);
     RegisterSpellScript(spell_evo_permeating_chill);
     RegisterSpellScript(spell_evo_pyre);
+    RegisterSpellScript(spell_evo_ruby_embers);
     RegisterSpellScript(spell_evo_scouring_flame);
+    RegisterSpellScript(spell_evo_snapfire);
+    RegisterSpellScript(spell_evo_snapfire_bonus_damage);
     RegisterSpellScript(spell_evo_verdant_embrace);
     RegisterSpellScript(spell_evo_verdant_embrace_trigger_heal);
 }
