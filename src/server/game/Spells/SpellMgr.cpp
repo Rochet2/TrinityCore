@@ -4968,6 +4968,27 @@ void SpellMgr::LoadSpellInfoCorrections()
         spellInfo->AttributesEx8 &= ~SPELL_ATTR8_ONLY_TARGET_IF_SAME_CREATOR;
     });
 
+    // Ritual
+    // Spirit of Gold
+    // Summon Spirit of Gold
+    ApplySpellFix({
+        258388,
+        259205,
+        259209
+    }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_0, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TargetA = SpellImplicitTargetInfo(TARGET_DEST_DEST);
+        });
+    });
+
+    // Tainted Blood
+    ApplySpellFix({ 255592 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->AttributesEx2 |= SPELL_ATTR2_IGNORE_LINE_OF_SIGHT;
+    });
+
     // ENDOF ATAL DAZAR SPELLS
     //
 
@@ -5260,6 +5281,12 @@ void SpellMgr::LoadSpellInfoTargetCaps()
     ApplySpellFix({ 390137 }, [](SpellInfo* spellInfo)
     {
         spellInfo->_LoadSqrtTargetLimit(5, 0, 389693, EFFECT_1, {}, {});
+    });
+
+    // Divine Storm
+    ApplySpellFix({ 53385 }, [](SpellInfo* spellInfo)
+    {
+        spellInfo->_LoadSqrtTargetLimit(5, 0, {}, EFFECT_1, {}, {});
     });
 
     TC_LOG_INFO("server.loading", ">> Loaded SpellInfo target caps in {} ms", GetMSTimeDiffToNow(oldMSTime));
