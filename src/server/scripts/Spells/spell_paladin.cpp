@@ -95,7 +95,7 @@ enum PaladinSpells
     SPELL_PALADIN_HOLY_SHOCK_HEALING             = 25914,
     SPELL_PALADIN_HOLY_LIGHT                     = 82326,
     SPELL_PALADIN_INFUSION_OF_LIGHT_ENERGIZE     = 356717,
-    SPELL_PALADIN_IMMUNE_SHIELD_MARKER           = 61988,
+    SPELL_PALADIN_IMMUNE_SHIELD_MARKER           = 61988, // Serverside
     SPELL_PALADIN_ITEM_HEALING_TRANCE            = 37706,
     SPELL_PALADIN_JUDGMENT_GAIN_HOLY_POWER       = 220637,
     SPELL_PALADIN_JUDGMENT_HOLY_R3               = 231644,
@@ -351,32 +351,20 @@ class spell_pal_blessing_of_protection : public SpellScript
         return ValidateSpellInfo(
         {
             SPELL_PALADIN_FORBEARANCE,
-            // uncomment when we have serverside only spells
-            //SPELL_PALADIN_IMMUNE_SHIELD_MARKER
+            SPELL_PALADIN_IMMUNE_SHIELD_MARKER
         }) && spellInfo->ExcludeTargetAuraSpell == SPELL_PALADIN_IMMUNE_SHIELD_MARKER;
     }
 
-    SpellCastResult CheckForbearance()
+    void TriggerForbearance() const
     {
-        Unit* target = GetExplTargetUnit();
-        if (!target || target->HasAura(SPELL_PALADIN_FORBEARANCE))
-            return SPELL_FAILED_TARGET_AURASTATE;
-
-        return SPELL_CAST_OK;
-    }
-
-    void TriggerForbearance()
-    {
-        if (Unit* target = GetHitUnit())
-        {
-            GetCaster()->CastSpell(target, SPELL_PALADIN_FORBEARANCE, true);
-            GetCaster()->CastSpell(target, SPELL_PALADIN_IMMUNE_SHIELD_MARKER, true);
-        }
+        GetCaster()->CastSpell(GetHitUnit(), SPELL_PALADIN_FORBEARANCE, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
     }
 
     void Register() override
     {
-        OnCheckCast += SpellCheckCastFn(spell_pal_blessing_of_protection::CheckForbearance);
         AfterHit += SpellHitFn(spell_pal_blessing_of_protection::TriggerForbearance);
     }
 };
@@ -544,17 +532,8 @@ class spell_pal_divine_shield : public SpellScript
             SPELL_PALADIN_FINAL_STAND,
             SPELL_PALADIN_FINAL_STAND_EFFECT,
             SPELL_PALADIN_FORBEARANCE,
-            // uncomment when we have serverside only spells
-            //SPELL_PALADIN_IMMUNE_SHIELD_MARKER
+            SPELL_PALADIN_IMMUNE_SHIELD_MARKER
         }) && spellInfo->ExcludeCasterAuraSpell == SPELL_PALADIN_IMMUNE_SHIELD_MARKER;
-    }
-
-    SpellCastResult CheckForbearance()
-    {
-        if (GetCaster()->HasAura(SPELL_PALADIN_FORBEARANCE))
-            return SPELL_FAILED_TARGET_AURASTATE;
-
-        return SPELL_CAST_OK;
     }
 
     void HandleFinalStand()
@@ -563,18 +542,18 @@ class spell_pal_divine_shield : public SpellScript
             GetCaster()->CastSpell(nullptr, SPELL_PALADIN_FINAL_STAND_EFFECT, true);
     }
 
-    void TriggerForbearance()
+    void TriggerForbearance() const
     {
-        Unit* caster = GetCaster();
-        caster->CastSpell(caster, SPELL_PALADIN_FORBEARANCE, true);
-        caster->CastSpell(caster, SPELL_PALADIN_IMMUNE_SHIELD_MARKER, true);
+        GetCaster()->CastSpell(GetHitUnit(), SPELL_PALADIN_FORBEARANCE, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
     }
 
     void Register() override
     {
-        OnCheckCast += SpellCheckCastFn(spell_pal_divine_shield::CheckForbearance);
         AfterCast += SpellCastFn(spell_pal_divine_shield::HandleFinalStand);
-        AfterCast += SpellCastFn(spell_pal_divine_shield::TriggerForbearance);
+        AfterHit += SpellHitFn(spell_pal_divine_shield::TriggerForbearance);
     }
 };
 
@@ -1261,39 +1240,25 @@ class spell_pal_item_t6_trinket : public AuraScript
 };
 
 // 633 - Lay on Hands
+// 471195 - Lay on Hands (from 387791 - Empyreal Ward)
 class spell_pal_lay_on_hands : public SpellScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo(
-        {
-            SPELL_PALADIN_FORBEARANCE,
-            // uncomment when we have serverside only spells
-            //SPELL_PALADIN_IMMUNE_SHIELD_MARKER
-        }) && spellInfo->ExcludeTargetAuraSpell == SPELL_PALADIN_IMMUNE_SHIELD_MARKER;
+        return ValidateSpellInfo({ SPELL_PALADIN_FORBEARANCE })
+            && spellInfo->ExcludeTargetAuraSpell == SPELL_PALADIN_IMMUNE_SHIELD_MARKER;
     }
 
-    SpellCastResult CheckForbearance()
+    void TriggerForbearance() const
     {
-        Unit* target = GetExplTargetUnit();
-        if (!target || target->HasAura(SPELL_PALADIN_FORBEARANCE))
-            return SPELL_FAILED_TARGET_AURASTATE;
-
-        return SPELL_CAST_OK;
-    }
-
-    void TriggerForbearance()
-    {
-        if (Unit* target = GetHitUnit())
-        {
-            GetCaster()->CastSpell(target, SPELL_PALADIN_FORBEARANCE, true);
-            GetCaster()->CastSpell(target, SPELL_PALADIN_IMMUNE_SHIELD_MARKER, true);
-        }
+        GetCaster()->CastSpell(GetHitUnit(), SPELL_PALADIN_FORBEARANCE, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
     }
 
     void Register() override
     {
-        OnCheckCast += SpellCheckCastFn(spell_pal_lay_on_hands::CheckForbearance);
         AfterHit += SpellHitFn(spell_pal_lay_on_hands::TriggerForbearance);
     }
 };
