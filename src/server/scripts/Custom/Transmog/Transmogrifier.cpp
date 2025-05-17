@@ -421,7 +421,7 @@ public:
                         switch (std::get<AppearanceType>(v))
                         {
                             case TRANSMOG_TYPE_ITEM:
-                                AddGossipItemFor(player, GOSSIP_ICON_MONEY_BAG, Transmogrification::instance().GetItemIcon(std::get<uint32>(v), 30, 30, -18, 0) + Transmogrification::instance().GetItemLink(std::get<uint32>(v), session), sender, action);
+                                AddGossipItemFor(player, GOSSIP_ICON_MONEY_BAG, Transmogrification::instance().GetItemIcon(std::get<uint32>(v), 30, 30, -18, 0) + Transmogrification::instance().GetItemLink(std::get<uint32>(v), session, true), sender, action);
                                 break;
                             case TRANSMOG_TYPE_ENCHANT:
                             {
@@ -692,7 +692,7 @@ public:
                 {
                     decltype(auto) source = sObjectMgr->GetItemTemplate(appearance);
                     if (source && !Transmogrification::instance().CannotTransmogrifyItemWithItem(player, target, source, true))
-                        actions.emplace_back(appearance, Transmogrification::instance().GetItemLink(source->ItemId, player->GetSession()), Transmogrification::instance().GetItemName(source, player->GetSession()));
+                        actions.emplace_back(appearance, Transmogrification::instance().GetItemLink(source->ItemId, player->GetSession(), true), Transmogrification::instance().GetItemName(source, player->GetSession()));
                 }
             }
             break;
