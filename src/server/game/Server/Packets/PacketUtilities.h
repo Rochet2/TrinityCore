@@ -15,8 +15,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef PacketUtilities_h__
-#define PacketUtilities_h__
+#ifndef TRINITYCORE_PACKET_UTILITIES_H
+#define TRINITYCORE_PACKET_UTILITIES_H
 
 #include "ByteBuffer.h"
 #include "Duration.h"
@@ -153,6 +153,8 @@ namespace WorldPackets
         PacketArrayMaxCapacityException(std::size_t requestedSize, std::size_t sizeLimit);
     };
 
+    [[noreturn]] void OnInvalidArraySize(std::size_t requestedSize, std::size_t sizeLimit);
+
     /**
      * Utility class for automated prevention of loop counter spoofing in client packets
      */
@@ -200,6 +202,8 @@ namespace WorldPackets
 
         Array& operator=(Array&& other) noexcept = delete;
 
+        ~Array() = default;
+
         iterator begin() { return _storage.begin(); }
         const_iterator begin() const { return _storage.begin(); }
 
@@ -218,7 +222,7 @@ namespace WorldPackets
         void resize(size_type newSize)
         {
             if (newSize > max_capacity::value)
-                throw PacketArrayMaxCapacityException(newSize, max_capacity::value);
+                OnInvalidArraySize(newSize, max_capacity::value);
 
             _storage.resize(newSize);
         }
@@ -226,7 +230,7 @@ namespace WorldPackets
         void push_back(value_type const& value)
         {
             if (_storage.size() >= max_capacity::value)
-                throw PacketArrayMaxCapacityException(_storage.size() + 1, max_capacity::value);
+                OnInvalidArraySize(_storage.size() + 1, max_capacity::value);
 
             _storage.push_back(value);
         }
@@ -234,7 +238,7 @@ namespace WorldPackets
         void push_back(value_type&& value)
         {
             if (_storage.size() >= max_capacity::value)
-                throw PacketArrayMaxCapacityException(_storage.size() + 1, max_capacity::value);
+                OnInvalidArraySize(_storage.size() + 1, max_capacity::value);
 
             _storage.push_back(std::forward<value_type>(value));
         }
@@ -518,10 +522,32 @@ namespace WorldPackets
     namespace SizedString
     {
         template<uint32 BitCount, typename Container>
-        inline BitsSizeWriter<BitCount, Container> BitsSize(Container const& value) { return { value }; }
+        struct SizeWriter
+        {
+            Container const& Value;
+
+            friend inline ByteBuffer& operator<<(ByteBuffer& data, SizeWriter const& bits)
+            {
+                data.WriteBits(static_cast<uint32>(bits.Value.length()), BitCount);
+                return data;
+            }
+        };
 
         template<uint32 BitCount, typename Container>
-        inline BitsSizeReaderWriter<BitCount, Container> BitsSize(Container& value) { return { value }; }
+        struct SizeReaderWriter : SizeWriter<BitCount, Container>
+        {
+            friend inline ByteBuffer& operator>>(ByteBuffer& data, SizeReaderWriter const& bits)
+            {
+                const_cast<Container&>(bits.Value).resize(data.ReadBits(BitCount));
+                return data;
+            }
+        };
+
+        template<uint32 BitCount, typename Container>
+        inline SizeWriter<BitCount, Container> BitsSize(Container const& value) { return { value }; }
+
+        template<uint32 BitCount, typename Container>
+        inline SizeReaderWriter<BitCount, Container> BitsSize(Container& value) { return { value }; }
 
         template<typename Container>
         struct DataWriter
@@ -626,4 +652,4 @@ namespace WorldPackets
     }
 }
 
-#endif // PacketUtilities_h__
+#endif // TRINITYCORE_PACKET_UTILITIES_H
