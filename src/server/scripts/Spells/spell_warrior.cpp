@@ -45,12 +45,14 @@ enum WarriorSpells
     SPELL_WARRIOR_CRITICAL_THINKING_ENERGIZE        = 392776,
     SPELL_WARRIOR_EXECUTE                           = 20647,
     SPELL_WARRIOR_ENRAGE                            = 184362,
+    SPELL_WARRIOR_FRENZIED_ENRAGE                   = 383848,
     SPELL_WARRIOR_FUELED_BY_VIOLENCE_HEAL           = 383104,
     SPELL_WARRIOR_GLYPH_OF_THE_BLAZING_TRAIL        = 123779,
     SPELL_WARRIOR_GLYPH_OF_HEROIC_LEAP              = 159708,
     SPELL_WARRIOR_GLYPH_OF_HEROIC_LEAP_BUFF         = 133278,
     SPELL_WARRIOR_HEROIC_LEAP_JUMP                  = 178368,
     SPELL_WARRIOR_IGNORE_PAIN                       = 190456,
+    SPELL_WARRIOR_IMPROVED_RAGING_BLOW              = 383854,
     SPELL_WARRIOR_INVIGORATING_FURY                 = 385174,
     SPELL_WARRIOR_INVIGORATING_FURY_TALENT          = 383468,
     SPELL_WARRIOR_IN_FOR_THE_KILL                   = 248621,
@@ -60,6 +62,7 @@ enum WarriorSpells
     SPELL_WARRIOR_IMPROVED_HEROIC_LEAP              = 157449,
     SPELL_WARRIOR_MORTAL_STRIKE                     = 12294,
     SPELL_WARRIOR_MORTAL_WOUNDS                     = 115804,
+    SPELL_WARRIOR_POWERFUL_ENRAGE                   = 440277,
     SPELL_WARRIOR_RALLYING_CRY                      = 97463,
     SPELL_WARRIOR_RUMBLING_EARTH                    = 275339,
     SPELL_WARRIOR_SHIELD_BLOCK_AURA                 = 132404,
@@ -78,6 +81,7 @@ enum WarriorSpells
     SPELL_WARRIOR_TRAUMA_EFFECT                     = 215537,
     SPELL_WARRIOR_VICTORIOUS                        = 32216,
     SPELL_WARRIOR_VICTORY_RUSH_HEAL                 = 118779,
+    SPELL_WARRIOR_WRATH_AND_FURY                    = 392936
 };
 
 enum WarriorMisc
@@ -336,6 +340,45 @@ class spell_warr_devastator : public AuraScript
     }
 };
 
+// 184361 - Enrage
+class spell_warr_enrage_proc : public AuraScript
+{
+    static bool CheckRampageProc(AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo || !spellInfo->IsAffected(SPELLFAMILY_WARRIOR, { 0x0, 0x0, 0x0, 0x8000000 }))  // Rampage
+            return false;
+
+        return true;
+    }
+
+    static bool CheckBloodthirstProc(AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
+    {
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (!spellInfo || !spellInfo->IsAffected(SPELLFAMILY_WARRIOR, { 0x0, 0x400 }))  // Bloodthirst/Bloodbath
+            return false;
+
+        return roll_chance_i(aurEff->GetAmount());
+    }
+
+    void HandleProc(ProcEventInfo const& eventInfo)
+    {
+        PreventDefaultAction();
+
+        GetTarget()->CastSpell(nullptr, SPELL_WARRIOR_ENRAGE, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = eventInfo.GetProcSpell()
+        });
+    }
+
+    void Register() override
+    {
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_warr_enrage_proc::CheckRampageProc, EFFECT_0, SPELL_AURA_DUMMY);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_warr_enrage_proc::CheckBloodthirstProc, EFFECT_1, SPELL_AURA_DUMMY);
+        OnProc += AuraProcFn(spell_warr_enrage_proc::HandleProc);
+    }
+};
+
 // 260798 - Execute (Arms, Protection)
 class spell_warr_execute_damage : public SpellScript
 {
@@ -348,6 +391,62 @@ class spell_warr_execute_damage : public SpellScript
     void Register() override
     {
         CalcDamage += SpellCalcDamageFn(spell_warr_execute_damage::CalculateExecuteDamage);
+    }
+};
+
+// 383848 - Frenzied Enrage (attached to 184362 - Enrage)
+class spell_warr_frenzied_enrage : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({ SPELL_WARRIOR_FRENZIED_ENRAGE })
+            && ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } })
+            && spellInfo->GetEffect(EFFECT_0).IsAura(SPELL_AURA_MELEE_SLOW)
+            && spellInfo->GetEffect(EFFECT_1).IsAura(SPELL_AURA_MOD_INCREASE_SPEED);
+    }
+
+    bool Load() override
+    {
+        return !GetCaster()->HasAura(SPELL_WARRIOR_FRENZIED_ENRAGE);
+    }
+
+    static void HandleFrenziedEnrage(WorldObject*& target)
+    {
+        target = nullptr;
+    }
+
+    void Register() override
+    {
+        OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_warr_frenzied_enrage::HandleFrenziedEnrage, EFFECT_0, TARGET_UNIT_CASTER);
+        OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_warr_frenzied_enrage::HandleFrenziedEnrage, EFFECT_1, TARGET_UNIT_CASTER);
+    }
+};
+
+// 440277 - Powerful Enrage (attached to 184362 - Enrage)
+class spell_warr_powerful_enrage : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({ SPELL_WARRIOR_POWERFUL_ENRAGE })
+            && ValidateSpellEffect({ { spellInfo->Id, EFFECT_4 } })
+            && spellInfo->GetEffect(EFFECT_3).IsAura(SPELL_AURA_ADD_PCT_MODIFIER) && spellInfo->GetEffect(EFFECT_3).MiscValue == int32(SpellModOp::HealingAndDamage)
+            && spellInfo->GetEffect(EFFECT_4).IsAura(SPELL_AURA_ADD_PCT_MODIFIER) && spellInfo->GetEffect(EFFECT_4).MiscValue == int32(SpellModOp::PeriodicHealingAndDamage);
+    }
+
+    bool Load() override
+    {
+        return !GetCaster()->HasAura(SPELL_WARRIOR_POWERFUL_ENRAGE);
+    }
+
+    static void HandlePowerfulEnrage(WorldObject*& target)
+    {
+        target = nullptr;
+    }
+
+    void Register() override
+    {
+        OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_warr_powerful_enrage::HandlePowerfulEnrage, EFFECT_3, TARGET_UNIT_CASTER);
+        OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_warr_powerful_enrage::HandlePowerfulEnrage, EFFECT_4, TARGET_UNIT_CASTER);
     }
 };
 
@@ -578,6 +677,43 @@ class spell_warr_mortal_strike : public SpellScript
     }
 };
 
+// 383854 - Improved Raging Blow (attached to 85288 - Raging Blow, 335097 - Crushing Blow)
+// 392936 - Wrath and Fury (attached to 85288 - Raging Blow, 335097 - Crushing Blow)
+class spell_warr_raging_blow_cooldown_reset : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_WARRIOR_IMPROVED_RAGING_BLOW })
+            && ValidateSpellEffect({{ SPELL_WARRIOR_WRATH_AND_FURY, EFFECT_0 }});
+    }
+
+    bool Load() override
+    {
+        Unit const* caster = GetCaster();
+        return caster->HasAura(SPELL_WARRIOR_IMPROVED_RAGING_BLOW) || caster->HasAuraEffect(SPELL_WARRIOR_WRATH_AND_FURY, EFFECT_0);
+    }
+
+    void HandleResetCooldown(SpellEffIndex /*effIndex*/) const
+    {
+        // it is currently impossible to have Wrath and Fury without having Improved Raging Blow, but we will check it anyway
+        Unit* caster = GetCaster();
+        int32 value = 0;
+        if (caster->HasAura(SPELL_WARRIOR_IMPROVED_RAGING_BLOW))
+            value = GetEffectValue();
+
+        if (AuraEffect const* auraEffect = caster->GetAuraEffect(SPELL_WARRIOR_WRATH_AND_FURY, EFFECT_0))
+            value += auraEffect->GetAmount();
+
+        if (roll_chance_i(value))
+            caster->GetSpellHistory()->RestoreCharge(GetSpellInfo()->ChargeCategoryId);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_warr_raging_blow_cooldown_reset::HandleResetCooldown, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
 // 97462 - Rallying Cry
 class spell_warr_rallying_cry : public SpellScript
 {
@@ -602,28 +738,6 @@ class spell_warr_rallying_cry : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_warr_rallying_cry::HandleScript, EFFECT_0, SPELL_EFFECT_DUMMY);
-    }
-};
-
-// 184367 - Rampage (triggers enrage)
-class spell_warr_rampage_enrage : public SpellScript
-{
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo({ SPELL_WARRIOR_ENRAGE });
-    }
-
-    void HandleCast() const
-    {
-        GetCaster()->CastSpell(nullptr, SPELL_WARRIOR_ENRAGE, CastSpellExtraArgsInit{
-            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
-            .TriggeringSpell = GetSpell()
-        });
-    }
-
-    void Register() override
-    {
-        OnCast += SpellCastFn(spell_warr_rampage_enrage::HandleCast);
     }
 };
 
@@ -943,7 +1057,9 @@ void AddSC_warrior_spell_scripts()
     RegisterSpellScript(spell_warr_colossus_smash);
     RegisterSpellScript(spell_warr_critical_thinking);
     RegisterSpellScript(spell_warr_devastator);
+    RegisterSpellScript(spell_warr_enrage_proc);
     RegisterSpellScript(spell_warr_execute_damage);
+    RegisterSpellScript(spell_warr_frenzied_enrage);
     RegisterSpellScript(spell_warr_fueled_by_violence);
     RegisterSpellScript(spell_warr_heroic_leap);
     RegisterSpellScript(spell_warr_heroic_leap_jump);
@@ -952,8 +1068,9 @@ void AddSC_warrior_spell_scripts()
     RegisterSpellScript(spell_warr_invigorating_fury);
     RegisterSpellScript(spell_warr_item_t10_prot_4p_bonus);
     RegisterSpellScript(spell_warr_mortal_strike);
+    RegisterSpellScript(spell_warr_powerful_enrage);
+    RegisterSpellScript(spell_warr_raging_blow_cooldown_reset);
     RegisterSpellScript(spell_warr_rallying_cry);
-    RegisterSpellScript(spell_warr_rampage_enrage);
     RegisterSpellScript(spell_warr_rumbling_earth);
     RegisterSpellScript(spell_warr_shield_block);
     RegisterSpellScript(spell_warr_shield_charge);
