@@ -15,28 +15,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "SFMTRand.h"
-#include <algorithm>
-#include <array>
-#include <functional>
-#include <random>
-#include <ctime>
+#ifndef TRINITYCORE_ASYNC_CALLBACK_PROCESSOR_FWD_H
+#define TRINITYCORE_ASYNC_CALLBACK_PROCESSOR_FWD_H
 
-SFMTRand::SFMTRand() noexcept
-{
-    std::random_device dev;
-    if (dev.entropy() > 0)
-    {
-        std::array<uint32, SFMT_N32> seed;
-        std::ranges::generate(seed, std::ref(dev));
+#include <concepts>
 
-        sfmt_init_by_array(&_state, seed.data(), seed.size());
-    }
-    else
-        sfmt_init_gen_rand(&_state, uint32(time(nullptr)));
-}
+template <typename T>
+concept AsyncCallback = requires(T& t) { { InvokeAsyncCallbackIfReady(t) } -> std::convertible_to<bool>; };
 
-uint32 SFMTRand::RandomUInt32() noexcept                            // Output random bits
-{
-    return sfmt_genrand_uint32(&_state);
-}
+template<AsyncCallback T>
+class AsyncCallbackProcessor;
+
+#endif // TRINITYCORE_ASYNC_CALLBACK_PROCESSOR_FWD_H
