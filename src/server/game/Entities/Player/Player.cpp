@@ -6848,6 +6848,7 @@ bool Player::RewardHonor(Unit* victim, uint32 groupsize, int32 honor, HonorGainS
 
         // apply honor multiplier from aura (not stacking-get highest)
         AddPct(honor_f, GetMaxPositiveAuraModifierByMiscMask(SPELL_AURA_MOD_HONOR_GAIN_PCT_FROM_SOURCE, 1 << AsUnderlyingType(source)));
+        AddPct(honor_f, GetMaxPositiveAuraModifier(SPELL_AURA_MOD_HONOR_GAIN_PCT));
         honor_f += _restMgr->GetRestBonusFor(REST_TYPE_HONOR, honor_f);
     }
 
@@ -18185,7 +18186,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     // load the player's map here if it's not already loaded
     if (!map)
         map = sMapMgr->CreateMap(mapId, this);
-    AreaTriggerStruct const* areaTrigger = nullptr;
+    AreaTriggerTeleport const* areaTrigger = nullptr;
     bool check = false;
 
     if (!map)
