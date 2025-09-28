@@ -192,7 +192,7 @@ WorldPacket CreatureTemplate::BuildQueryData(LocaleConstant loc) const
     queryTemp.Allow = true;
 
     queryTemp.Stats.Name = locName;
-    queryTemp.Stats.NameAlt = locTitle;
+    queryTemp.Stats.Title = locTitle;
     queryTemp.Stats.CursorName = IconName;
     queryTemp.Stats.Flags = type_flags;
     queryTemp.Stats.CreatureType = type;
@@ -2735,7 +2735,7 @@ void Creature::UpdateMovementFlags()
     }
 
     if (!isInAir)
-        RemoveUnitMovementFlag(MOVEMENTFLAG_FALLING);
+        SetFall(false);
 
     SetSwim(CanSwim() && IsInWater());
 }
