@@ -195,7 +195,7 @@ public:
             do
             {
                 uint32 lowGUID = (*result)[0].GetUInt32();
-                Item* invItem = player->GetItemByGuid(ObjectGuid(HighGuid::Item, 0, lowGUID));
+                Item* invItem = player->GetItemByGuid(ObjectGuid(HighGuid::Item, lowGUID));
                 if (invItem && invItem->IsEquipped())
                     player->_ApplyItemMods(invItem, invItem->GetSlot(), false);
                 ReforgeData& data = player->reforgeMap[lowGUID];
@@ -423,7 +423,7 @@ public:
                 case RESTORE:
                     // sender = item guidlow
                     {
-                        if (player->GetItemByGuid(ObjectGuid(HighGuid::Item, 0, sender)))
+                        if (player->GetItemByGuid(ObjectGuid(HighGuid::Item, sender)))
                         {
                             if (!player->reforgeMap.empty() && player->reforgeMap.find(sender) != player->reforgeMap.end())
                                 RemoveReforge(player, sender, true);
