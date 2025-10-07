@@ -4098,7 +4098,7 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             {
                 do
                 {
-                    if (Player* playerFriend = ObjectAccessor::FindPlayer(ObjectGuid(HighGuid::Player, 0, (*resultFriends)[0].GetUInt32())))
+                    if (Player* playerFriend = ObjectAccessor::FindPlayer(ObjectGuid(HighGuid::Player, (*resultFriends)[0].GetUInt32())))
                     {
                         playerFriend->GetSocial()->RemoveFromSocialList(playerguid, SOCIAL_FLAG_ALL);
                         sSocialMgr->SendFriendStatus(playerFriend, FRIEND_REMOVED, playerguid);

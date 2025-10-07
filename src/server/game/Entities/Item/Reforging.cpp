@@ -56,7 +56,7 @@ void RemoveReforge(Player* player, uint32 itemguid, bool update)
         player->reforgeMap.find(itemguid) == player->reforgeMap.end())
         return;
 
-    Item* invItem = update ? player->GetItemByGuid(ObjectGuid(HighGuid::Item, 0, itemguid)) : NULL;
+    Item* invItem = update ? player->GetItemByGuid(ObjectGuid(HighGuid::Item, itemguid)) : NULL;
     if (invItem && invItem->IsEquipped())
         player->_ApplyItemMods(invItem, invItem->GetSlot(), false);
     player->reforgeMap.erase(itemguid);
