@@ -18,8 +18,9 @@
 #ifndef _INTERMEDIATE_VALUES_H
 #define _INTERMEDIATE_VALUES_H
 
-#include "Recast.h"
 #include "TerrainBuilder.h"
+#include <Recast.h>
+#include <utility>
 
 namespace MMAP
 {
@@ -32,19 +33,46 @@ namespace MMAP
         rcPolyMesh* polyMesh;
         rcPolyMeshDetail* polyMeshDetail;
 
-        IntermediateValues() :  heightfield(nullptr), compactHeightfield(nullptr),
-                                contours(nullptr), polyMesh(nullptr), polyMeshDetail(nullptr) {}
+        IntermediateValues() : heightfield(nullptr), compactHeightfield(nullptr),
+                               contours(nullptr), polyMesh(nullptr), polyMeshDetail(nullptr) {}
+
+        IntermediateValues(IntermediateValues const&) = delete;
+
+        IntermediateValues(IntermediateValues&& other) noexcept :
+            heightfield(std::exchange(other.heightfield, nullptr)),
+            compactHeightfield(std::exchange(other.compactHeightfield, nullptr)),
+            contours(std::exchange(other.contours, nullptr)),
+            polyMesh(std::exchange(other.polyMesh, nullptr)),
+            polyMeshDetail(std::exchange(other.polyMeshDetail, nullptr))
+        {
+        }
+
         ~IntermediateValues();
 
-        void writeIV(uint32 mapID, uint32 tileX, uint32 tileY);
+        IntermediateValues& operator=(IntermediateValues const&) = delete;
 
-        void debugWrite(FILE* file, rcHeightfield const* mesh);
-        void debugWrite(FILE* file, rcCompactHeightfield const* chf);
-        void debugWrite(FILE* file, rcContourSet const* cs);
-        void debugWrite(FILE* file, rcPolyMesh const* mesh);
-        void debugWrite(FILE* file, rcPolyMeshDetail const* mesh);
+        IntermediateValues& operator=(IntermediateValues&& other) noexcept
+        {
+            if (this != std::addressof(other))
+            {
+                heightfield = std::exchange(other.heightfield, nullptr);
+                compactHeightfield = std::exchange(other.compactHeightfield, nullptr);
+                contours = std::exchange(other.contours, nullptr);
+                polyMesh = std::exchange(other.polyMesh, nullptr);
+                polyMeshDetail = std::exchange(other.polyMeshDetail, nullptr);
+            }
+            return *this;
+        }
 
-        void generateObjFile(uint32 mapID, uint32 tileX, uint32 tileY, MeshData const& meshData);
+        void writeIV(boost::filesystem::path const& outputDirectory, uint32 mapID, uint32 tileX, uint32 tileY);
+
+        static void debugWrite(FILE* file, rcHeightfield const* mesh);
+        static void debugWrite(FILE* file, rcCompactHeightfield const* chf);
+        static void debugWrite(FILE* file, rcContourSet const* cs);
+        static void debugWrite(FILE* file, rcPolyMesh const* mesh);
+        static void debugWrite(FILE* file, rcPolyMeshDetail const* mesh);
+
+        void generateObjFile(boost::filesystem::path const& outputDirectory, uint32 mapID, uint32 tileX, uint32 tileY, MeshData const& meshData);
     };
 }
 #endif
