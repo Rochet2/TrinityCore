@@ -197,11 +197,11 @@ namespace MMAP
             OffMeshData offMesh;
             int32 scanned = sscanf(buf, "%u %u,%u (%f %f %f) (%f %f %f) %f %hhu %hu", &offMesh.MapId, &offMesh.TileX, &offMesh.TileY,
                 &offMesh.From[0], &offMesh.From[1], &offMesh.From[2], &offMesh.To[0], &offMesh.To[1], &offMesh.To[2],
-                &offMesh.Radius, &offMesh.AreaId, &offMesh.Flags);
+                &offMesh.Radius, &offMesh.AreaId, reinterpret_cast<std::underlying_type_t<NavTerrainFlag>*>(&offMesh.Flags));
             if (scanned < 10)
                 continue;
 
-            offMesh.Bidirectional = true;
+            offMesh.ConnectionFlags = OFFMESH_CONNECTION_FLAG_BIDIRECTIONAL;
             if (scanned < 12)
                 offMesh.Flags = NAV_GROUND;
 
@@ -447,17 +447,16 @@ namespace MMAP
         /***       now create the navmesh       ***/
 
         // navmesh creation params
-        dtNavMeshParams navMeshParams;
-        memset(&navMeshParams, 0, sizeof(dtNavMeshParams));
-        navMeshParams.tileWidth = GRID_SIZE;
-        navMeshParams.tileHeight = GRID_SIZE;
-        rcVcopy(navMeshParams.orig, bmin);
-        navMeshParams.maxTiles = maxTiles;
-        navMeshParams.maxPolys = maxPolysPerTile;
+        MmapNavMeshHeader fileHeader;
+        fileHeader.params.tileWidth = GRID_SIZE;
+        fileHeader.params.tileHeight = GRID_SIZE;
+        rcVcopy(fileHeader.params.orig, bmin);
+        fileHeader.params.maxTiles = maxTiles;
+        fileHeader.params.maxPolys = maxPolysPerTile;
 
         navMesh = dtAllocNavMesh();
         TC_LOG_INFO("maps.mmapgen", "[Map {:04}] Creating navMesh...", mapID);
-        if (!navMesh->init(&navMeshParams))
+        if (!navMesh->init(&fileHeader.params))
         {
             TC_LOG_ERROR("maps.mmapgen", "[Map {:04}] Failed creating navmesh!", mapID);
             return;
@@ -474,8 +473,14 @@ namespace MMAP
             return;
         }
 
+        std::vector<OffMeshData> offMeshConnections;
+        std::ranges::copy_if(m_offMeshConnections, std::back_inserter(offMeshConnections), [mapID](OffMeshData const& offMeshData) { return offMeshData.MapId == mapID; });
+
+        fileHeader.offmeshConnectionCount = offMeshConnections.size();
+
         // now that we know navMesh params are valid, we can write them to file
-        fwrite(&navMeshParams, sizeof(dtNavMeshParams), 1, file.get());
+        fwrite(&fileHeader, sizeof(MmapNavMeshHeader), 1, file.get());
+        fwrite(offMeshConnections.data(), sizeof(OffMeshData), offMeshConnections.size(), file.get());
     }
 
     /**************************************************************************/
@@ -566,7 +571,7 @@ namespace MMAP
     /**************************************************************************/
     bool MapTileBuilder::shouldSkipTile(uint32 mapID, uint32 tileX, uint32 tileY) const
     {
-        std::string fileName = Trinity::StringFormat("{}/mmaps/{:04}{:02}{:02}.mmtile", m_outputDirectory.generic_string(), mapID, tileX, tileY);
+        std::string fileName = Trinity::StringFormat("{}/mmaps/{:04}_{:02}_{:02}.mmtile", m_outputDirectory.generic_string(), mapID, tileX, tileY);
         auto file = Trinity::make_unique_ptr_with_deleter<&::fclose>(fopen(fileName.c_str(), "rb"));
         if (!file)
             return false;
