@@ -125,9 +125,8 @@ namespace MMAP
 
         // gather all mesh data for final data check, and bounds calculation
         std::vector<float> allVerts(meshData.liquidVerts.size() + meshData.solidVerts.size());
-        auto allVertsOutput = allVerts.begin();
-        allVertsOutput = std::ranges::copy(meshData.liquidVerts, allVertsOutput).out;
-        allVertsOutput = std::ranges::copy(meshData.solidVerts, allVertsOutput).out;
+        std::ranges::copy(meshData.liquidVerts, allVerts.begin());
+        std::ranges::copy(meshData.solidVerts, allVerts.begin() + std::ssize(meshData.liquidVerts));
 
         // get bounds of current tile
         float bmin[3], bmax[3];
@@ -147,7 +146,7 @@ namespace MMAP
     /**************************************************************************/
     TileBuilder::TileResult TileBuilder::buildMoveMapTile(uint32 mapID, uint32 tileX, uint32 tileY,
         MeshData& meshData, float (&bmin)[3], float (&bmax)[3],
-        dtNavMeshParams const* navMeshParams)
+        dtNavMeshParams const* navMeshParams, std::string_view fileNameSuffix)
     {
         // console output
         std::string tileString = Trinity::StringFormat("[Map {:04}] [{:02},{:02}]:", mapID, tileX, tileY);
@@ -377,7 +376,10 @@ namespace MMAP
         // will hold final navmesh
         unsigned char* navData = nullptr;
 
-        auto debugOutputWriter = Trinity::make_unique_ptr_with_deleter(m_debugOutput ? &iv : nullptr, [borderSize = static_cast<unsigned short>(config.borderSize), outputDir = &m_outputDirectory, mapID, tileX, tileY, &meshData](IntermediateValues* intermediate)
+        auto debugOutputWriter = Trinity::make_unique_ptr_with_deleter(m_debugOutput ? &iv : nullptr,
+            [borderSize = static_cast<unsigned short>(config.borderSize),
+            outputDir = &m_outputDirectory, fileNameSuffix,
+            mapID, tileX, tileY, &meshData](IntermediateValues* intermediate)
         {
             // restore padding so that the debug visualization is correct
             for (std::ptrdiff_t i = 0; i < intermediate->polyMesh->nverts; ++i)
@@ -387,8 +389,8 @@ namespace MMAP
                 v[2] += borderSize;
             }
 
-            intermediate->generateObjFile(*outputDir, mapID, tileX, tileY, meshData);
-            intermediate->writeIV(*outputDir, mapID, tileX, tileY);
+            intermediate->generateObjFile(*outputDir, fileNameSuffix, mapID, tileX, tileY, meshData);
+            intermediate->writeIV(*outputDir, fileNameSuffix, mapID, tileX, tileY);
         });
 
         // these values are checked within dtCreateNavMeshData - handle them here
@@ -440,7 +442,8 @@ namespace MMAP
         return tileResult;
     }
 
-    void TileBuilder::saveMoveMapTileToFile(uint32 mapID, uint32 tileX, uint32 tileY, dtNavMesh* navMesh, TileResult const& tileResult)
+    void TileBuilder::saveMoveMapTileToFile(uint32 mapID, uint32 tileX, uint32 tileY, dtNavMesh* navMesh,
+        TileResult const& tileResult, std::string_view fileNameSuffix)
     {
         dtTileRef tileRef = 0;
         auto navMeshTile = Trinity::make_unique_ptr_with_deleter<dtTileRef*>(nullptr, [navMesh](dtTileRef const* ref)
@@ -464,7 +467,7 @@ namespace MMAP
         }
 
         // file output
-        std::string fileName = Trinity::StringFormat("{}/mmaps/{:04}{:02}{:02}.mmtile", m_outputDirectory.generic_string(), mapID, tileX, tileY);
+        std::string fileName = Trinity::StringFormat("{}/mmaps/{:04}_{:02}_{:02}{}.mmtile", m_outputDirectory.generic_string(), mapID, tileX, tileY, fileNameSuffix);
         auto file = Trinity::make_unique_ptr_with_deleter<&::fclose>(fopen(fileName.c_str(), "wb"));
         if (!file)
         {
@@ -485,11 +488,11 @@ namespace MMAP
     }
 
     /**************************************************************************/
-    void TileBuilder::getTileBounds(uint32 tileX, uint32 tileY, float* verts, int vertCount, float* bmin, float* bmax)
+    void TileBuilder::getTileBounds(uint32 tileX, uint32 tileY, float const* verts, std::size_t vertCount, float* bmin, float* bmax)
     {
         // this is for elevation
         if (verts && vertCount)
-            rcCalcBounds(verts, vertCount, bmin, bmax);
+            rcCalcBounds(verts, int(vertCount), bmin, bmax);
         else
         {
             bmin[1] = FLT_MIN;
