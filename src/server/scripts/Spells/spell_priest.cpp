@@ -94,6 +94,8 @@ enum PriestSpells
     SPELL_PRIEST_ESSENCE_DEVOURER                   = 415479,
     SPELL_PRIEST_ESSENCE_DEVOURER_SHADOWFIEND_HEAL  = 415673,
     SPELL_PRIEST_ESSENCE_DEVOURER_MINDBENDER_HEAL   = 415676,
+    SPELL_PRIEST_EXPIATION                          = 390832,
+    SPELL_PRIEST_EXPIATION_DAMAGE                   = 390844,
     SPELL_PRIEST_FLASH_HEAL                         = 2061,
     SPELL_PRIEST_FROM_DARKNESS_COMES_LIGHT_AURA     = 390617,
     SPELL_PRIEST_GREATER_HEAL                       = 289666,
@@ -199,8 +201,11 @@ enum PriestSpells
     SPELL_PRIEST_TWILIGHT_EQUILIBRIUM_HOLY          = 390706,
     SPELL_PRIEST_TWILIGHT_EQUILIBRIUM_SHADOW        = 390707,
     SPELL_PRIEST_ULTIMATE_PENITENCE                 = 421453,
+    SPELL_PRIEST_ULTIMATE_PENITENCE_CHANNEL         = 421434,
     SPELL_PRIEST_ULTIMATE_PENITENCE_DAMAGE          = 421543,
+    SPELL_PRIEST_ULTIMATE_PENITENCE_FALLING_FACING_CONTROL = 419305,
     SPELL_PRIEST_ULTIMATE_PENITENCE_HEAL            = 421544,
+    SPELL_PRIEST_ULTIMATE_PENITENCE_IMMUNITY        = 421354,
     SPELL_PRIEST_UNFURLING_DARKNESS                 = 341273,
     SPELL_PRIEST_UNFURLING_DARKNESS_AURA            = 341282,
     SPELL_PRIEST_UNFURLING_DARKNESS_DEBUFF          = 341291,
@@ -1332,6 +1337,64 @@ class spell_pri_evangelism : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_pri_evangelism::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+// 390832 - Expiation
+// Triggered by 8092 - Mind Blast and 32379 - Shadow Word: Death
+class spell_pri_expiation : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PRIEST_EXPIATION_DAMAGE })
+            && ValidateSpellEffect({ { SPELL_PRIEST_EXPIATION, EFFECT_1 }, { SPELL_PRIEST_SHADOW_WORD_PAIN, EFFECT_1 } });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_PRIEST_EXPIATION);
+    }
+
+    void HandleHitTarget(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+
+        Aura const* expiation = caster->GetAura(SPELL_PRIEST_EXPIATION);
+        if (!expiation)
+            return;
+
+        AuraEffect const* expiationConsume = expiation->GetEffect(EFFECT_0);
+        AuraEffect const* expiationDmgMul = expiation->GetEffect(EFFECT_1);
+        if (!expiationConsume || !expiationDmgMul)
+            return;
+
+        AuraEffect const* swPainAuraEffect = target->GetAuraEffect(SPELL_PRIEST_SHADOW_WORD_PAIN, EFFECT_1, caster->GetGUID());
+        if (!swPainAuraEffect)
+            return;
+
+        Aura* swPainAura = swPainAuraEffect->GetBase();
+        int32 debuffDuration = swPainAura->GetDuration();
+        int32 consumeDuration = std::min(debuffDuration, expiationConsume->GetAmount() * IN_MILLISECONDS);
+        if (consumeDuration == 0)
+            return;
+
+        float ticksConsumed = static_cast<float>(consumeDuration) / swPainAuraEffect->GetPeriod();
+        float damagePerTick = swPainAuraEffect->CalculateEstimatedAmount(caster, swPainAuraEffect->GetAmount()).value_or(swPainAuraEffect->GetAmount());
+        int32 totalDamage = static_cast<int32>(damagePerTick * ticksConsumed);
+
+        swPainAura->SetDuration(debuffDuration - consumeDuration);
+
+        caster->CastSpell(target, SPELL_PRIEST_EXPIATION_DAMAGE, CastSpellExtraArgsInit
+        {
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .SpellValueOverrides = { { SPELLVALUE_BASE_POINT0, CalculatePct(totalDamage, expiationDmgMul->GetAmount()) } }
+        });
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_pri_expiation::HandleHitTarget, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
     }
 };
 
@@ -3525,6 +3588,172 @@ class spell_pri_twist_of_fate : public AuraScript
     }
 };
 
+// 421453 - Ultimate Penitence
+class spell_pri_ultimate_penitence : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PRIEST_ULTIMATE_PENITENCE_CHANNEL, SPELL_PRIEST_ULTIMATE_PENITENCE_IMMUNITY });
+    }
+
+    void TriggerImmunity() const
+    {
+        Unit* caster = GetCaster();
+        caster->CastSpell(caster, SPELL_PRIEST_ULTIMATE_PENITENCE_IMMUNITY, CastSpellExtraArgsInit
+        {
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+
+        int32 preferHealing = 1;
+        if (Unit const* target = GetExplTargetUnit(); target && !GetCaster()->IsFriendlyTo(target))
+            preferHealing = 0;
+
+        caster->m_Events.AddEventAtOffset([caster, originalCastId = GetSpell()->m_originalCastId, preferHealing]
+        {
+            caster->CastSpell(caster, SPELL_PRIEST_ULTIMATE_PENITENCE_CHANNEL, CastSpellExtraArgsInit
+            {
+                .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+                .OriginalCastId = originalCastId,
+                .SpellValueOverrides = { { SPELLVALUE_BASE_POINT1, preferHealing } }
+            });
+        }, 250ms);
+    }
+
+    void Register() override
+    {
+        OnCast += SpellCastFn(spell_pri_ultimate_penitence::TriggerImmunity);
+    }
+};
+
+// 421453 - Ultimate Penitence (Aura)
+class spell_pri_ultimate_penitence_aura : public AuraScript
+{
+    void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& canBeRecalculated) const
+    {
+        canBeRecalculated = false;
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        amount = caster->CountPctFromMaxHealth(GetEffectInfo(EFFECT_0).CalcValue(caster));
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_pri_ultimate_penitence_aura::CalculateAmount, EFFECT_2, SPELL_AURA_SCHOOL_ABSORB);
+    }
+};
+
+// 421434 - Ultimate Penitence (Channel)
+class spell_pri_ultimate_penitence_channel : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_PRIEST_ULTIMATE_PENITENCE_FALLING_FACING_CONTROL
+        }) && ValidateSpellEffect(
+        {
+            { SPELL_PRIEST_ULTIMATE_PENITENCE_DAMAGE, EFFECT_0 },
+            { SPELL_PRIEST_ULTIMATE_PENITENCE_HEAL, EFFECT_0 }
+        });
+    }
+
+    void HandlePeriodic(AuraEffect const* aurEff) const
+    {
+        if (aurEff->GetAmount() == 1) // set by spell_pri_ultimate_penitence
+            (void)(TryHealing() || TryDealingDamage());
+        else
+            (void)(TryDealingDamage() || TryHealing());
+    }
+
+    bool TryDealingDamage() const
+    {
+        std::list<WorldObject*> enemies = SearchTargetCandidates(SPELL_PRIEST_ULTIMATE_PENITENCE_DAMAGE, TARGET_CHECK_ENEMY);
+        if (enemies.empty())
+            return false;
+
+        GetTarget()->CastSpell(Trinity::Containers::SelectRandomContainerElement(enemies), SPELL_PRIEST_ULTIMATE_PENITENCE_DAMAGE, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+        return true;
+    }
+
+    bool TryHealing() const
+    {
+        std::list<WorldObject*> allies = SearchTargetCandidates(SPELL_PRIEST_ULTIMATE_PENITENCE_HEAL, TARGET_CHECK_ALLY);
+        Trinity::Containers::EraseIf(allies, [](WorldObject const* ally) { return !ally->IsUnit() || ally->ToUnit()->IsFullHealth(); });
+        if (allies.empty())
+            return false;
+
+        Unit* caster = GetTarget();
+
+        Trinity::SortTargetsWithPriorityRules(allies, 1, GetHealingRules(caster));
+
+        caster->CastSpell(allies.front(), SPELL_PRIEST_ULTIMATE_PENITENCE_HEAL, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+        return true;
+    }
+
+    std::list<WorldObject*> SearchTargetCandidates(uint32 spellId, SpellTargetCheckTypes checkType) const
+    {
+        SpellInfo const* spellInfo = sSpellMgr->AssertSpellInfo(spellId, GetCastDifficulty());
+        SpellEffectInfo const& spellEffect = spellInfo->GetEffect(EFFECT_0);
+
+        std::list<WorldObject*> targets;
+        if (uint32 containerTypeMask = Spell::GetSearcherTypeMask(spellInfo, spellEffect, TARGET_OBJECT_TYPE_UNIT, spellEffect.ImplicitTargetConditions.get()))
+        {
+            Unit* caster = GetTarget();
+
+            float maxRange = spellInfo->GetMaxRange(true, caster);
+
+            Trinity::WorldObjectSpellAreaTargetCheck check(maxRange, caster, caster, caster, spellInfo, checkType, spellEffect.ImplicitTargetConditions.get(), TARGET_OBJECT_TYPE_UNIT);
+            Trinity::WorldObjectListSearcher searcher(caster->GetPhaseShift(), targets, check, containerTypeMask);
+            Spell::SearchTargets(searcher, containerTypeMask, caster, caster, maxRange + EXTRA_CELL_SEARCH_RADIUS);
+        }
+
+        return targets;
+    }
+
+    void HandleRemoveEffect(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
+    {
+        Unit* caster = GetTarget();
+        CastSpellExtraArgs args = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR;
+
+        caster->CastSpell(caster, SPELL_PRIEST_ULTIMATE_PENITENCE_IMMUNITY, args);
+        caster->CastSpell(caster, SPELL_PRIEST_ULTIMATE_PENITENCE_FALLING_FACING_CONTROL, args);
+    }
+
+    static std::array<Trinity::TargetPriorityRule, 2> GetHealingRules(Unit const* caster)
+    {
+        return
+        {
+            [](WorldObject const* target) { return target->IsPlayer() || (target->IsCreature() && target->ToCreature()->IsTreatedAsRaidUnit()); },
+            [caster](Unit const* target) { return !caster->IsPlayer() || !caster->ToPlayer()->GetGroup() || target->IsInRaidWith(caster); }
+        };
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_pri_ultimate_penitence_channel::HandlePeriodic, EFFECT_1, SPELL_AURA_PERIODIC_DUMMY);
+        AfterEffectRemove += AuraEffectApplyFn(spell_pri_ultimate_penitence_channel::HandleRemoveEffect, EFFECT_0, SPELL_AURA_MECHANIC_IMMUNITY_MASK, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 432154 - Ultimate Penitence (Jump)
+class spell_pri_ultimate_penitence_jump : public SpellScript
+{
+    static constexpr Position JumpOffset = { 0.0f, 0.0f, 5.0f };
+
+    static void SetDestTarget(SpellScript const&, SpellDestination& dest)
+    {
+        dest.RelocateOffset(JumpOffset);
+    }
+
+    void Register() override
+    {
+        OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_pri_ultimate_penitence_jump::SetDestTarget, EFFECT_0, TARGET_DEST_CASTER);
+    }
+};
+
 // 341273 - Unfurling Darkness
 // Triggered by 34914 - Vampiric Touch
 class spell_pri_unfurling_darkness : public SpellScript
@@ -3760,6 +3989,7 @@ void AddSC_priest_spell_scripts()
     RegisterSpellScript(spell_pri_epiphany);
     RegisterSpellScript(spell_pri_essence_devourer_heal);
     RegisterSpellScript(spell_pri_evangelism);
+    RegisterSpellScript(spell_pri_expiation);
     RegisterSpellScript(spell_pri_focused_mending);
     RegisterSpellScript(spell_pri_from_darkness_comes_light);
     RegisterSpellScript(spell_pri_guardian_spirit);
@@ -3821,6 +4051,9 @@ void AddSC_priest_spell_scripts()
     RegisterSpellScript(spell_pri_twilight_equilibrium);
     RegisterSpellScript(spell_pri_twilight_equilibrium_shadow_word_pain);
     RegisterSpellScript(spell_pri_twist_of_fate);
+    RegisterSpellAndAuraScriptPair(spell_pri_ultimate_penitence, spell_pri_ultimate_penitence_aura);
+    RegisterSpellScript(spell_pri_ultimate_penitence_channel);
+    RegisterSpellScript(spell_pri_ultimate_penitence_jump);
     RegisterSpellScript(spell_pri_unfurling_darkness);
     RegisterSpellScript(spell_pri_vampiric_embrace);
     RegisterSpellScript(spell_pri_vampiric_embrace_target);
