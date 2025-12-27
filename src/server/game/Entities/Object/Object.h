@@ -228,8 +228,8 @@ class TC_GAME_API Object
         void BuildOutOfRangeUpdateBlock(UpdateData* data) const;
         ByteBuffer& PrepareValuesUpdateBuffer(UpdateData* data) const;
 
-        virtual void DestroyForPlayer(Player* target) const;
-        void SendOutOfRangeForPlayer(Player* target) const;
+        virtual void DestroyForPlayer(Player const* target) const;
+        void SendOutOfRangeForPlayer(Player const* target) const;
 
         virtual void ClearUpdateMask(bool remove);
 
@@ -921,7 +921,7 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         uint32 GetTransTime()   const { return m_movementInfo.transport.time; }
         int8 GetTransSeat()     const { return m_movementInfo.transport.seat; }
         virtual ObjectGuid GetTransGUID() const;
-        void SetTransport(TransportBase* t) { m_transport = t; }
+        void SetTransport(TransportBase* t);
 
         MovementInfo m_movementInfo;
 
