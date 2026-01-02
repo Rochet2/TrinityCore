@@ -62,6 +62,8 @@ enum PriestSpells
     SPELL_PRIEST_BLESSED_LIGHT                      = 196813,
     SPELL_PRIEST_BODY_AND_SOUL                      = 64129,
     SPELL_PRIEST_BODY_AND_SOUL_SPEED                = 65081,
+    SPELL_PRIEST_BURNING_VEHEMENCE_DAMAGE           = 400370,
+    SPELL_PRIEST_CENSURE                            = 200199,
     SPELL_PRIEST_CIRCLE_OF_HEALING                  = 204883,
     SPELL_PRIEST_CRYSTALLINE_REFLECTION             = 373457,
     SPELL_PRIEST_CRYSTALLINE_REFLECTION_HEAL        = 373462,
@@ -122,6 +124,8 @@ enum PriestSpells
     SPELL_PRIEST_HOLY_MENDING_HEAL                  = 391156,
     SPELL_PRIEST_HOLY_NOVA                          = 132157,
     SPELL_PRIEST_HOLY_WORD_CHASTISE                 = 88625,
+    SPELL_PRIEST_HOLY_WORD_CHASTISE_INCAPACITATE    = 200196,
+    SPELL_PRIEST_HOLY_WORD_CHASTISE_STUN            = 200200,
     SPELL_PRIEST_HOLY_WORD_SALVATION                = 265202,
     SPELL_PRIEST_HOLY_WORD_SANCTIFY                 = 34861,
     SPELL_PRIEST_HOLY_WORD_SERENITY                 = 2050,
@@ -170,6 +174,7 @@ enum PriestSpells
     SPELL_PRIEST_PRAYER_OF_MENDING_AURA             = 41635,
     SPELL_PRIEST_PRAYER_OF_MENDING_HEAL             = 33110,
     SPELL_PRIEST_PRAYER_OF_MENDING_JUMP             = 155793,
+    SPELL_PRIEST_PRAYERFUL_LITANY                   = 391209,
     SPELL_PRIEST_PROTECTIVE_LIGHT_AURA              = 193065,
     SPELL_PRIEST_PROTECTOR_OF_THE_FRAIL             = 373035,
     SPELL_PRIEST_PURGE_THE_WICKED                   = 204197,
@@ -224,6 +229,7 @@ enum PriestSpells
     SPELL_PRIEST_VAMPIRIC_TOUCH                     = 34914,
     SPELL_PRIEST_VOID_SHIELD                        = 199144,
     SPELL_PRIEST_VOID_SHIELD_EFFECT                 = 199145,
+    SPELL_PRIEST_VOICE_OF_HARMONY                   = 390994,
     SPELL_PRIEST_VOID_TORRENT                       = 263165,
     SPELL_PRIEST_WEAKENED_SOUL                      = 6788,
     SPELL_PRIEST_WHISPERING_SHADOWS                 = 406777,
@@ -783,6 +789,30 @@ class spell_pri_blaze_of_light : public AuraScript
     void Register() override
     {
         OnProc += AuraProcFn(spell_pri_blaze_of_light::HandleProc);
+    }
+};
+
+// 372307 - Burning Vehemence
+class spell_pri_burning_vehemence : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_PRIEST_BURNING_VEHEMENCE_DAMAGE });
+    }
+
+    void HandleEffectProc(AuraEffect const* aurEff, ProcEventInfo const& eventInfo) const
+    {
+        GetTarget()->CastSpell(eventInfo.GetActionTarget()->GetPosition(), SPELL_PRIEST_BURNING_VEHEMENCE_DAMAGE, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = eventInfo.GetProcSpell(),
+            .TriggeringAura = aurEff,
+            .SpellValueOverrides = { { SPELLVALUE_BASE_POINT0, int32(CalculatePct(eventInfo.GetDamageInfo()->GetDamage(), aurEff->GetAmount())) } }
+        });
+    }
+
+    void Register() override
+    {
+        OnEffectProc += AuraEffectProcFn(spell_pri_burning_vehemence::HandleEffectProc, EFFECT_2, SPELL_AURA_DUMMY);
     }
 };
 
@@ -1911,6 +1941,36 @@ class spell_pri_holy_words : public AuraScript
     }
 };
 
+// 88625 - Holy Word: Chastise
+class spell_pri_holy_word_chastise : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo
+        ({
+            SPELL_PRIEST_HOLY_WORD_CHASTISE_INCAPACITATE,
+            SPELL_PRIEST_HOLY_WORD_CHASTISE_STUN,
+            SPELL_PRIEST_CENSURE
+        });
+    }
+
+    void HandleAfterHit() const
+    {
+        Unit* caster = GetCaster();
+        uint32 spellId = caster->HasAura(SPELL_PRIEST_CENSURE) ? SPELL_PRIEST_HOLY_WORD_CHASTISE_STUN : SPELL_PRIEST_HOLY_WORD_CHASTISE_INCAPACITATE;
+
+        caster->CastSpell(GetHitUnit(), spellId, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void Register() override
+    {
+        AfterHit += SpellHitFn(spell_pri_holy_word_chastise::HandleAfterHit);
+    }
+};
+
 // 265202 - Holy Word: Salvation
 class spell_pri_holy_word_salvation : public SpellScript
 {
@@ -2919,6 +2979,32 @@ class spell_pri_prayer_of_mending_jump : public spell_pri_prayer_of_mending_Spel
     {
         OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_pri_prayer_of_mending_jump::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ALLY);
         OnEffectHitTarget += SpellEffectFn(spell_pri_prayer_of_mending_jump::HandleJump, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 391209 - Prayerful Litany (attached to 596 - Prayer of Healing)
+class spell_pri_prayerful_litany : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_PRIEST_PRAYERFUL_LITANY, EFFECT_0 } });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAuraEffect(SPELL_PRIEST_PRAYERFUL_LITANY, EFFECT_0);
+    }
+
+    void CalcPrimaryTargetHealing(SpellEffectInfo const& /*effectInfo*/, Unit const* victim, int32& /*healing*/, int32& /*flatMod*/, float& pctMod) const
+    {
+        if (victim == GetExplTargetUnit())
+            if (AuraEffect const* prayerfulLitanyEff = GetCaster()->GetAuraEffect(SPELL_PRIEST_PRAYERFUL_LITANY, EFFECT_0))
+                AddPct(pctMod, prayerfulLitanyEff->GetAmount());
+    }
+
+    void Register() override
+    {
+        CalcHealing += SpellCalcHealingFn(spell_pri_prayerful_litany::CalcPrimaryTargetHealing);
     }
 };
 
@@ -4180,6 +4266,58 @@ class spell_pri_vampiric_touch : public AuraScript
     }
 };
 
+// 390994 - Voice of Harmony
+class spell_pri_voice_of_harmony : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo
+        ({
+            SPELL_PRIEST_HOLY_WORD_CHASTISE,
+            SPELL_PRIEST_HOLY_WORD_SANCTIFY,
+            SPELL_PRIEST_HOLY_WORD_SERENITY
+        });
+    }
+
+    static bool CheckHolyWordSanctify(AuraScript const&, AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
+    {
+        // Divine Star
+        // Halo
+        return eventInfo.GetSpellInfo()->IsAffected(SPELLFAMILY_PRIEST, { 0x0, 0x0, 0x0, 0x4040 });
+    }
+
+    static bool CheckHolyWordSerenity(AuraScript const&, AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
+    {
+        // Power Word: Life
+        // Prayer of Mending
+        return eventInfo.GetSpellInfo()->IsAffected(SPELLFAMILY_PRIEST, { 0x0, 0x0, 0x8000, 0x400000 });
+    }
+
+    static bool CheckHolyWordChastise(AuraScript const&, AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
+    {
+        // Holy Fire
+        return eventInfo.GetSpellInfo()->IsAffected(SPELLFAMILY_PRIEST, { 0x100000, 0x0, 0x0, 0x0 });
+    }
+
+    template <uint32 TargetSpellId>
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo const& /*eventInfo*/) const
+    {
+        SpellInfo const* targetSpellInfo = sSpellMgr->AssertSpellInfo(TargetSpellId, GetCastDifficulty());
+        int32 cdReduction = aurEff->GetAmount();
+        spell_pri_holy_words_base::ModifyCooldown(GetTarget(), targetSpellInfo, Seconds(-cdReduction));
+    }
+
+    void Register() override
+    {
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_pri_voice_of_harmony::CheckHolyWordSanctify, EFFECT_0, SPELL_AURA_DUMMY);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_pri_voice_of_harmony::CheckHolyWordSerenity, EFFECT_1, SPELL_AURA_DUMMY);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_pri_voice_of_harmony::CheckHolyWordChastise, EFFECT_2, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_pri_voice_of_harmony::HandleProc<SPELL_PRIEST_HOLY_WORD_SANCTIFY>, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_pri_voice_of_harmony::HandleProc<SPELL_PRIEST_HOLY_WORD_SERENITY>, EFFECT_1, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_pri_voice_of_harmony::HandleProc<SPELL_PRIEST_HOLY_WORD_CHASTISE>, EFFECT_2, SPELL_AURA_DUMMY);
+    }
+};
+
 // 205385 - Shadow Crash
 class spell_pri_whispering_shadows : public SpellScript
 {
@@ -4267,6 +4405,7 @@ void AddSC_priest_spell_scripts()
     RegisterSpellScript(spell_pri_benediction);
     RegisterSpellScript(spell_pri_binding_heals);
     RegisterSpellScript(spell_pri_blaze_of_light);
+    RegisterSpellScript(spell_pri_burning_vehemence);
     RegisterSpellScript(spell_pri_circle_of_healing);
     RegisterSpellScript(spell_pri_crystalline_reflection);
     RegisterSpellScript(spell_pri_dark_indulgence);
@@ -4298,6 +4437,7 @@ void AddSC_priest_spell_scripts()
     RegisterSpellScript(spell_pri_heavens_wrath);
     RegisterSpellScript(spell_pri_holy_mending);
     RegisterSpellScript(spell_pri_holy_words);
+    RegisterSpellScript(spell_pri_holy_word_chastise);
     RegisterSpellScript(spell_pri_holy_word_salvation);
     RegisterSpellScript(spell_pri_holy_word_salvation_cooldown_reduction);
     RegisterSpellScript(spell_pri_item_t6_trinket);
@@ -4323,6 +4463,7 @@ void AddSC_priest_spell_scripts()
     RegisterSpellScript(spell_pri_prayer_of_mending_dummy);
     RegisterSpellAndAuraScriptPair(spell_pri_prayer_of_mending, spell_pri_prayer_of_mending_aura);
     RegisterSpellScript(spell_pri_prayer_of_mending_jump);
+    RegisterSpellScript(spell_pri_prayerful_litany);
     RegisterSpellScript(spell_pri_protective_light);
     RegisterSpellScript(spell_pri_protector_of_the_frail);
     RegisterSpellScript(spell_pri_holy_10_1_class_set_2pc);
@@ -4359,6 +4500,7 @@ void AddSC_priest_spell_scripts()
     RegisterSpellScript(spell_pri_vampiric_embrace);
     RegisterSpellScript(spell_pri_vampiric_embrace_target);
     RegisterSpellScript(spell_pri_vampiric_touch);
+    RegisterSpellScript(spell_pri_voice_of_harmony);
     RegisterSpellScript(spell_pri_whispering_shadows);
     RegisterSpellScript(spell_pri_whispering_shadows_effect);
 }
