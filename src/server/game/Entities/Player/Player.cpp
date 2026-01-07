@@ -18192,8 +18192,13 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     // NOW player must have valid map
     // load the player's map here if it's not already loaded
+    bool isNewMap = false;
     if (!map)
+    {
         map = sMapMgr->CreateMap(mapId, this);
+        isNewMap = true;
+    }
+
     AreaTriggerTeleport const* areaTrigger = nullptr;
     bool check = false;
 
@@ -18210,9 +18215,14 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
             areaTrigger = sObjectMgr->GetGoBackTrigger(mapId);
             check = true;
         }
-        else if (instanceId && !sInstanceLockMgr.FindActiveInstanceLock(guid, { mapId, map->GetDifficultyID() })) // ... and instance is reseted then look for entrance.
+        else if (instanceId && isNewMap) // ... and instance is reseted then look for entrance.
         {
-            areaTrigger = sObjectMgr->GetMapEntranceTrigger(mapId);
+            if (InstanceScript const* instanceScript = map->ToInstanceMap()->GetInstanceScript())
+                areaTrigger = sObjectMgr->GetWorldSafeLoc(instanceScript->GetEntranceLocation());
+
+            if (!areaTrigger)
+                areaTrigger = sObjectMgr->GetMapEntranceTrigger(mapId);
+
             check = true;
         }
     }
@@ -18221,10 +18231,10 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     {
         if (areaTrigger) // ... if we have an areatrigger, then relocate to new map/coordinates.
         {
-            Relocate(areaTrigger->target_X, areaTrigger->target_Y, areaTrigger->target_Z, GetOrientation());
-            if (mapId != areaTrigger->target_mapId)
+            Relocate(areaTrigger->Loc);
+            if (mapId != areaTrigger->Loc.GetMapId())
             {
-                mapId = areaTrigger->target_mapId;
+                mapId = areaTrigger->Loc.GetMapId();
                 map = sMapMgr->CreateMap(mapId, this);
             }
         }
