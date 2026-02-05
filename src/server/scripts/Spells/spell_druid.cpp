@@ -58,6 +58,8 @@ enum DruidSpells
     SPELL_DRUID_BRAMBLES_REFLECT               = 203958,
     SPELL_DRUID_BRISTLING_FUR_GAIN_RAGE        = 204031,
     SPELL_DRUID_CAT_FORM                       = 768,
+    SPELL_DRUID_CRASHING_STAR_TALENT           = 468978,
+    SPELL_DRUID_CRASHING_STAR_DAMAGE           = 468981,
     SPELL_DRUID_CULTIVATION                    = 200390,
     SPELL_DRUID_CULTIVATION_HEAL               = 200389,
     SPELL_DRUID_CURIOUS_BRAMBLEPATCH           = 330670,
@@ -118,11 +120,14 @@ enum DruidSpells
     SPELL_DRUID_MATTED_FUR                     = 385786,
     SPELL_DRUID_MOONFIRE                       = 8921,
     SPELL_DRUID_MOONFIRE_DAMAGE                = 164812,
+    SPELL_DRUID_MOONLESS_NIGHT                 = 400278,
+    SPELL_DRUID_MOONLESS_NIGHT_DAMAGE          = 400360,
     SPELL_DRUID_NATURES_GRACE_TALENT           = 450347,
     SPELL_DRUID_NEW_MOON                       = 274281,
     SPELL_DRUID_NEW_MOON_OVERRIDE              = 274295,
     SPELL_DRUID_POWER_OF_THE_ARCHDRUID         = 392302,
     SPELL_DRUID_PROWL                          = 5215,
+    SPELL_DRUID_PULVERIZE                      = 80313,
     SPELL_DRUID_RAKE_STUN                      = 163505,
     SPELL_DRUID_REGROWTH                       = 8936,
     SPELL_DRUID_REJUVENATION                   = 774,
@@ -145,6 +150,7 @@ enum DruidSpells
     SPELL_DRUID_THRASH_BEAR_BLEED              = 192090,
     SPELL_DRUID_THRASH_CAT                     = 106830,
     SPELL_DRUID_THRASH_CAT_BLEED               = 405233,
+    SPELL_DRUID_THRASH_PULVERIZE_TRIGGER       = 158790,
     SPELL_DRUID_TWIN_MOONS                     = 279620,
     SPELL_DRUID_TWIN_MOONFIRE                  = 372567,
     SPELL_DRUID_UMBRAL_EMBRACE                 = 393763,
@@ -1467,6 +1473,38 @@ class spell_dru_moonfire : public SpellScript
     }
 };
 
+// 400278 - Moonless Night
+class spell_dru_moonless_night : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DRUID_MOONFIRE_DAMAGE, SPELL_DRUID_MOONLESS_NIGHT_DAMAGE });
+    }
+
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        return !eventInfo.GetSpellInfo()->HasAttribute(SPELL_ATTR5_TREAT_AS_AREA_EFFECT) && eventInfo.GetActionTarget()->HasAura(SPELL_DRUID_MOONFIRE_DAMAGE);
+    }
+
+    void HandleEffectProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+    {
+        Unit* caster = eventInfo.GetActor();
+        Unit* target = eventInfo.GetActionTarget();
+        int32 damage = CalculatePct(eventInfo.GetDamageInfo()->GetDamage(), aurEff->GetAmount());
+
+        caster->CastSpell(target, SPELL_DRUID_MOONLESS_NIGHT_DAMAGE, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .SpellValueOverrides = { { SPELLVALUE_BASE_POINT0, damage } }
+        });
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_dru_moonless_night::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_dru_moonless_night::HandleEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
 // 450347 - Nature's Grace
 class spell_dru_natures_grace : public AuraScript
 {
@@ -1649,6 +1687,105 @@ protected:
     bool ToCatForm() const override { return true; }
 };
 
+// 80313 - Pulverize
+class spell_dru_pulverize : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({ SPELL_DRUID_THRASH_BEAR_BLEED })
+            && ValidateSpellEffect({ { spellInfo->Id, EFFECT_2 } });
+    }
+
+    void HandleEffectHit(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+        Aura* bleedAura = target->GetAura(SPELL_DRUID_THRASH_BEAR_BLEED, caster->GetGUID());
+        if (!bleedAura)
+            return;
+
+        int32 stacksToRemove = GetEffectInfo(EFFECT_2).CalcValue(caster);
+
+        bleedAura->ModStackAmount(-stacksToRemove);
+        target->RemoveAurasDueToSpell(SPELL_DRUID_THRASH_PULVERIZE_TRIGGER);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_dru_pulverize::HandleEffectHit, EFFECT_1, SPELL_EFFECT_APPLY_AURA);
+    }
+};
+
+// 80313 - Pulverize (Trigger)
+// Triggered by 77758 - Thrash (Bear Form)
+class spell_dru_pulverize_thrash : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo
+        ({
+            SPELL_DRUID_THRASH_BEAR_BLEED,
+            SPELL_DRUID_PULVERIZE,
+            SPELL_DRUID_THRASH_PULVERIZE_TRIGGER
+        })
+        && ValidateSpellEffect({ { SPELL_DRUID_PULVERIZE, EFFECT_2 } });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasSpell(SPELL_DRUID_PULVERIZE);
+    }
+
+    void HandleAfterHit()
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+
+        Aura* bleedAura = target->GetAura(SPELL_DRUID_THRASH_BEAR_BLEED, caster->GetGUID());
+        if (!bleedAura)
+            return;
+
+        int32 thresholdStacks = sSpellMgr->AssertSpellInfo(SPELL_DRUID_PULVERIZE, GetCastDifficulty())->GetEffect(EFFECT_2).CalcValue(caster);
+        if (bleedAura->GetStackAmount() >= thresholdStacks)
+            caster->CastSpell(target, SPELL_DRUID_THRASH_PULVERIZE_TRIGGER, CastSpellExtraArgs().SetTriggeringSpell(GetSpell()));
+    }
+
+    void Register() override
+    {
+        AfterHit += SpellHitFn(spell_dru_pulverize_thrash::HandleAfterHit);
+    }
+};
+
+// 158790 - Thrash
+class spell_dru_pulverize_trigger_periodic : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DRUID_THRASH_BEAR_BLEED });
+    }
+
+    void OnTick(AuraEffect const* /*aurEff*/)
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+        {
+            Remove();
+            return;
+        }
+
+        // in case bleed aura is removed due to e.g. dwarf racial
+        if (!GetTarget()->GetAura(SPELL_DRUID_THRASH_BEAR_BLEED, caster->GetGUID()))
+            Remove();
+
+        // threshold stacks don't have to be checked here, duration of the trigger is less than Thrash uptime
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_dru_pulverize_trigger_periodic::OnTick, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+    }
+};
+
 // 1822 - Rake
 class spell_dru_rake : public SpellScript
 {
@@ -1773,8 +1910,8 @@ class spell_dru_shooting_stars : public AuraScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellInfo({ SPELL_DRUID_SHOOTING_STARS_DAMAGE })
-            && ValidateSpellEffect({ { SPELL_DRUID_MOONFIRE_DAMAGE, EFFECT_1 }, { SPELL_DRUID_SUNFIRE_DAMAGE, EFFECT_1 } })
+        return ValidateSpellInfo({ SPELL_DRUID_SHOOTING_STARS_DAMAGE, SPELL_DRUID_CRASHING_STAR_DAMAGE })
+            && ValidateSpellEffect({ { SPELL_DRUID_MOONFIRE_DAMAGE, EFFECT_1 }, { SPELL_DRUID_SUNFIRE_DAMAGE, EFFECT_1 }, { SPELL_DRUID_CRASHING_STAR_TALENT, EFFECT_0 } })
             && sSpellMgr->AssertSpellInfo(SPELL_DRUID_MOONFIRE_DAMAGE, DIFFICULTY_NONE)->GetEffect(EFFECT_1).IsAura(SPELL_AURA_PERIODIC_DAMAGE)
             && sSpellMgr->AssertSpellInfo(SPELL_DRUID_SUNFIRE_DAMAGE, DIFFICULTY_NONE)->GetEffect(EFFECT_1).IsAura(SPELL_AURA_PERIODIC_DAMAGE);
     }
@@ -1814,9 +1951,16 @@ class spell_dru_shooting_stars : public AuraScript
 
         Trinity::Containers::RandomResize(targets, procs);
         for (Unit* target : targets)
-            caster->CastSpell(target, SPELL_DRUID_SHOOTING_STARS_DAMAGE, CastSpellExtraArgsInit{
+        {
+            uint32 spellId = SPELL_DRUID_SHOOTING_STARS_DAMAGE;
+            AuraEffect const* crashingStarTalent = caster->GetAuraEffect(SPELL_DRUID_CRASHING_STAR_TALENT, EFFECT_0);
+            if (crashingStarTalent && roll_chance_i(crashingStarTalent->GetAmount()))
+                spellId = SPELL_DRUID_CRASHING_STAR_DAMAGE;
+
+            caster->CastSpell(target, spellId, CastSpellExtraArgsInit{
                 .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR
             });
+        }
     }
 
     void Register() override
@@ -2760,6 +2904,7 @@ void AddSC_druid_spell_scripts()
     RegisterSpellScript(spell_dru_mangle);
     RegisterSpellScript(spell_dru_matted_fur_absorb);
     RegisterSpellScript(spell_dru_moonfire);
+    RegisterSpellScript(spell_dru_moonless_night);
     RegisterSpellScript(spell_dru_natures_grace);
     RegisterSpellScript(spell_dru_natures_grace_eclipse);
     RegisterSpellScriptWithArgs(spell_dru_new_moon, "spell_dru_full_moon", Optional<DruidSpells>(), Optional<DruidSpells>(SPELL_DRUID_HALF_MOON_OVERRIDE));
@@ -2769,6 +2914,9 @@ void AddSC_druid_spell_scripts()
     RegisterSpellScript(spell_dru_omen_of_clarity_restoration);
     RegisterSpellScript(spell_dru_power_of_the_archdruid);
     RegisterSpellScript(spell_dru_prowl);
+    RegisterSpellScript(spell_dru_pulverize);
+    RegisterSpellScript(spell_dru_pulverize_thrash);
+    RegisterSpellScript(spell_dru_pulverize_trigger_periodic);
     RegisterSpellScript(spell_dru_rake);
     RegisterSpellScript(spell_dru_rip);
     RegisterSpellAndAuraScriptPair(spell_dru_savage_roar, spell_dru_savage_roar_aura);
