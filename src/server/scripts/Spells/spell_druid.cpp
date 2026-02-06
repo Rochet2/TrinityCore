@@ -46,6 +46,7 @@ enum DruidSpells
     SPELL_DRUID_ASTRAL_SMOLDER_DAMAGE          = 394061,
     SPELL_DRUID_BALANCE_T10_BONUS              = 70718,
     SPELL_DRUID_BALANCE_T10_BONUS_PROC         = 70721,
+    SPELL_DRUID_BARKSKIN                       = 22812,
     SPELL_DRUID_BEAR_FORM                      = 5487,
     SPELL_DRUID_BLESSING_OF_CENARIUS           = 40452,
     SPELL_DRUID_BLESSING_OF_ELUNE              = 40446,
@@ -91,6 +92,8 @@ enum DruidSpells
     SPELL_DRUID_FORMS_TRINKET_MOONKIN          = 37343,
     SPELL_DRUID_FORMS_TRINKET_NONE             = 37344,
     SPELL_DRUID_FORMS_TRINKET_TREE             = 37342,
+    SPELL_DRUID_FLOWER_WALK                    = 439901,
+    SPELL_DRUID_FLOWER_WALK_HEAL               = 439902,
     SPELL_DRUID_FULL_MOON                      = 274283,
     SPELL_DRUID_GALACTIC_GUARDIAN_AURA         = 213708,
     SPELL_DRUID_GERMINATION                    = 155675,
@@ -98,6 +101,7 @@ enum DruidSpells
     SPELL_DRUID_GLYPH_OF_STARS_VISUAL          = 114302,
     SPELL_DRUID_GORE_PROC                      = 93622,
     SPELL_DRUID_GROWL                          = 6795,
+    SPELL_DRUID_GUARDIAN_OF_ELUNE_AURA         = 213680,
     SPELL_DRUID_HALF_MOON                      = 274282,
     SPELL_DRUID_HALF_MOON_OVERRIDE             = 274297,
     SPELL_DRUID_IDOL_OF_FERAL_SHADOWS          = 34241,
@@ -114,6 +118,7 @@ enum DruidSpells
     SPELL_DRUID_LUNAR_BEAM_HEAL                = 204069,
     SPELL_DRUID_LUNAR_BEAM_DAMAGE              = 414613,
     SPELL_DRUID_LUNAR_INSPIRATION_OVERRIDE     = 155627,
+    SPELL_DRUID_MAIM_STUN                      = 203123,
     SPELL_DRUID_MANGLE                         = 33917,
     SPELL_DRUID_MANGLE_TALENT                  = 231064,
     SPELL_DRUID_MASS_ENTANGLEMENT              = 102359,
@@ -940,6 +945,68 @@ private:
     float _damageMultiplier = 0.0f;
 };
 
+// 439901 - Flower Walk
+// Triggered by 22812 - Barkskin
+class spell_dru_flower_walk : public AuraScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({ SPELL_DRUID_FLOWER_WALK_HEAL })
+            && ValidateSpellEffect({ { spellInfo->Id, EFFECT_2 } });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_DRUID_FLOWER_WALK);
+    }
+
+    void HandlePeriodic(AuraEffect const* /*aurEff*/)
+    {
+        Unit* target = GetTarget();
+        target->CastSpell(target, SPELL_DRUID_FLOWER_WALK_HEAL, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR | TRIGGERED_SUPPRESS_CASTER_ANIM);
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_dru_flower_walk::HandlePeriodic, EFFECT_2, SPELL_AURA_PERIODIC_DUMMY);
+    }
+};
+
+// 439902 - Flower Walk (Heal)
+class spell_dru_flower_walk_heal : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
+    }
+
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        Unit* caster = GetCaster();
+        int32 maxTargets = GetEffectInfo(EFFECT_1).CalcValue(caster);
+
+        if (targets.size() > 1)
+            targets.remove(caster);
+
+        Trinity::SelectRandomInjuredTargets(targets, maxTargets, true, caster);
+
+        if (targets.empty())
+            targets.push_back(caster);
+    }
+
+    void PreventEffect(WorldObject*& target)
+    {
+        if (target->ToUnit() == GetCaster())
+            target = nullptr;
+    }
+
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_dru_flower_walk_heal::FilterTargets, EFFECT_0, TARGET_UNIT_DEST_AREA_ALLY);
+        OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_dru_flower_walk_heal::PreventEffect, EFFECT_0, TARGET_UNIT_TARGET_ALLY);
+    }
+};
+
 // 37336 - Druid Forms Trinket
 class spell_dru_forms_trinket : public AuraScript
 {
@@ -1134,6 +1201,33 @@ class spell_dru_gore : public AuraScript
     {
         DoCheckEffectProc += AuraCheckEffectProcFn(spell_dru_gore::CheckEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
         OnEffectProc += AuraEffectProcFn(spell_dru_gore::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 213680 - Guardian of Elune
+// Triggered by 22842 - Frenzied Regeneration
+class spell_dru_guardian_of_elune_healing : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_DRUID_GUARDIAN_OF_ELUNE_AURA, EFFECT_1 } });
+    }
+
+    void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& canBeRecalculated)
+    {
+        canBeRecalculated = false;
+
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        if (AuraEffect* guardianOfElune = caster->GetAuraEffect(SPELL_DRUID_GUARDIAN_OF_ELUNE_AURA, EFFECT_1))
+            AddPct(amount, guardianOfElune->GetAmount());
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_dru_guardian_of_elune_healing::CalculateAmount, EFFECT_0, SPELL_AURA_OBS_MOD_HEALTH);
     }
 };
 
@@ -1405,6 +1499,38 @@ class spell_dru_luxuriant_soil : public AuraScript
     {
         DoCheckEffectProc += AuraCheckEffectProcFn(spell_dru_luxuriant_soil::CheckProc, EFFECT_0, SPELL_AURA_DUMMY);
         OnEffectProc += AuraEffectProcFn(spell_dru_luxuriant_soil::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 22570 - Maim
+class spell_dru_maim : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DRUID_MAIM_STUN });
+    }
+
+    void CalculateDamage(SpellEffectInfo const& /*spellEffectInfo*/, Unit* /*victim*/, int32& /*damage*/, int32& /*flatMod*/, float& pctMod)
+    {
+        int32 comboPoints = GetSpell()->GetPowerTypeCostAmount(POWER_COMBO_POINTS).value_or(0);
+
+        pctMod *= comboPoints;
+    }
+
+    void HandleEffectHit(SpellEffIndex /*effIndex*/)
+    {
+        int32 comboPoints = GetSpell()->GetPowerTypeCostAmount(POWER_COMBO_POINTS).value_or(0);
+
+        GetCaster()->CastSpell(GetHitUnit(), SPELL_DRUID_MAIM_STUN, CastSpellExtraArgsInit{
+            .TriggeringSpell = GetSpell(),
+            .SpellValueOverrides = { { SPELLVALUE_DURATION, comboPoints * IN_MILLISECONDS } }
+        });
+    }
+
+    void Register() override
+    {
+        CalcDamage += SpellCalcDamageFn(spell_dru_maim::CalculateDamage);
+        OnEffectHitTarget += SpellEffectFn(spell_dru_maim::HandleEffectHit, EFFECT_0, SPELL_EFFECT_DUMMY);
     }
 };
 
@@ -2886,11 +3012,14 @@ void AddSC_druid_spell_scripts()
     RegisterSpellScript(spell_dru_embrace_of_the_dream_effect);
     RegisterSpellAndAuraScriptPair(spell_dru_entangling_roots, spell_dru_entangling_roots_aura);
     RegisterSpellScript(spell_dru_ferocious_bite);
+    RegisterSpellScript(spell_dru_flower_walk);
+    RegisterSpellScript(spell_dru_flower_walk_heal);
     RegisterSpellScript(spell_dru_forms_trinket);
     RegisterSpellScript(spell_dru_galactic_guardian);
     RegisterSpellScript(spell_dru_germination);
     RegisterSpellScript(spell_dru_glyph_of_stars);
     RegisterSpellScript(spell_dru_gore);
+    RegisterSpellScript(spell_dru_guardian_of_elune_healing);
     RegisterSpellScript(spell_dru_incapacitating_roar);
     RegisterSpellScript(spell_dru_incarnation);
     RegisterSpellScript(spell_dru_incarnation_tree_of_life);
@@ -2901,6 +3030,7 @@ void AddSC_druid_spell_scripts()
     RegisterAreaTriggerAI(at_dru_lunar_beam);
     RegisterSpellScript(spell_dru_lunar_inspiration);
     RegisterSpellScript(spell_dru_luxuriant_soil);
+    RegisterSpellScript(spell_dru_maim);
     RegisterSpellScript(spell_dru_mangle);
     RegisterSpellScript(spell_dru_matted_fur_absorb);
     RegisterSpellScript(spell_dru_moonfire);
