@@ -5,6 +5,9 @@ on:
   schedule:
     - cron:  '0 0 * * *'
 
+permissions:
+  contents: write
+
 jobs:
   _master:
     strategy:
@@ -37,11 +40,11 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         ref: ${{ matrix.branch }}
         fetch-depth: 0
-        token: ${{ secrets.WORKFLOW_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Configure user
       run: |
@@ -161,11 +164,11 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         ref: ${{ matrix.branch }}
         fetch-depth: 0
-        token: ${{ secrets.WORKFLOW_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Configure user
       run: |
