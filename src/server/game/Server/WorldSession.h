@@ -193,6 +193,11 @@ namespace WorldPackets
         class SaveGuildEmblem;
     }
 
+    namespace Inspect
+    {
+        class Inspect;
+    }
+
     namespace LFG
     {
         class LFGJoin;
@@ -273,7 +278,7 @@ namespace WorldPackets
         class CancelChannelling;
     }
 
-    namespace Talents
+    namespace Talent
     {
         class ConfirmRespecWipe;
     }
@@ -679,7 +684,7 @@ class TC_GAME_API WorldSession
         void HandlePlayedTime(WorldPackets::Character::PlayedTimeClient& packet);
 
         // new inspect
-        void HandleInspectOpcode(WorldPacket& recvPacket);
+        void HandleInspectOpcode(WorldPackets::Inspect::Inspect& inspect);
 
         // new party stats
         void HandleInspectHonorStatsOpcode(WorldPacket& recvPacket);
@@ -929,7 +934,7 @@ class TC_GAME_API WorldSession
 
         void HandleLearnTalentOpcode(WorldPacket& recvPacket);
         void HandleLearnPreviewTalents(WorldPacket& recvPacket);
-        void HandleTalentWipeConfirmOpcode(WorldPackets::Talents::ConfirmRespecWipe& confirmRespecWipe);
+        void HandleTalentWipeConfirmOpcode(WorldPackets::Talent::ConfirmRespecWipe& confirmRespecWipe);
         void HandleUnlearnSkillOpcode(WorldPacket& recvPacket);
 
         void HandleQuestgiverStatusQueryOpcode(WorldPacket& recvPacket);
