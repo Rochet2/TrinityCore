@@ -19,7 +19,10 @@
 #define CharacterPackets_h__
 
 #include "Packet.h"
+#include "ObjectGuid.h"
 #include "Position.h"
+#include "SharedDefines.h"
+#include <memory>
 
 namespace WorldPackets
 {
