@@ -15,15 +15,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "Common.h"
-#include "ObjectMgr.h"
-#include "DatabaseEnv.h"
-
 #include "Bag.h"
+#include "Common.h"
+#include "DatabaseEnv.h"
 #include "Log.h"
-#include "UpdateData.h"
+#include "ObjectMgr.h"
 #include "Player.h"
-#include <sstream>
+#include "UpdateData.h"
+#include "WorldPacket.h"
 
 Bag::Bag(): Item()
 {
@@ -283,13 +282,6 @@ Item* Bag::GetItemByPos(uint8 slot) const
         return m_bagslot[slot];
 
     return nullptr;
-}
-
-std::string Bag::GetDebugInfo() const
-{
-    std::stringstream sstr;
-    sstr << Item::GetDebugInfo();
-    return sstr.str();
 }
 
 uint32 GetBagSize(Bag const* bag)
