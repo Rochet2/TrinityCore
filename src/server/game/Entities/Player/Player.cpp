@@ -3662,7 +3662,7 @@ void Player::BuildValuesUpdateWithFlag(UF::UpdateFieldFlag flags, ByteBuffer& da
 
 void Player::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::Mask const& requestedObjectMask,
     UF::UnitData::Mask const& requestedUnitMask, UF::PlayerData::Mask const& requestedPlayerMask,
-    UF::ActivePlayerData::Mask const& requestedActivePlayerMask, Player const* target) const
+    UF::ActivePlayerData::Mask const& requestedActivePlayerMask, Player const* target, bool ignoreNestedChangesMask) const
 {
     UF::UpdateFieldFlag flags = GetUpdateFieldFlagsFor(target);
     UpdateMask<NUM_CLIENT_OBJECT_TYPES> valuesMask;
@@ -3689,16 +3689,16 @@ void Player::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData
     buffer << uint32(valuesMask.GetBlock(0));
 
     if (valuesMask[TYPEID_OBJECT])
-        m_objectData->WriteUpdate(requestedObjectMask, buffer, target, this, true);
+        m_objectData->WriteUpdate(requestedObjectMask, buffer, target, this, ignoreNestedChangesMask);
 
     if (valuesMask[TYPEID_UNIT])
-        m_unitData->WriteUpdate(unitMask, buffer, target, this, true);
+        m_unitData->WriteUpdate(unitMask, buffer, target, this, ignoreNestedChangesMask);
 
     if (valuesMask[TYPEID_PLAYER])
-        m_playerData->WriteUpdate(playerMask, buffer, target, this, true);
+        m_playerData->WriteUpdate(playerMask, buffer, target, this, ignoreNestedChangesMask);
 
     if (valuesMask[TYPEID_ACTIVE_PLAYER])
-        m_activePlayerData->WriteUpdate(requestedActivePlayerMask, buffer, target, this, true);
+        m_activePlayerData->WriteUpdate(requestedActivePlayerMask, buffer, target, this, ignoreNestedChangesMask);
 
     buffer.put<uint32>(sizePos, buffer.wpos() - sizePos - 4);
 
@@ -3711,7 +3711,7 @@ void Player::ValuesUpdateForPlayerWithMaskSender::operator()(Player const* playe
     WorldPacket packet;
 
     Owner->BuildValuesUpdateForPlayerWithMask(&udata, ObjectMask.GetChangesMask(), UnitMask.GetChangesMask(),
-        PlayerMask.GetChangesMask(), ActivePlayerMask.GetChangesMask(), player);
+        PlayerMask.GetChangesMask(), ActivePlayerMask.GetChangesMask(), player, IgnoreNestedChangesMask);
 
     udata.BuildPacket(&packet);
     player->SendDirectMessage(&packet);
@@ -25742,7 +25742,7 @@ void Player::UpdateVisibleObjectInteractions(bool allUnits, bool onlySpellClicks
                     }
                 }
                 if (objMask.GetChangesMask().IsAnySet() || goMask.GetChangesMask().IsAnySet())
-                    gameObject->BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), goMask.GetChangesMask(), this);
+                    gameObject->BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), goMask.GetChangesMask(), this, false);
             }
         }
         else if (visibleObjectGuid.IsCreatureOrVehicle() && (allUnits || onlySpellClicks))
@@ -25772,7 +25772,7 @@ void Player::UpdateVisibleObjectInteractions(bool allUnits, bool onlySpellClicks
                 }
 
                 if (objMask.GetChangesMask().IsAnySet() || unitMask.GetChangesMask().IsAnySet())
-                    creature->BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), unitMask.GetChangesMask(), this);
+                    creature->BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), unitMask.GetChangesMask(), this, false);
 
                 if (creature->IsQuestGiver())
                     giverStatusMultiple.QuestGiver.emplace_back(visibleObjectGuid, GetQuestDialogStatus(creature));
@@ -25791,7 +25791,7 @@ void Player::UpdateVisibleObjectInteractions(bool allUnits, bool onlySpellClicks
                         UF::ObjectData::Base objMask;
                         UF::UnitData::Base unitMask;
                         unitMask.MarkChanged(&UF::UnitData::NpcFlags); // NpcFlags has UNIT_NPC_FLAG_SPELLCLICK
-                        creature->BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), unitMask.GetChangesMask(), this);
+                        creature->BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), unitMask.GetChangesMask(), this, false);
                         break;
                     }
                 }

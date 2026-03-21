@@ -1300,7 +1300,7 @@ void GameObject::Update(uint32 diff)
                     goMask.MarkChanged(&UF::GameObjectData::State);
 
                     UpdateData udata(GetMapId());
-                    BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), goMask.GetChangesMask(), seer);
+                    BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), goMask.GetChangesMask(), seer, false);
                     WorldPacket packet;
                     udata.BuildPacket(&packet);
                     seer->SendDirectMessage(&packet);
@@ -3900,7 +3900,7 @@ void GameObject::OnLootRelease(Player* looter)
             objMask.MarkChanged(&UF::ObjectData::DynamicFlags);
 
             UpdateData udata(GetMapId());
-            BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), goMask.GetChangesMask(), looter);
+            BuildValuesUpdateForPlayerWithMask(&udata, objMask.GetChangesMask(), goMask.GetChangesMask(), looter, false);
             WorldPacket packet;
             udata.BuildPacket(&packet);
             looter->SendDirectMessage(&packet);
@@ -4100,7 +4100,7 @@ void GameObject::BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, 
 }
 
 void GameObject::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::Mask const& requestedObjectMask,
-    UF::GameObjectData::Mask const& requestedGameObjectMask, Player const* target) const
+    UF::GameObjectData::Mask const& requestedGameObjectMask, Player const* target, bool ignoreNestedChangesMask) const
 {
     UF::UpdateFieldFlag flags = GetUpdateFieldFlagsFor(target);
     UpdateMask<NUM_CLIENT_OBJECT_TYPES> valuesMask;
@@ -4117,10 +4117,10 @@ void GameObject::BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::Object
     buffer << uint32(valuesMask.GetBlock(0));
 
     if (valuesMask[TYPEID_OBJECT])
-        m_objectData->WriteUpdate(requestedObjectMask, buffer, target, this, true);
+        m_objectData->WriteUpdate(requestedObjectMask, buffer, target, this, ignoreNestedChangesMask);
 
     if (valuesMask[TYPEID_GAMEOBJECT])
-        m_gameObjectData->WriteUpdate(requestedGameObjectMask, buffer, target, this, true);
+        m_gameObjectData->WriteUpdate(requestedGameObjectMask, buffer, target, this, ignoreNestedChangesMask);
 
     buffer.put<uint32>(sizePos, buffer.wpos() - sizePos - 4);
 
@@ -4132,7 +4132,7 @@ void GameObject::ValuesUpdateForPlayerWithMaskSender::operator()(Player const* p
     UpdateData udata(Owner->GetMapId());
     WorldPacket packet;
 
-    Owner->BuildValuesUpdateForPlayerWithMask(&udata, ObjectMask.GetChangesMask(), GameObjectMask.GetChangesMask(), player);
+    Owner->BuildValuesUpdateForPlayerWithMask(&udata, ObjectMask.GetChangesMask(), GameObjectMask.GetChangesMask(), player, IgnoreNestedChangesMask);
 
     udata.BuildPacket(&packet);
     player->SendDirectMessage(&packet);

@@ -2221,17 +2221,19 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) const override;
         void BuildValuesUpdateWithFlag(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const override;
         void BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::Mask const& requestedObjectMask, UF::UnitData::Mask const& requestedUnitMask,
-            UF::PlayerData::Mask const& requestedPlayerMask, UF::ActivePlayerData::Mask const& requestedActivePlayerMask, Player const* target) const;
+            UF::PlayerData::Mask const& requestedPlayerMask, UF::ActivePlayerData::Mask const& requestedActivePlayerMask,
+            Player const* target, bool ignoreNestedChangesMask) const;
 
         struct ValuesUpdateForPlayerWithMaskSender // sender compatible with MessageDistDeliverer
         {
-            explicit ValuesUpdateForPlayerWithMaskSender(Player const* owner) : Owner(owner) { }
+            explicit ValuesUpdateForPlayerWithMaskSender(Player const* owner) : Owner(owner), IgnoreNestedChangesMask(false) { }
 
             Player const* Owner;
             UF::ObjectData::Base ObjectMask;
             UF::UnitData::Base UnitMask;
             UF::PlayerData::Base PlayerMask;
             UF::ActivePlayerData::Base ActivePlayerMask;
+            bool IgnoreNestedChangesMask;
 
             void operator()(Player const* player) const;
         };
