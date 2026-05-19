@@ -150,6 +150,13 @@ namespace WorldPackets
         class UserClientUpdateAccountData;
     }
 
+    namespace Channel
+    {
+        class ChannelListRequest;
+        class JoinChannel;
+        class LeaveChannel;
+    }
+
     namespace Chat
     {
         class ChatMessage;
@@ -167,6 +174,12 @@ namespace WorldPackets
     namespace EquipmentSet
     {
         class SaveEquipmentSet;
+    }
+
+    namespace GameObject
+    {
+        class GameObjReportUse;
+        class GameObjUse;
     }
 
     namespace Guild
@@ -211,6 +224,15 @@ namespace WorldPackets
         class Inspect;
     }
 
+    namespace Item
+    {
+        class AutoEquipItem;
+        class DestroyItem;
+        class SplitItem;
+        class SwapInvItem;
+        class SwapItem;
+    }
+
     namespace LFG
     {
         class LFGJoin;
@@ -232,7 +254,11 @@ namespace WorldPackets
 
     namespace Misc
     {
+        class SetSelection;
         class TimeSyncResponse;
+        class TutorialSetFlag;
+        class TutorialClear;
+        class TutorialReset;
         class ReclaimCorpse;
         class RepopRequest;
         class ResurrectResponse;
@@ -250,6 +276,7 @@ namespace WorldPackets
     {
         class ClientPlayerMovement;
         class WorldPortResponse;
+        class MoveTeleportAck;
     }
 
     namespace NPC
@@ -277,6 +304,7 @@ namespace WorldPackets
         class QueryCreature;
         class QueryPlayerName;
         class QueryPageText;
+        class QueryNPCText;
         class QueryGameObject;
         class QueryCorpseLocationFromClient;
         class QueryCorpseTransport;
@@ -293,17 +321,22 @@ namespace WorldPackets
 
     namespace Spells
     {
-        class CancelCast;
         class CancelAura;
-        class PetCancelAura;
-        class CancelGrowthAura;
-        class CancelMountAura;
         class CancelAutoRepeatSpell;
         class CancelChannelling;
+        class CancelGrowthAura;
+        class CancelMountAura;
+        class PetCancelAura;
+        class CancelCast;
+        class CastSpell;
+        class PetCastSpell;
+        class SetActionButton;
     }
 
     namespace Talent
     {
+        class LearnTalent;
+        class LearnPreviewTalents;
         class ConfirmRespecWipe;
     }
 
@@ -713,7 +746,7 @@ class TC_GAME_API WorldSession
 
         void HandleForceSpeedChangeAck(WorldPacket& recvData);
         void HandleMoveKnockBackAck(WorldPacket& recvPacket);
-        void HandleMoveTeleportAck(WorldPacket& recvPacket);
+        void HandleMoveTeleportAck(WorldPackets::Movement::MoveTeleportAck& packet);
         void HandleMoveWaterWalkAck(WorldPacket& recvPacket);
         void HandleFeatherFallAck(WorldPacket& recvData);
         void HandleMoveHoverAck(WorldPacket& recvData);
@@ -758,7 +791,7 @@ class TC_GAME_API WorldSession
         void HandleTogglePvP(WorldPackets::Misc::TogglePvP& togglePvP);
 
         void HandleZoneUpdateOpcode(WorldPacket& recvPacket);
-        void HandleSetSelectionOpcode(WorldPacket& recvPacket);
+        void HandleSetSelectionOpcode(WorldPackets::Misc::SetSelection& packet);
         void HandleStandStateChangeOpcode(WorldPacket& recvPacket);
         void HandleEmoteOpcode(WorldPackets::Chat::EmoteClient& packet);
 
@@ -782,15 +815,13 @@ class TC_GAME_API WorldSession
 
         void HandleUpdateAccountData(WorldPackets::ClientConfig::UserClientUpdateAccountData& packet);
         void HandleRequestAccountData(WorldPackets::ClientConfig::RequestAccountData& request);
-        void HandleSetActionButtonOpcode(WorldPacket& recvPacket);
+        void HandleSetActionButtonOpcode(WorldPackets::Spells::SetActionButton& packet);
 
-        void HandleGameObjectUseOpcode(WorldPacket& recPacket);
-        void HandleGameobjectReportUse(WorldPacket& recvPacket);
+        void HandleGameObjectUseOpcode(WorldPackets::GameObject::GameObjUse& packet);
+        void HandleGameobjectReportUse(WorldPackets::GameObject::GameObjReportUse& packet);
 
         void HandleNameQueryOpcode(WorldPackets::Query::QueryPlayerName& queryPlayerName);
-
         void HandleQueryTimeOpcode(WorldPacket& recvPacket);
-
         void HandleCreatureQueryOpcode(WorldPackets::Query::QueryCreature& query);
 
         void HandleGameObjectQueryOpcode(WorldPackets::Query::QueryGameObject& query);
@@ -875,11 +906,11 @@ class TC_GAME_API WorldSession
         void HandleTrainerListOpcode(WorldPackets::NPC::Hello& packet);
         void HandleTrainerBuySpellOpcode(WorldPackets::NPC::TrainerBuySpell& packet);
         void HandlePetitionShowListOpcode(WorldPacket& recvPacket);
-        void HandleGossipHelloOpcode(WorldPacket& recvPacket);
+        void HandleGossipHelloOpcode(WorldPackets::NPC::Hello& packet);
         void HandleGossipSelectOptionOpcode(WorldPacket& recvPacket);
         void HandleSpiritHealerActivateOpcode(WorldPacket& recvPacket);
-        void HandleNpcTextQueryOpcode(WorldPacket& recvPacket);
-        void HandleBinderActivateOpcode(WorldPacket& recvPacket);
+        void HandleNpcTextQueryOpcode(WorldPackets::Query::QueryNPCText& packet);
+        void HandleBinderActivateOpcode(WorldPackets::NPC::Hello& packet);
         void HandleRequestStabledPets(WorldPacket& recvPacket);
         void HandleStablePet(WorldPacket& recvPacket);
         void HandleUnstablePet(WorldPacket& recvPacket);
@@ -927,19 +958,19 @@ class TC_GAME_API WorldSession
         void HandleMailCreateTextItem(WorldPackets::Mail::MailCreateTextItem& createTextItem);
         void HandleQueryNextMailTime(WorldPackets::Mail::MailQueryNextMailTime& queryNextMailTime);
 
-        void HandleSplitItemOpcode(WorldPacket& recvPacket);
-        void HandleSwapInvItemOpcode(WorldPacket& recvPacket);
-        void HandleDestroyItemOpcode(WorldPacket& recvPacket);
-        void HandleAutoEquipItemOpcode(WorldPacket& recvPacket);
+        void HandleSplitItemOpcode(WorldPackets::Item::SplitItem& splitItem);
+        void HandleSwapInvItemOpcode(WorldPackets::Item::SwapInvItem& swapInvItem);
+        void HandleDestroyItemOpcode(WorldPackets::Item::DestroyItem& destroyItem);
+        void HandleAutoEquipItemOpcode(WorldPackets::Item::AutoEquipItem& autoEquipItem);
         void HandleItemQuerySingleOpcode(WorldPackets::Query::QueryItemSingle& query);
         void HandleSellItemOpcode(WorldPacket& recvPacket);
         void HandleBuyItemInSlotOpcode(WorldPacket& recvPacket);
         void HandleBuyItemOpcode(WorldPacket& recvPacket);
-        void HandleListInventoryOpcode(WorldPacket& recvPacket);
+        void HandleListInventoryOpcode(WorldPackets::NPC::Hello& packet);
         void HandleAutoStoreBagItemOpcode(WorldPacket& recvPacket);
         void HandleReadItem(WorldPacket& recvPacket);
         void HandleAutoEquipItemSlotOpcode(WorldPacket& recvPacket);
-        void HandleSwapItem(WorldPacket& recvPacket);
+        void HandleSwapItem(WorldPackets::Item::SwapItem& swapItem);
         void HandleBuybackItem(WorldPacket& recvPacket);
         void HandleWrapItemOpcode(WorldPacket& recvPacket);
 
@@ -950,7 +981,7 @@ class TC_GAME_API WorldSession
         void HandleUseItemOpcode(WorldPacket& recvPacket);
         void HandleOpenItemOpcode(WorldPacket& recvPacket);
         void HandleOpenWrappedItemCallback(uint16 pos, ObjectGuid itemGuid, PreparedQueryResult result);
-        void HandleCastSpellOpcode(WorldPacket& recvPacket);
+        void HandleCastSpellOpcode(WorldPackets::Spells::CastSpell& castRequest);
         void HandleCancelCastOpcode(WorldPackets::Spells::CancelCast& cancelCast);
         void HandleCancelAuraOpcode(WorldPackets::Spells::CancelAura& cancelAura);
         void HandleCancelGrowthAuraOpcode(WorldPackets::Spells::CancelGrowthAura& cancelGrowthAura);
@@ -958,8 +989,8 @@ class TC_GAME_API WorldSession
         void HandleCancelAutoRepeatSpellOpcode(WorldPackets::Spells::CancelAutoRepeatSpell& cancelAutoRepeatSpell);
         void HandleCancelChanneling(WorldPackets::Spells::CancelChannelling& cancelChanneling);
 
-        void HandleLearnTalentOpcode(WorldPacket& recvPacket);
-        void HandleLearnPreviewTalents(WorldPacket& recvPacket);
+        void HandleLearnTalentOpcode(WorldPackets::Talent::LearnTalent& packet);
+        void HandleLearnPreviewTalents(WorldPackets::Talent::LearnPreviewTalents& learnPreviewTalents);
         void HandleTalentWipeConfirmOpcode(WorldPackets::Talent::ConfirmRespecWipe& confirmRespecWipe);
         void HandleUnlearnSkillOpcode(WorldPacket& recvPacket);
 
@@ -995,9 +1026,9 @@ class TC_GAME_API WorldSession
         void HandleResurrectResponse(WorldPackets::Misc::ResurrectResponse& packet);
         void HandleSummonResponseOpcode(WorldPacket& recvData);
 
-        void HandleJoinChannel(WorldPacket& recvPacket);
-        void HandleLeaveChannel(WorldPacket& recvPacket);
-        void HandleChannelList(WorldPacket& recvPacket);
+        void HandleJoinChannel(WorldPackets::Channel::JoinChannel& packet);
+        void HandleLeaveChannel(WorldPackets::Channel::LeaveChannel& packet);
+        void HandleChannelList(WorldPackets::Channel::ChannelListRequest& packet);
         void HandleChannelPassword(WorldPacket& recvPacket);
         void HandleChannelSetOwner(WorldPacket& recvPacket);
         void HandleChannelOwner(WorldPacket& recvPacket);
@@ -1011,7 +1042,6 @@ class TC_GAME_API WorldSession
         void HandleChannelUnban(WorldPacket& recvPacket);
         void HandleChannelAnnouncements(WorldPacket& recvPacket);
         void HandleChannelDeclineInvite(WorldPacket& recvPacket);
-        void HandleChannelDisplayListQuery(WorldPacket& recvPacket);
         void HandleGetChannelMemberCount(WorldPacket& recvPacket);
         void HandleSetChannelWatch(WorldPacket& recvPacket);
 
@@ -1021,9 +1051,9 @@ class TC_GAME_API WorldSession
 
         void HandleQueryPageText(WorldPackets::Query::QueryPageText& packet);
 
-        void HandleTutorialFlag (WorldPacket& recvData);
-        void HandleTutorialClear(WorldPacket& recvData);
-        void HandleTutorialReset(WorldPacket& recvData);
+        void HandleTutorialFlag(WorldPackets::Misc::TutorialSetFlag& packet);
+        void HandleTutorialClear(WorldPackets::Misc::TutorialClear& tutorialClear);
+        void HandleTutorialReset(WorldPackets::Misc::TutorialReset& tutorialReset);
 
         //Pet
         void HandlePetAction(WorldPacket& recvData);
@@ -1035,7 +1065,7 @@ class TC_GAME_API WorldSession
         void HandlePetRename(WorldPacket& recvData);
         void HandlePetCancelAuraOpcode(WorldPackets::Spells::PetCancelAura& packet);
         void HandlePetSpellAutocastOpcode(WorldPackets::Pet::PetSpellAutocast& packet);
-        void HandlePetCastSpellOpcode(WorldPacket& recvPacket);
+        void HandlePetCastSpellOpcode(WorldPackets::Spells::PetCastSpell& petCastSpell);
         void HandlePetLearnTalent(WorldPacket& recvPacket);
         void HandleLearnPreviewTalentsPet(WorldPacket& recvPacket);
 
