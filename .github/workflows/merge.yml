@@ -36,6 +36,10 @@ jobs:
       SQL_CHAR: ${{ join( matrix.char, ' ' ) }}
       SQL_AUTH: ${{ join( matrix.auth, ' ' ) }}
       SQL_HOTFIX: ${{ join( matrix.hotfix, ' ' ) }}
+      CCACHE_MAXSIZE: 500M
+      CCACHE_COMPRESS: true
+      CCACHE_COMPRESSLEVEL: 6
+      CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
 
     runs-on: ubuntu-22.04
     steps:
@@ -52,11 +56,12 @@ jobs:
         git remote add Trinity https://github.com/TrinityCore/TrinityCore.git || git remote set-url Trinity https://github.com/TrinityCore/TrinityCore.git
         git fetch Trinity master
         if git merge-base --is-ancestor Trinity/master HEAD; then
-          echo "merge_needed=false" >> "$GITHUB_OUTPUT"
-          echo "Already up to date with TrinityCore master, skipping merge and build"
+          echo "Already up to date with TrinityCore master"
         else
-          echo "merge_needed=true" >> "$GITHUB_OUTPUT"
+          echo "Upstream merge required"
         fi
+        # BENCHMARK: upstream skip disabled — restore merge_needed=false branch below
+        echo "merge_needed=true" >> "$GITHUB_OUTPUT"
 
     - name: Configure user
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -73,19 +78,42 @@ jobs:
     - name: Dependencies
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        sudo apt-get update && sudo apt-get install -yq libboost-all-dev clang-15
+        sudo apt-get update && sudo apt-get install -yq libboost-all-dev clang-15 ccache
+
+    - name: Restore ccache
+      if: steps.upstream.outputs.merge_needed == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.ccache
+        key: ccache-master-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
+        restore-keys: |
+          ccache-master-${{ matrix.pch }}-
+          ccache-master-
+
     - name: Setup
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         mkdir bin
         cd bin
-        cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15
+        cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         cd ..
     - name: Build
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin
         make -j 4 -k && make install
+
+    - name: ccache stats
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: ccache -s
+
+    - name: Save ccache
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.branch == 'master' && matrix.pch == 'ON'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.ccache
+        key: ccache-master-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
+
     - name: Check executables
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
@@ -176,6 +204,10 @@ jobs:
       SQL_WORLD: ${{ join( matrix.world, ' ' ) }}
       SQL_CHAR: ${{ join( matrix.char, ' ' ) }}
       SQL_AUTH: ${{ join( matrix.auth, ' ' ) }}
+      CCACHE_MAXSIZE: 500M
+      CCACHE_COMPRESS: true
+      CCACHE_COMPRESSLEVEL: 6
+      CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
 
     runs-on: ubuntu-22.04
     steps:
@@ -192,11 +224,12 @@ jobs:
         git remote add Trinity https://github.com/TrinityCore/TrinityCore.git || git remote set-url Trinity https://github.com/TrinityCore/TrinityCore.git
         git fetch Trinity 3.3.5
         if git merge-base --is-ancestor Trinity/3.3.5 HEAD; then
-          echo "merge_needed=false" >> "$GITHUB_OUTPUT"
-          echo "Already up to date with TrinityCore 3.3.5, skipping merge and build"
+          echo "Already up to date with TrinityCore 3.3.5"
         else
-          echo "merge_needed=true" >> "$GITHUB_OUTPUT"
+          echo "Upstream merge required"
         fi
+        # BENCHMARK: upstream skip disabled — restore merge_needed=false branch below
+        echo "merge_needed=true" >> "$GITHUB_OUTPUT"
 
     - name: Configure user
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -213,20 +246,43 @@ jobs:
     - name: Dependencies
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        sudo apt-get update && sudo apt-get install -yq libboost-all-dev g++-11
+        sudo apt-get update && sudo apt-get install -yq libboost-all-dev g++-11 ccache
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 --slave /usr/bin/g++ g++ /usr/bin/g++-11
+
+    - name: Restore ccache
+      if: steps.upstream.outputs.merge_needed == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.ccache
+        key: ccache-335-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
+        restore-keys: |
+          ccache-335-${{ matrix.pch }}-
+          ccache-335-
+
     - name: Setup
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         mkdir bin
         cd bin
-        cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DBUILD_TESTING=1
+        cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DBUILD_TESTING=1 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         cd ..
     - name: Build
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin
         make -j 4 -k && make install
+
+    - name: ccache stats
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: ccache -s
+
+    - name: Save ccache
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.branch == '3.3.5' && matrix.pch == 'ON'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.ccache
+        key: ccache-335-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
+
     - name: Unit tests
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
