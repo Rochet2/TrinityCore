@@ -46,38 +46,54 @@ jobs:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Check upstream
+      id: upstream
+      run: |
+        git remote add Trinity https://github.com/TrinityCore/TrinityCore.git || git remote set-url Trinity https://github.com/TrinityCore/TrinityCore.git
+        git fetch Trinity master
+        if git merge-base --is-ancestor Trinity/master HEAD; then
+          echo "merge_needed=false" >> "$GITHUB_OUTPUT"
+          echo "Already up to date with TrinityCore master, skipping merge and build"
+        else
+          echo "merge_needed=true" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Configure user
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         git config user.email "rochet2@post.com" && git config user.name "Rochet2"
 
     - name: Merge TC
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        git status
-        git remote add Trinity https://github.com/TrinityCore/TrinityCore.git
-        git fetch Trinity master
         git merge -m "Merge TrinityCore master to ${BRANCH} [skip ci]" Trinity/master
         git submodule update --init --recursive
         git status
 
     - name: Dependencies
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         sudo apt-get update && sudo apt-get install -yq libboost-all-dev clang-15
     - name: Setup
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         mkdir bin
         cd bin
         cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15
         cd ..
     - name: Build
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin
         make -j 4 -k && make install
     - name: Check executables
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin/check_install/bin
         ./bnetserver --version
         ./worldserver --version
     - name: Find latest DB release tag
+      if: steps.upstream.outputs.merge_needed == 'true'
       id: find_matching_tags
       uses: Rochet2/find-matching-tags-ghapi@v1.3
       with:
@@ -88,19 +104,19 @@ jobs:
         per_page: 100
         token: ${{ secrets.GITHUB_TOKEN }}
     - name: Download latest DB
-      uses: i3h/download-release-asset@a987f9dc3559bd1024d7ed353b59c9d0bbb8ab61
-      with:
-        owner: TrinityCore
-        repo: TrinityCore
-        tag: ${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}
-        file: /TDB_full.*\.7z/
-        path: bin/check_install/bin
-        token: ${{ secrets.GITHUB_TOKEN }}
+      if: steps.upstream.outputs.merge_needed == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG='${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}'
+        gh release download "$TAG" --repo TrinityCore/TrinityCore --pattern 'TDB_full*.7z' --dir bin/check_install/bin
     - name: Set configs
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin/check_install/etc
         sed "s/127.0.0.1;3306;trinity;trinity;/localhost;3306;root;;/g" worldserver.conf.dist > worldserver.conf
     - name: Build DB
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         echo "start mysql"
         sudo systemctl start mysql.service
@@ -113,7 +129,7 @@ jobs:
         yes | ./worldserver --update-databases-only
 
     - name: Run SQLs
-      if: matrix.pch == 'ON'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON'
       run: |
         for f in $SQL_WORLD; do echo "$f"; cat "$f" | mysql -uroot world; done
         for f in $SQL_CHAR; do echo "$f"; cat "$f" | mysql -uroot characters; done
@@ -121,7 +137,7 @@ jobs:
         for f in $SQL_HOTFIX; do echo "$f"; cat "$f" | mysql -uroot hotfixes; done
 
     - name: Push changes
-      if: matrix.pch == 'ON'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON'
       run: |
         git push
 
@@ -170,43 +186,60 @@ jobs:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Check upstream
+      id: upstream
+      run: |
+        git remote add Trinity https://github.com/TrinityCore/TrinityCore.git || git remote set-url Trinity https://github.com/TrinityCore/TrinityCore.git
+        git fetch Trinity 3.3.5
+        if git merge-base --is-ancestor Trinity/3.3.5 HEAD; then
+          echo "merge_needed=false" >> "$GITHUB_OUTPUT"
+          echo "Already up to date with TrinityCore 3.3.5, skipping merge and build"
+        else
+          echo "merge_needed=true" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Configure user
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         git config user.email "rochet2@post.com" && git config user.name "Rochet2"
 
     - name: Merge TC
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        git status
-        git remote add Trinity https://github.com/TrinityCore/TrinityCore.git
-        git fetch Trinity 3.3.5
         git merge -m "Merge TrinityCore 3.3.5 to ${BRANCH} [skip ci]" Trinity/3.3.5
         git submodule update --init --recursive
         git status
 
     - name: Dependencies
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         sudo apt-get update && sudo apt-get install -yq libboost-all-dev g++-11
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 --slave /usr/bin/g++ g++ /usr/bin/g++-11
     - name: Setup
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         mkdir bin
         cd bin
         cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DBUILD_TESTING=1
         cd ..
     - name: Build
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin
         make -j 4 -k && make install
     - name: Unit tests
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin
         make test
     - name: Check executables
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin/check_install/bin
         ./authserver --version
         ./worldserver --version
     - name: Find latest DB release tag
+      if: steps.upstream.outputs.merge_needed == 'true'
       id: find_matching_tags
       uses: Rochet2/find-matching-tags-ghapi@v1.3
       with:
@@ -217,25 +250,27 @@ jobs:
         per_page: 70
         token: ${{ secrets.GITHUB_TOKEN }}
     - name: Print matched tags
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         echo ${{ steps.find_matching_tags.outputs.tags }}
     - name: Download latest DB
-      uses: i3h/download-release-asset@a987f9dc3559bd1024d7ed353b59c9d0bbb8ab61
-      with:
-        owner: TrinityCore
-        repo: TrinityCore
-        tag: ${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}
-        file: /TDB_full.*\.7z/
-        path: bin/check_install/bin
-        token: ${{ secrets.GITHUB_TOKEN }}
+      if: steps.upstream.outputs.merge_needed == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG='${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}'
+        gh release download "$TAG" --repo TrinityCore/TrinityCore --pattern 'TDB_full*.7z' --dir bin/check_install/bin
     - name: Print downloaded files
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         ls -lah bin/check_install/bin
     - name: Set configs
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin/check_install/etc
         sed "s/127.0.0.1;3306;trinity;trinity;/localhost;3306;root;;/g" worldserver.conf.dist > worldserver.conf
     - name: Build DB
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         echo "start mysql"
         sudo systemctl start mysql.service
@@ -248,20 +283,20 @@ jobs:
         yes | ./worldserver --update-databases-only
 
     - name: Run SQLs
-      if: matrix.pch == 'ON'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON'
       run: |
         for f in $SQL_WORLD; do echo "$f"; cat "$f" | mysql -uroot world; done
         for f in $SQL_CHAR; do echo "$f"; cat "$f" | mysql -uroot characters; done
         for f in $SQL_AUTH; do echo "$f"; cat "$f" | mysql -uroot auth; done
 
     - name: Run External SQLs
-      if: matrix.pch == 'ON' && matrix.branch == '3.3.5'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON' && matrix.branch == '3.3.5'
       run: |
-        echo 'Trinity_Jukebox' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Jukebox.sql | mysql -uroot world
-        echo 'Trinity_Portal_Master' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Portal_Master.sql | mysql -uroot world
-        echo 'Trinity_Portal_Master_Option' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Portal_Master_Option.sql | mysql -uroot world
+        echo 'Trinity_Jukebox' ; curl -sSf https://rochet2.github.io/downloads/Trinity_Jukebox.sql | mysql -uroot world
+        echo 'Trinity_Portal_Master' ; curl -sSf https://rochet2.github.io/downloads/Trinity_Portal_Master.sql | mysql -uroot world
+        echo 'Trinity_Portal_Master_Option' ; curl -sSf https://rochet2.github.io/downloads/Trinity_Portal_Master_Option.sql | mysql -uroot world
 
     - name: Push changes
-      if: matrix.pch == 'ON'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON'
       run: |
         git push
