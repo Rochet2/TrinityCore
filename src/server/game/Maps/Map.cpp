@@ -18,7 +18,7 @@
 #include "Map.h"
 #include "Battleground.h"
 #include "CellImpl.h"
-#include "Chat.h"
+#include "ChatPackets.h"
 #include "DatabaseEnv.h"
 #include "DisableMgr.h"
 #include "DynamicTree.h"
@@ -3082,7 +3082,9 @@ bool Map::CheckRespawn(RespawnInfo* info)
     }
 
     // next, check linked respawn time
-    ObjectGuid thisGUID = ObjectGuid((info->type == SPAWN_TYPE_GAMEOBJECT) ? HighGuid::GameObject : HighGuid::Unit, info->entry, info->spawnId);
+    ObjectGuid thisGUID = info->type == SPAWN_TYPE_GAMEOBJECT
+        ? ObjectGuid::Create<HighGuid::GameObject>(info->entry, info->spawnId)
+        : ObjectGuid::Create<HighGuid::Unit>(info->entry, info->spawnId);
     if (time_t linkedTime = GetLinkedRespawnTime(thisGUID))
     {
         time_t now = GameTime::GetGameTime();
@@ -4754,9 +4756,9 @@ void Map::SendZoneWeather(ZoneDynamicInfo const& zoneDynamicInfo, Player* player
 /// Send a System Message to all players in the zone (except self if mentioned)
 void Map::SendZoneText(uint32 zoneId, char const* text, WorldSession const* self, uint32 team) const
 {
-    WorldPacket data;
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, LANG_UNIVERSAL, nullptr, nullptr, text);
-    SendZoneMessage(zoneId, &data, self, team);
+    WorldPackets::Chat::Chat packet;
+    packet.Initialize(CHAT_MSG_SYSTEM, LANG_UNIVERSAL, nullptr, nullptr, text);
+    SendZoneMessage(zoneId, packet.Write(), self, team);
 }
 
 void Map::SetZoneMusic(uint32 zoneId, uint32 musicId)
