@@ -42,8 +42,9 @@ jobs:
       CCACHE_COMPRESSLEVEL: 6
       CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
       CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
 
     - uses: actions/checkout@v6
@@ -80,7 +81,10 @@ jobs:
     - name: Dependencies
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        sudo apt-get update && sudo apt-get install -yq libboost-all-dev clang-15 ccache
+        sudo apt-get update && sudo apt-get install -yq ccache clang-17 \
+          libboost-dev libboost-filesystem-dev libboost-locale-dev \
+          libboost-program-options-dev libboost-regex-dev libboost-thread-dev \
+          libssl-dev libreadline-dev zlib1g-dev libbz2-dev
 
     - name: Restore ccache
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -95,10 +99,13 @@ jobs:
 
     - name: Setup
       if: steps.upstream.outputs.merge_needed == 'true'
+      env:
+        CC: /usr/bin/clang-17
+        CXX: /usr/bin/clang++-17
       run: |
         mkdir bin
         cd bin
-        cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        cmake ../ -DWITH_WARNINGS=1 -DWITH_WARNINGS_AS_ERRORS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         cd ..
     - name: Build
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -235,6 +242,7 @@ jobs:
       CCACHE_COMPRESSLEVEL: 6
       CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
       CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
 
     runs-on: ubuntu-22.04
     steps:
