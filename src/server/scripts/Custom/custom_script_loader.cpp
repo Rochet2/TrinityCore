@@ -16,9 +16,13 @@
  */
 
 // This is where scripts' loading functions should be declared:
+void AddSC_example_ItemGossip();
+void AddSC_example_PlayerGossip();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddCustomScripts()
 {
+    AddSC_example_ItemGossip();
+    AddSC_example_PlayerGossip();
 }
