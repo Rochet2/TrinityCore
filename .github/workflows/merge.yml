@@ -151,7 +151,6 @@ jobs:
         sort: desc
         owner: TrinityCore
         repo: TrinityCore
-        paginate: 'true'
         per_page: 100
     - name: Download latest DB
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -347,11 +346,10 @@ jobs:
       id: find_matching_tags
       uses: Rochet2/find-matching-tags-ghapi@v2
       with:
-        regex: ^TDB335\.\d+$
+        regex: ^TDB335\.\d{5,}$
         sort: desc
         owner: TrinityCore
         repo: TrinityCore
-        paginate: 'true'
         per_page: 100
     - name: Download latest DB
       if: steps.upstream.outputs.merge_needed == 'true'
