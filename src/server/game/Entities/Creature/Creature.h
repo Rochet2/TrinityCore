@@ -54,6 +54,15 @@ typedef std::list<VendorItemCount> VendorItemCounts;
 
 #define MAX_VENDOR_ITEMS 150                                // Limitation in 3.x.x item count in SMSG_LIST_INVENTORY
 
+enum class VendorInventoryReason : uint8
+{
+    Empty       = 0,
+    DontLikeYou = 1,
+    TooFar      = 2,
+    Dead        = 3,
+    YouAreDead  = 4
+};
+
 //used for handling non-repeatable random texts
 typedef std::vector<uint8> CreatureTextRepeatIds;
 typedef std::unordered_map<uint8, CreatureTextRepeatIds> CreatureTextRepeatGroup;
@@ -152,14 +161,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void Motion_Initialize();
 
         CreatureAI* AI() const { return reinterpret_cast<CreatureAI*>(GetAI()); }
-
-        bool SetWalk(bool enable) override;
-        bool SetDisableGravity(bool disable, bool packetOnly = false, bool updateAnimTier = true) override;
-        bool SetSwim(bool enable) override;
-        bool SetCanFly(bool enable, bool packetOnly = false) override;
-        bool SetWaterWalking(bool enable, bool packetOnly = false) override;
-        bool SetFeatherFall(bool enable, bool packetOnly = false) override;
-        bool SetHover(bool enable, bool packetOnly = false, bool updateAnimTier = true) override;
 
         uint32 GetShieldBlockValue() const override;
 
@@ -345,7 +346,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool m_isTempWorldObject; //true when possessed
 
         // Handling caster facing during spellcast
-        void SetTarget(ObjectGuid guid) override;
+        void SetTarget(ObjectGuid const& guid) override;
         void DoNotReacquireSpellFocusTarget();
         void SetSpellFocus(Spell const* focusSpell, WorldObject const* target);
         bool HasSpellFocus(Spell const* focusSpell = nullptr) const override;

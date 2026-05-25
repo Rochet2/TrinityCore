@@ -314,7 +314,7 @@ public:
                             return true;
                         }
                         // sender = slot, action = display
-                        TransmogTrinityStrings res = sTransmogrification->Transmogrify(player, ObjectGuid(HighGuid::Item, 0, action), sender);
+                        TransmogTrinityStrings res = sTransmogrification->Transmogrify(player, ObjectGuid::Create<HighGuid::Item>(action), sender);
                         if (res == LANG_ERR_TRANSMOG_OK)
                             session->SendAreaTriggerMessage("%s", GTS(LANG_ERR_TRANSMOG_OK));
                         else
