@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   _master:
     strategy:
@@ -40,6 +43,7 @@ jobs:
       CCACHE_COMPRESS: true
       CCACHE_COMPRESSLEVEL: 6
       CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
 
     runs-on: ubuntu-22.04
     steps:
@@ -84,12 +88,16 @@ jobs:
       if: steps.upstream.outputs.merge_needed == 'true'
       uses: actions/cache/restore@v4
       with:
-        path: ~/.ccache
+        path: .ccache
         key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
         restore-keys: |
           ccache-master-${{ matrix.branch }}-${{ matrix.pch }}-
           ccache-master-${{ matrix.branch }}-
           ccache-master-${{ matrix.pch }}-
+
+    - name: Init ccache directory
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: mkdir -p .ccache
 
     - name: Setup
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -108,11 +116,22 @@ jobs:
       if: steps.upstream.outputs.merge_needed == 'true'
       run: ccache -s
 
+    - name: Check ccache has data
+      id: ccache_has_data
+      if: success() && steps.upstream.outputs.merge_needed == 'true'
+      run: |
+        if find .ccache -type f -print -quit 2>/dev/null | grep -q .; then
+          echo "has_data=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_data=false" >> "$GITHUB_OUTPUT"
+          echo "No ccache objects produced, skipping cache save"
+        fi
+
     - name: Save ccache
-      if: steps.upstream.outputs.merge_needed == 'true'
+      if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
       uses: actions/cache/save@v4
       with:
-        path: ~/.ccache
+        path: .ccache
         key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
 
     - name: Check executables
@@ -209,6 +228,7 @@ jobs:
       CCACHE_COMPRESS: true
       CCACHE_COMPRESSLEVEL: 6
       CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
 
     runs-on: ubuntu-22.04
     steps:
@@ -254,12 +274,16 @@ jobs:
       if: steps.upstream.outputs.merge_needed == 'true'
       uses: actions/cache/restore@v4
       with:
-        path: ~/.ccache
+        path: .ccache
         key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
         restore-keys: |
           ccache-335-${{ matrix.branch }}-${{ matrix.pch }}-
           ccache-335-${{ matrix.branch }}-
           ccache-335-${{ matrix.pch }}-
+
+    - name: Init ccache directory
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: mkdir -p .ccache
 
     - name: Setup
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -278,11 +302,22 @@ jobs:
       if: steps.upstream.outputs.merge_needed == 'true'
       run: ccache -s
 
+    - name: Check ccache has data
+      id: ccache_has_data
+      if: success() && steps.upstream.outputs.merge_needed == 'true'
+      run: |
+        if find .ccache -type f -print -quit 2>/dev/null | grep -q .; then
+          echo "has_data=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_data=false" >> "$GITHUB_OUTPUT"
+          echo "No ccache objects produced, skipping cache save"
+        fi
+
     - name: Save ccache
-      if: steps.upstream.outputs.merge_needed == 'true'
+      if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
       uses: actions/cache/save@v4
       with:
-        path: ~/.ccache
+        path: .ccache
         key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
 
     - name: Unit tests
