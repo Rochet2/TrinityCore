@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   _master:
@@ -86,11 +87,7 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: .ccache
-        key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
-        restore-keys: |
-          ccache-master-${{ matrix.branch }}-${{ matrix.pch }}-
-          ccache-master-${{ matrix.branch }}-
-          ccache-master-${{ matrix.pch }}-
+        key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}
 
     - name: Init ccache directory
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -124,12 +121,20 @@ jobs:
           echo "No ccache objects produced, skipping cache save"
         fi
 
+    - name: Delete previous ccache entry
+      if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh cache delete "ccache-master-${{ matrix.branch }}-${{ matrix.pch }}" --repo "${{ github.repository }}" || true
+
     - name: Save ccache
       if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
       uses: actions/cache/save@v5
       with:
         path: .ccache
-        key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
+        key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}
 
     - name: Check executables
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -277,11 +282,7 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: .ccache
-        key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
-        restore-keys: |
-          ccache-335-${{ matrix.branch }}-${{ matrix.pch }}-
-          ccache-335-${{ matrix.branch }}-
-          ccache-335-${{ matrix.pch }}-
+        key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}
 
     - name: Init ccache directory
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -315,12 +316,20 @@ jobs:
           echo "No ccache objects produced, skipping cache save"
         fi
 
+    - name: Delete previous ccache entry
+      if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh cache delete "ccache-335-${{ matrix.branch }}-${{ matrix.pch }}" --repo "${{ github.repository }}" || true
+
     - name: Save ccache
       if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
       uses: actions/cache/save@v5
       with:
         path: .ccache
-        key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
+        key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}
 
     - name: Unit tests
       if: steps.upstream.outputs.merge_needed == 'true'
