@@ -179,7 +179,8 @@ enum Misc
     DATA_MATERIAL_DAMAGE_TAKEN   = 2,
     DATA_STACKS_DISPELLED        = 3,
     DATA_FIGHT_PHASE             = 4,
-    DATA_SPAWNED_FLAMES          = 5
+    DATA_SPAWNED_FLAMES          = 5,
+    DATA_ROOT_GUID               = 6,
 };
 
 enum OrbCarrierSeats
@@ -936,7 +937,7 @@ class npc_orb_carrier : public CreatureScript
                         if (northOrb && northOrb->GetTypeId() == TYPEID_UNIT)
                             northOrb->ToCreature()->AI()->Talk(EMOTE_WARN_LASER);
 
-                        scheduler.Schedule(Seconds(5), [this](TaskContext /*context*/)
+                        scheduler.Schedule(Seconds(5), [this](TaskContext const& /*context*/)
                         {
                             DoAction(ACTION_SHOOT);
                         });
@@ -1110,7 +1111,7 @@ class npc_meteor_strike : public CreatureScript
                 {
                     Position pos = me->GetNearPosition(5.0f, frand(-static_cast<float>(M_PI / 6.0f), static_cast<float>(M_PI / 6.0f)));
                     if (Creature* flame = me->SummonCreature(NPC_METEOR_STRIKE_FLAME, pos, TEMPSUMMON_TIMED_DESPAWN, 25s))
-                        flame->AI()->SetGUID(me->GetGUID());
+                        flame->AI()->SetGUID(me->GetGUID(), DATA_ROOT_GUID);
                 }
             }
 
@@ -1139,8 +1140,11 @@ class npc_meteor_strike_flame : public CreatureScript
                 SetCombatMovement(false);
             }
 
-            void SetGUID(ObjectGuid const& guid, int32 /*id*/) override
+            void SetGUID(ObjectGuid const& guid, int32 id) override
             {
+                if (id != DATA_ROOT_GUID)
+                    return;
+
                 _rootOwnerGuid = guid;
                 _events.ScheduleEvent(EVENT_SPAWN_METEOR_FLAME, Milliseconds(800));
             }
@@ -1170,7 +1174,7 @@ class npc_meteor_strike_flame : public CreatureScript
 
                 Position pos = me->GetNearPosition(5.0f, frand(-static_cast<float>(M_PI / 6.0f), static_cast<float>(M_PI / 6.0f)));
                 if (Creature* flame = me->SummonCreature(NPC_METEOR_STRIKE_FLAME, pos, TEMPSUMMON_TIMED_DESPAWN, 25s))
-                    flame->AI()->SetGUID(_rootOwnerGuid);
+                    flame->AI()->SetGUID(_rootOwnerGuid, DATA_ROOT_GUID);
             }
 
             void EnterEvadeMode(EvadeReason /*why*/) override { }
@@ -1280,7 +1284,7 @@ class npc_living_inferno : public CreatureScript
 
                 // SMSG_SPELL_GO for the living ember stuff isn't even sent to the client - Blizzard on drugs.
                 if (me->GetMap()->GetDifficultyID() == DIFFICULTY_25_HC)
-                    scheduler.Schedule(Seconds(3), [this](TaskContext /*context*/)
+                    scheduler.Schedule(Seconds(3), [this](TaskContext const& /*context*/)
                     {
                         me->CastSpell(me, SPELL_SPAWN_LIVING_EMBERS, true);
                     });
@@ -1612,7 +1616,7 @@ class spell_halion_damage_aoe_summon : public SpellScriptLoader
 
             void Register() override
             {
-                OnEffectHit += SpellEffectFn(spell_halion_damage_aoe_summon_SpellScript::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
+                OnEffectLaunch += SpellEffectFn(spell_halion_damage_aoe_summon_SpellScript::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
             }
         };
 
@@ -1700,8 +1704,8 @@ class spell_halion_clear_debuffs : public SpellScriptLoader
 
             void HandleScript(SpellEffIndex /*effIndex*/)
             {
-                if (GetHitUnit()->HasAura(GetEffectInfo().CalcValue()))
-                    GetHitUnit()->RemoveAurasDueToSpell(GetEffectInfo().CalcValue());
+                if (GetHitUnit()->HasAura(GetEffectInfo().CalcValueAsInt()))
+                    GetHitUnit()->RemoveAurasDueToSpell(GetEffectInfo().CalcValueAsInt());
             }
 
             void Register() override

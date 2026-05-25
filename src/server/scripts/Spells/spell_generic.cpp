@@ -23,6 +23,8 @@
  */
 
 #include "ScriptMgr.h"
+#include "AreaTrigger.h"
+#include "AreaTriggerAI.h"
 #include "Battleground.h"
 #include "BattlePetMgr.h"
 #include "CellImpl.h"
@@ -34,11 +36,14 @@
 #include "GridNotifiersImpl.h"
 #include "Item.h"
 #include "Log.h"
+#include "MapUtils.h"
 #include "MotionMaster.h"
 #include "NPCPackets.h"
 #include "ObjectMgr.h"
 #include "Pet.h"
+#include "PhasingHandler.h"
 #include "ReputationMgr.h"
+#include "PathGenerator.h"
 #include "SkillDiscovery.h"
 #include "SpellAuraEffects.h"
 #include "SpellHistory.h"
@@ -55,7 +60,7 @@ class spell_gen_absorb0_hitlimit1 : public AuraScript
     bool Load() override
     {
         // Max absorb stored in 1 dummy effect
-        limit = GetSpellInfo()->GetEffect(EFFECT_1).CalcValue();
+        limit = GetSpellInfo()->GetEffect(EFFECT_1).CalcValueAsInt();
         return true;
     }
 
@@ -264,7 +269,7 @@ class spell_gen_arena_drink : public AuraScript
             isPeriodic = false;
     }
 
-    void CalcAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& /*canBeRecalculated*/)
+    void CalcAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
     {
         AuraEffect* regen = GetAura()->GetEffect(EFFECT_0);
         if (!regen)
@@ -328,7 +333,7 @@ class spell_gen_aura_of_fear : public AuraScript
     void PeriodicTick(AuraEffect const* aurEff)
     {
         PreventDefaultAction();
-        if (!roll_chance_i(GetSpellInfo()->ProcChance))
+        if (!roll_chance(GetSpellInfo()->ProcChance))
             return;
 
         GetTarget()->CastSpell(nullptr, aurEff->GetSpellEffectInfo().TriggerSpell, true);
@@ -435,6 +440,12 @@ class spell_gen_battleground_mercenary_shapeshift : public AuraScript
         { RACE_VULPERA, { 94999, 95001 } },
         { RACE_MAGHAR_ORC, { 88420, 88410 } },
         { RACE_MECHAGNOME, { 94998, 95000 } },
+        { RACE_DRACTHYR_ALLIANCE, { 112794, 112793 } },
+        { RACE_DRACTHYR_HORDE, { 112796, 112795 } },
+        { RACE_EARTHEN_DWARF_HORDE, { 118113, 118114 } },
+        { RACE_EARTHEN_DWARF_ALLIANCE, { 118111, 118112 } },
+        { RACE_HARANIR_ALLIANCE, { 140501, 140500 } },
+        { RACE_HARANIR_HORDE, { 140503, 140502 } },
     };
 
     inline static std::vector<uint32> RacialSkills;
@@ -704,18 +715,18 @@ class spell_gen_burning_depths_necrolyte_image : public AuraScript
     bool Validate(SpellInfo const* spellInfo) override
     {
         return ValidateSpellEffect({ { spellInfo->Id, EFFECT_2 } })
-            && ValidateSpellInfo({ static_cast<uint32>(spellInfo->GetEffect(EFFECT_2).CalcValue()) });
+            && ValidateSpellInfo({ static_cast<uint32>(spellInfo->GetEffect(EFFECT_2).CalcValueAsInt()) });
     }
 
     void HandleApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         if (Unit* caster = GetCaster())
-            caster->CastSpell(GetTarget(), uint32(GetEffectInfo(EFFECT_2).CalcValue()));
+            caster->CastSpell(GetTarget(), uint32(GetEffectInfo(EFFECT_2).CalcValueAsInt()));
     }
 
     void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
-        GetTarget()->RemoveAurasDueToSpell(uint32(GetEffectInfo(EFFECT_2).CalcValue()), GetCasterGUID());
+        GetTarget()->RemoveAurasDueToSpell(uint32(GetEffectInfo(EFFECT_2).CalcValueAsInt()), GetCasterGUID());
     }
 
     void Register() override
@@ -775,7 +786,7 @@ class spell_gen_chains_of_ice : public AuraScript
         if (!slow)
             return;
 
-        int32 newAmount = std::min<int32>(slow->GetAmount() + aurEff->GetAmount(), 0);
+        SpellEffectValue newAmount = std::min(slow->GetAmount() + aurEff->GetAmount(), 0.0);
         slow->ChangeAmount(newAmount);
     }
 
@@ -840,7 +851,7 @@ class spell_gen_clone : public SpellScript
     void HandleScriptEffect(SpellEffIndex effIndex)
     {
         PreventHitDefaultEffect(effIndex);
-        GetHitUnit()->CastSpell(GetCaster(), uint32(GetEffectValue()), true);
+        GetHitUnit()->CastSpell(GetCaster(), uint32(GetEffectValueAsInt()), true);
     }
 
     void Register() override
@@ -875,7 +886,7 @@ class spell_gen_clone_weapon : public SpellScript
     void HandleScriptEffect(SpellEffIndex effIndex)
     {
         PreventHitDefaultEffect(effIndex);
-        GetHitUnit()->CastSpell(GetCaster(), uint32(GetEffectValue()), true);
+        GetHitUnit()->CastSpell(GetCaster(), uint32(GetEffectValueAsInt()), true);
     }
 
     void Register() override
@@ -1016,7 +1027,7 @@ class spell_gen_consumption : public SpellScript
     void CalculateDamage(SpellEffectInfo const& /*spellEffectInfo*/, Unit const* /*victim*/, int32& damage, int32& /*flatMod*/, float& /*pctMod*/) const
     {
         if (SpellInfo const* createdBySpell = sSpellMgr->GetSpellInfo(GetCaster()->m_unitData->CreatedBySpell, GetCastDifficulty()))
-            damage = createdBySpell->GetEffect(EFFECT_1).CalcValue();
+            damage = createdBySpell->GetEffect(EFFECT_1).CalcValueAsInt();
     }
 
     void Register() override
@@ -1885,14 +1896,14 @@ class spell_gen_gift_of_naaru : public AuraScript
         return ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
     }
 
-    void CalculateAmount(AuraEffect const* aurEff, int32& amount, bool& /*canBeRecalculated*/)
+    void CalculateAmount(AuraEffect const* aurEff, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
     {
         if (!GetCaster() || !aurEff->GetTotalTicks())
             return;
 
-        float healPct = GetEffectInfo(EFFECT_1).CalcValue() / 100.0f;
-        float heal = healPct * GetCaster()->GetMaxHealth();
-        int32 healTick = std::floor(heal / aurEff->GetTotalTicks());
+        SpellEffectValue healPct = GetEffectInfo(EFFECT_1).CalcValue() / 100.0;
+        SpellEffectValue heal = healPct * GetCaster()->GetMaxHealth();
+        SpellEffectValue healTick = std::floor(heal / aurEff->GetTotalTicks());
         amount += healTick;
     }
 
@@ -1921,7 +1932,7 @@ class spell_gen_gnomish_transporter : public SpellScript
 
     void HandleDummy(SpellEffIndex /* effIndex */)
     {
-        GetCaster()->CastSpell(GetCaster(), roll_chance_i(50) ? SPELL_TRANSPORTER_SUCCESS : SPELL_TRANSPORTER_FAILURE, true);
+        GetCaster()->CastSpell(GetCaster(), roll_chance(50) ? SPELL_TRANSPORTER_SUCCESS : SPELL_TRANSPORTER_FAILURE, true);
     }
 
     void Register() override
@@ -2053,9 +2064,9 @@ class spell_gen_increase_stats_buff : public SpellScript
     void HandleDummy(SpellEffIndex /*effIndex*/)
     {
         if (GetHitUnit()->IsInRaidWith(GetCaster()))
-            GetCaster()->CastSpell(GetCaster(), GetEffectValue() + 1, true); // raid buff
+            GetCaster()->CastSpell(GetCaster(), GetEffectValueAsInt() + 1, true); // raid buff
         else
-            GetCaster()->CastSpell(GetHitUnit(), GetEffectValue(), true); // single-target buff
+            GetCaster()->CastSpell(GetHitUnit(), GetEffectValueAsInt(), true); // single-target buff
     }
 
     void Register() override
@@ -2182,7 +2193,7 @@ class spell_gen_mounted_charge : public SpellScript
                 }
 
                 // If target isn't a training dummy there's a chance of failing the charge
-                if (!target->IsCharmedOwnedByPlayerOrPlayer() && roll_chance_f(12.5f))
+                if (!target->IsCharmedOwnedByPlayerOrPlayer() && roll_chance(12.5f))
                     spellId = SPELL_CHARGE_MISS_EFFECT;
 
                 if (Unit* vehicle = GetCaster()->GetVehicleBase())
@@ -2306,7 +2317,7 @@ class spell_gen_netherbloom : public SpellScript
         if (Unit* target = GetHitUnit())
         {
             // 25% chance of casting a random buff
-            if (roll_chance_i(75))
+            if (roll_chance(75))
                 return;
 
             // triggered spells are 28703 to 28707
@@ -2348,7 +2359,7 @@ class spell_gen_nightmare_vine : public SpellScript
         if (Unit* target = GetHitUnit())
         {
             // 25% chance of casting Nightmare Pollen
-            if (roll_chance_i(25))
+            if (roll_chance(25))
                 target->CastSpell(target, SPELL_NIGHTMARE_POLLEN, true);
         }
     }
@@ -2468,8 +2479,8 @@ class spell_gen_oracle_wolvar_reputation : public SpellScript
     void HandleDummy(SpellEffIndex /*effIndex*/)
     {
         Player* player = GetCaster()->ToPlayer();
-        uint32 factionId = GetEffectInfo().CalcValue();
-        int32  repChange = GetEffectInfo(EFFECT_1).CalcValue();
+        uint32 factionId = GetEffectInfo().CalcValueAsInt();
+        int32  repChange = GetEffectInfo(EFFECT_1).CalcValueAsInt();
 
         FactionEntry const* factionEntry = sFactionStore.LookupEntry(factionId);
         if (!factionEntry)
@@ -2579,14 +2590,14 @@ class spell_gen_player_say : public SpellScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return sBroadcastTextStore.HasRecord(uint32(spellInfo->GetEffect(EFFECT_0).CalcValue()));
+        return sBroadcastTextStore.HasRecord(uint32(spellInfo->GetEffect(EFFECT_0).CalcValueAsInt()));
     }
 
     void HandleScript(SpellEffIndex /*effIndex*/)
     {
         // Note: target here is always player; caster here is gameobject, creature or player (self cast)
         if (Unit* target = GetHitUnit())
-            target->Unit::Say(uint32(GetEffectValue()), target);
+            target->Unit::Say(uint32(GetEffectValueAsInt()), target);
     }
 
     void Register() override
@@ -2603,7 +2614,7 @@ class spell_gen_proc_below_pct_damaged : public AuraScript
         if (!damageInfo || !damageInfo->GetDamage())
             return false;
 
-        int32 pct = GetSpellInfo()->GetEffect(EFFECT_0).CalcValue();
+        SpellEffectValue pct = GetSpellInfo()->GetEffect(EFFECT_0).CalcValue();
 
         if (eventInfo.GetActionTarget()->HealthBelowPctDamaged(pct, damageInfo->GetDamage()))
             return true;
@@ -3003,7 +3014,7 @@ class spell_gen_replenishment_aura : public AuraScript
         return GetUnitOwner()->GetPowerType() == POWER_MANA;
     }
 
-    void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& /*canBeRecalculated*/)
+    void CalculateAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
     {
         switch (GetSpellInfo()->Id)
         {
@@ -3036,12 +3047,9 @@ class spell_gen_running_wild : public SpellScript
         return ValidateSpellInfo({ SPELL_ALTERED_FORM });
     }
 
-    bool Load() override
+    void OnPrecast() override
     {
-        // Definitely not a good thing, but currently the only way to do something at cast start
-        // Should be replaced as soon as possible with a new hook: BeforeCastStart
         GetCaster()->CastSpell(GetCaster(), SPELL_ALTERED_FORM, TRIGGERED_FULL_MASK);
-        return false;
     }
 
     void Register() override
@@ -3066,7 +3074,7 @@ class spell_gen_running_wild_aura : public AuraScript
         target->Mount(DISPLAYID_HIDDEN_MOUNT, 0, 0);
 
         // cast speed aura
-        if (MountCapabilityEntry const* mountCapability = sMountCapabilityStore.LookupEntry(aurEff->GetAmount()))
+        if (MountCapabilityEntry const* mountCapability = sMountCapabilityStore.LookupEntry(aurEff->GetAmountAsInt()))
             target->CastSpell(target, mountCapability->ModSpellAuraID, TRIGGERED_FULL_MASK);
     }
 
@@ -3164,7 +3172,7 @@ class spell_gen_spectator_cheer_trigger : public SpellScript
 {
     void HandleDummy(SpellEffIndex /*effIndex*/)
     {
-        if (roll_chance_i(40))
+        if (roll_chance(40))
             GetCaster()->HandleEmoteCommand(Trinity::Containers::SelectRandomContainerElement(EmoteArray));
     }
 
@@ -3238,7 +3246,7 @@ class spell_gen_throw_shield : public SpellScript
     void HandleScriptEffect(SpellEffIndex effIndex)
     {
         PreventHitDefaultEffect(effIndex);
-        GetCaster()->CastSpell(GetHitUnit(), uint32(GetEffectValue()), true);
+        GetCaster()->CastSpell(GetHitUnit(), uint32(GetEffectValueAsInt()), true);
     }
 
     void Register() override
@@ -3542,22 +3550,22 @@ class spell_gen_vehicle_scaling : public AuraScript
         return GetCaster() && GetCaster()->GetTypeId() == TYPEID_PLAYER;
     }
 
-    void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& /*canBeRecalculated*/)
+    void CalculateAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
     {
         Unit* caster = GetCaster();
         float factor;
-        uint16 baseItemLevel;
+        float baseItemLevel;
 
         /// @todo Reserach coeffs for different vehicles
         switch (GetId())
         {
             case SPELL_GEAR_SCALING:
                 factor = 1.0f;
-                baseItemLevel = 205;
+                baseItemLevel = 205.0f;
                 break;
             default:
                 factor = 1.0f;
-                baseItemLevel = 170;
+                baseItemLevel = 170.0f;
                 break;
         }
 
@@ -3565,7 +3573,7 @@ class spell_gen_vehicle_scaling : public AuraScript
         if (avgILvl < baseItemLevel)
             return;                     /// @todo Research possibility of scaling down
 
-        amount = uint16((avgILvl - baseItemLevel) * factor);
+        amount = (avgILvl - baseItemLevel) * factor;
     }
 
     void Register() override
@@ -3640,14 +3648,14 @@ class spell_gen_whisper_to_controller : public SpellScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return sBroadcastTextStore.HasRecord(uint32(spellInfo->GetEffect(EFFECT_0).CalcValue()));
+        return sBroadcastTextStore.HasRecord(uint32(spellInfo->GetEffect(EFFECT_0).CalcValueAsInt()));
     }
 
     void HandleScript(SpellEffIndex /*effIndex*/)
     {
         if (TempSummon* casterSummon = GetCaster()->ToTempSummon())
             if (Player* target = casterSummon->GetSummonerUnit()->ToPlayer())
-                casterSummon->Unit::Whisper(uint32(GetEffectValue()), target, false);
+                casterSummon->Unit::Whisper(uint32(GetEffectValueAsInt()), target, false);
     }
 
     void Register() override
@@ -3676,7 +3684,7 @@ private:
     void HandleScript(SpellEffIndex /*effIndex*/)
     {
         // Same for all spells
-        if (!roll_chance_i(20))
+        if (!roll_chance(20))
             return;
 
         if (Creature* target = GetHitCreature())
@@ -3713,7 +3721,7 @@ class spell_gen_eject_passenger : public SpellScript
     {
         if (!ValidateSpellEffect({ { spellInfo->Id, EFFECT_0 } }))
             return false;
-        if (spellInfo->GetEffect(EFFECT_0).CalcValue() < 1)
+        if (spellInfo->GetEffect(EFFECT_0).CalcValueAsInt() < 1)
             return false;
         return true;
     }
@@ -3722,7 +3730,7 @@ class spell_gen_eject_passenger : public SpellScript
     {
         if (Vehicle* vehicle = GetHitUnit()->GetVehicleKit())
         {
-            if (Unit* passenger = vehicle->GetPassenger(GetEffectValue() - 1))
+            if (Unit* passenger = vehicle->GetPassenger(GetEffectValueAsInt() - 1))
                 passenger->ExitVehicle();
         }
     }
@@ -3938,7 +3946,7 @@ class spell_gen_mixology_bonus : public AuraScript
             bonus = value;
     }
 
-    void CalculateAmount(AuraEffect const* aurEff, int32& amount, bool& /*canBeRecalculated*/)
+    void CalculateAmount(AuraEffect const* aurEff, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
     {
         if (GetCaster()->HasAura(SPELL_MIXOLOGY) && GetCaster()->HasSpell(GetEffectInfo(EFFECT_0).TriggerSpell))
         {
@@ -4367,7 +4375,7 @@ class spell_freezing_circle : public SpellScript
 
         if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, GetCastDifficulty()))
             if (!spellInfo->GetEffects().empty())
-                SetHitDamage(spellInfo->GetEffect(EFFECT_0).CalcValue());
+                SetHitDamage(spellInfo->GetEffect(EFFECT_0).CalcValueAsInt());
     }
 
     void Register() override
@@ -4412,7 +4420,7 @@ class spell_gen_cannon_blast : public SpellScript
     }
     void HandleScript(SpellEffIndex /*effIndex*/)
     {
-        int32 bp = GetEffectValue();
+        SpellEffectValue bp = GetEffectValue();
         Unit* target = GetHitUnit();
         CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
         args.AddSpellBP0(bp);
@@ -4460,7 +4468,7 @@ class spell_gen_anetheron_summon_towering_infernal : public SpellScript
 {
     void HandleDummy(SpellEffIndex /* effIndex */)
     {
-        GetCaster()->CastSpell(GetHitUnit(), uint32(GetEffectValue()), true);
+        GetCaster()->CastSpell(GetHitUnit(), uint32(GetEffectValueAsInt()), true);
     }
 
     void Register() override
@@ -4528,7 +4536,7 @@ class spell_gen_azgalor_rain_of_fire_hellfire_citadel : public SpellScript
 {
     void HandleDummy(SpellEffIndex /* effIndex */)
     {
-        GetCaster()->CastSpell(GetHitUnit(), uint32(GetEffectValue()), true);
+        GetCaster()->CastSpell(GetHitUnit(), uint32(GetEffectValueAsInt()), true);
     }
 
     void Register() override
@@ -4609,7 +4617,7 @@ class spell_gen_boost_2_0_paladin_priest_watch_for_shield : public AuraScript
 // 282559 - Enlisted
 class spell_gen_war_mode_enlisted : public AuraScript
 {
-    void CalcWarModeBonus(AuraEffect const* /*aurEff*/, int32& amount, bool& /*canBeRecalculated*/)
+    void CalcWarModeBonus(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
     {
         Player* target = GetUnitOwner()->ToPlayer();
         if (!target)
@@ -4618,10 +4626,10 @@ class spell_gen_war_mode_enlisted : public AuraScript
         switch (target->GetTeamId())
         {
             case TEAM_ALLIANCE:
-                amount = sWorldStateMgr->GetValue(WS_WAR_MODE_ALLIANCE_BUFF_VALUE, target->GetMap());
+                amount = WorldStateMgr::GetValue(WS_WAR_MODE_ALLIANCE_BUFF_VALUE, target->GetMap());
                 break;
             case TEAM_HORDE:
-                amount = sWorldStateMgr->GetValue(WS_WAR_MODE_HORDE_BUFF_VALUE, target->GetMap());
+                amount = WorldStateMgr::GetValue(WS_WAR_MODE_HORDE_BUFF_VALUE, target->GetMap());
                 break;
             default:
                 break;
@@ -4760,7 +4768,7 @@ class spell_summon_battle_pet : public SpellScript
 
     void Register() override
     {
-        OnEffectHit += SpellEffectFn(spell_summon_battle_pet::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
+        OnEffectLaunch += SpellEffectFn(spell_summon_battle_pet::HandleSummon, EFFECT_0, SPELL_EFFECT_SUMMON);
     }
 };
 
@@ -4917,12 +4925,13 @@ class spell_gen_eject_passengers_3_8 : public SpellScript
 };
 
 // 83781 - Reverse Cast Ride Vehicle
+// 85299 - Reverse Cast Ride Seat 1
 // 258344 - Reverse Cast Ride Vehicle
 class spell_gen_reverse_cast_target_to_caster_triggered: public SpellScript
 {
     void HandleScript(SpellEffIndex effIndex)
     {
-        GetHitUnit()->CastSpell(GetCaster(), GetSpellInfo()->GetEffect(effIndex).CalcValue(), true);
+        GetHitUnit()->CastSpell(GetCaster(), GetSpellInfo()->GetEffect(effIndex).CalcValueAsInt(), true);
     }
 
     void Register() override
@@ -5223,7 +5232,7 @@ enum MajorHealingCooldownSpell
 
 namespace MajorPlayerHealingCooldownHelpers
 {
-float GetBonusMultiplier(Unit const* unit, uint32 spellId)
+SpellEffectValue GetBonusMultiplier(Unit const* unit, uint32 spellId)
 {
     // Note: if caster is not in a raid setting, is in PvP or while in arena combat with 5 or less allied players.
     if (!unit->GetMap()->IsRaid() || !unit->GetMap()->IsBattleground())
@@ -5266,7 +5275,7 @@ float GetBonusMultiplier(Unit const* unit, uint32 spellId)
         return sSpellMgr->AssertSpellInfo(bonusSpellId, DIFFICULTY_NONE)->GetEffect(effIndex).CalcValue(unit);
     }
 
-    return 0.0f;
+    return 0.0;
 }
 }
 
@@ -5495,6 +5504,129 @@ class spell_gen_saddlechute : public AuraScript
     }
 };
 
+enum SpatialRiftSpells
+{
+    SPELL_SPATIAL_RIFT_TELEPORT     = 257034,
+    SPELL_SPATIAL_RIFT_AREATRIGGER  = 256948
+};
+
+// 257040 - Spatial Rift
+class spell_gen_spatial_rift : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_SPATIAL_RIFT_TELEPORT, SPELL_SPATIAL_RIFT_AREATRIGGER });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+
+        AreaTrigger* at = caster->GetAreaTrigger(SPELL_SPATIAL_RIFT_AREATRIGGER);
+        if (!at)
+            return;
+
+        caster->CastSpell(at->GetPosition(), SPELL_SPATIAL_RIFT_TELEPORT, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+
+        at->SetDuration(0);
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_gen_spatial_rift::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+struct at_gen_spatial_rift : AreaTriggerAI
+{
+    using AreaTriggerAI::AreaTriggerAI;
+
+    void OnInitialize() override
+    {
+        SpellInfo const* spellInfo = sSpellMgr->AssertSpellInfo(at->GetSpellId(), DIFFICULTY_NONE);
+        if (!spellInfo)
+            return;
+
+        Position destPos = at->GetPosition();
+        at->MovePositionToFirstCollision(destPos, spellInfo->GetMaxRange(), 0.0f);
+
+        PathGenerator path(at);
+        path.CalculatePath(destPos.GetPositionX(), destPos.GetPositionY(), destPos.GetPositionZ(), true);
+
+        at->InitSplines(path.GetPath());
+    }
+};
+
+class spell_gen_force_phase_update : public AuraScript
+{
+    void AfterApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
+    {
+        PhasingHandler::OnConditionChange(GetTarget());
+    }
+
+    void AfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
+    {
+        PhasingHandler::OnConditionChange(GetTarget());
+    }
+
+    void Register() override
+    {
+        AfterEffectApply += AuraEffectApplyFn(spell_gen_force_phase_update::AfterApply, EFFECT_FIRST_FOUND, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_gen_force_phase_update::AfterRemove, EFFECT_FIRST_FOUND, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+class spell_gen_no_npc_damage_below_override : public AuraScript
+{
+public:
+    spell_gen_no_npc_damage_below_override(float healthPct) : _healthPct(healthPct) {}
+
+    static void CalculateAmount(AuraScript const&, AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
+    {
+        amount = -1;
+    }
+
+    void HandleAbsorb(AuraEffect const* /*aurEff*/, DamageInfo const& dmgInfo, uint32& absorbAmount)
+    {
+        if (!dmgInfo.GetAttacker() || !dmgInfo.GetAttacker()->IsCreature())
+        {
+            PreventDefaultAction();
+            return;
+        }
+
+        if (GetTarget()->GetHealthPct() <= _healthPct)
+            absorbAmount = dmgInfo.GetDamage();
+        else
+            PreventDefaultAction();
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_gen_no_npc_damage_below_override::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
+        OnEffectAbsorb += AuraEffectAbsorbFn(spell_gen_no_npc_damage_below_override::HandleAbsorb, EFFECT_0);
+    }
+
+private:
+    float _healthPct;
+};
+
+// 92678 - Abandon Vehicle
+class spell_gen_abandon_vehicle : public SpellScript
+{
+    void HandleHitTarget(SpellEffIndex /*effIndex*/) const
+    {
+        GetHitUnit()->ExitVehicle();
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_gen_abandon_vehicle::HandleHitTarget, EFFECT_FIRST_FOUND, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
 void AddSC_generic_spell_scripts()
 {
     RegisterSpellScript(spell_gen_absorb0_hitlimit1);
@@ -5678,4 +5810,9 @@ void AddSC_generic_spell_scripts()
     RegisterSpellAndAuraScriptPair(spell_bg_defending_cart_aura, spell_bg_defending_cart_aura_AuraScript);
     RegisterSpellScript(spell_gen_comfortable_riders_barding);
     RegisterSpellScript(spell_gen_saddlechute);
+    RegisterSpellScript(spell_gen_spatial_rift);
+    RegisterAreaTriggerAI(at_gen_spatial_rift);
+    RegisterSpellScript(spell_gen_force_phase_update);
+    RegisterSpellScriptWithArgs(spell_gen_no_npc_damage_below_override, "spell_gen_no_npc_damage_below_override_70", 70.0f);
+    RegisterSpellScript(spell_gen_abandon_vehicle);
 }
