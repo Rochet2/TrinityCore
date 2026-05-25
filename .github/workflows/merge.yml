@@ -146,13 +146,17 @@ jobs:
         sort: desc
         owner: TrinityCore
         repo: TrinityCore
-        per_page: 100
-        token: ${{ secrets.GITHUB_TOKEN }}
+        paginate: 'true'
     - name: Download latest DB
       if: steps.upstream.outputs.merge_needed == 'true'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        MATCHED_COUNT: ${{ steps.find_matching_tags.outputs.count }}
       run: |
+        if [ "${MATCHED_COUNT}" -eq 0 ]; then
+          echo "::error::No TDB release tag matched the regex"
+          exit 1
+        fi
         TAG='${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}'
         gh release download "$TAG" --repo TrinityCore/TrinityCore --pattern 'TDB_full*.7z' --dir bin/check_install/bin
     - name: Set configs
@@ -337,17 +341,19 @@ jobs:
         sort: desc
         owner: TrinityCore
         repo: TrinityCore
-        per_page: 70
-        token: ${{ secrets.GITHUB_TOKEN }}
-    - name: Print matched tags
-      if: steps.upstream.outputs.merge_needed == 'true'
-      run: |
-        echo ${{ steps.find_matching_tags.outputs.tags }}
+        paginate: 'true'
     - name: Download latest DB
       if: steps.upstream.outputs.merge_needed == 'true'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        MATCHED_COUNT: ${{ steps.find_matching_tags.outputs.count }}
+        MATCHED_TAGS: ${{ steps.find_matching_tags.outputs.tags }}
       run: |
+        echo "Matched ${MATCHED_COUNT} tag(s): ${MATCHED_TAGS}"
+        if [ "${MATCHED_COUNT}" -eq 0 ]; then
+          echo "::error::No TDB release tag matched the regex"
+          exit 1
+        fi
         TAG='${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}'
         gh release download "$TAG" --repo TrinityCore/TrinityCore --pattern 'TDB_full*.7z' --dir bin/check_install/bin
     - name: Print downloaded files
