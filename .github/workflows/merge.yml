@@ -109,13 +109,20 @@ jobs:
         cd ..
     - name: Build
       if: steps.upstream.outputs.merge_needed == 'true'
+      id: build
       run: |
+        echo "build_start=$EPOCHSECONDS" >> "$GITHUB_OUTPUT"
+        ccache -z
         cd bin
         make -j 4 -k && make install
 
     - name: ccache stats
-      if: steps.upstream.outputs.merge_needed == 'true'
+      if: always() && steps.upstream.outputs.merge_needed == 'true'
       run: ccache -s
+
+    - name: Prune ccache
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: ccache --evict-older-than "$(( $EPOCHSECONDS - ${{ steps.build.outputs.build_start }} ))s"
 
     - name: Check ccache has data
       id: ccache_has_data
@@ -304,13 +311,20 @@ jobs:
         cd ..
     - name: Build
       if: steps.upstream.outputs.merge_needed == 'true'
+      id: build
       run: |
+        echo "build_start=$EPOCHSECONDS" >> "$GITHUB_OUTPUT"
+        ccache -z
         cd bin
         make -j 4 -k && make install
 
     - name: ccache stats
-      if: steps.upstream.outputs.merge_needed == 'true'
+      if: always() && steps.upstream.outputs.merge_needed == 'true'
       run: ccache -s
+
+    - name: Prune ccache
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: ccache --evict-older-than "$(( $EPOCHSECONDS - ${{ steps.build.outputs.build_start }} ))s"
 
     - name: Check ccache has data
       id: ccache_has_data
