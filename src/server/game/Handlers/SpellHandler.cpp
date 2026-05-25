@@ -497,7 +497,8 @@ void WorldSession::HandleMirrorImageDataRequest(WorldPackets::Spells::GetMirrorI
             CreatureOutfit const& outfit = *outfit_ptr;
             WorldPackets::Spells::MirrorImageComponentedData mirrorImageComponentedData;
             mirrorImageComponentedData.UnitGUID = guid;
-            mirrorImageComponentedData.DisplayID = outfit.GetDisplayId();
+            if (ChrModelEntry const* chrModel = sDB2Manager.GetChrModel(outfit.GetRace(), outfit.GetGender()))
+                mirrorImageComponentedData.ChrModelID = chrModel->ID;
             mirrorImageComponentedData.RaceID = outfit.GetRace();
             mirrorImageComponentedData.Gender = outfit.GetGender();
             mirrorImageComponentedData.ClassID = outfit.GetClass();

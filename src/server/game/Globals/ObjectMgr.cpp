@@ -9304,7 +9304,7 @@ void ObjectMgr::LoadCreatureOutfits()
             if (displayInfo > 0) // entry
             {
                 uint32 item_entry = static_cast<uint32>(displayInfo);
-                if (uint32 display = sDB2Manager.GetItemDisplayId(item_entry, appearancemodid))
+                if (uint32 display = CreatureOutfit::GetItemDisplayId(item_entry, appearancemodid))
                     co->outfitdisplays[slot] = display;
                 else
                 {
