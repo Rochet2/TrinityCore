@@ -8,9 +8,6 @@ on:
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   _master:
     strategy:
@@ -86,7 +83,7 @@ jobs:
 
     - name: Restore ccache
       if: steps.upstream.outputs.merge_needed == 'true'
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: .ccache
         key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
@@ -129,7 +126,7 @@ jobs:
 
     - name: Save ccache
       if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: .ccache
         key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
@@ -143,7 +140,7 @@ jobs:
     - name: Find latest DB release tag
       if: steps.upstream.outputs.merge_needed == 'true'
       id: find_matching_tags
-      uses: Rochet2/find-matching-tags-ghapi@v1.3
+      uses: Rochet2/find-matching-tags-ghapi@v2
       with:
         regex: ^TDB\d{4,}\.\d+$
         sort: desc
@@ -272,7 +269,7 @@ jobs:
 
     - name: Restore ccache
       if: steps.upstream.outputs.merge_needed == 'true'
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: .ccache
         key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
@@ -315,7 +312,7 @@ jobs:
 
     - name: Save ccache
       if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: .ccache
         key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
@@ -334,7 +331,7 @@ jobs:
     - name: Find latest DB release tag
       if: steps.upstream.outputs.merge_needed == 'true'
       id: find_matching_tags
-      uses: Rochet2/find-matching-tags-ghapi@v1.3
+      uses: Rochet2/find-matching-tags-ghapi@v2
       with:
         regex: ^TDB335\.\d+$
         sort: desc
