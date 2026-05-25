@@ -31,6 +31,7 @@
 #include "SpellAuraEffects.h"
 #include "SpellHistory.h"
 #include "SpellMgr.h"
+#include "SpellPackets.h"
 #include "SpellScript.h"
 #include "Unit.h"
 #include "Util.h"
@@ -127,7 +128,7 @@ void AuraApplication::_Remove()
 void AuraApplication::_InitFlags(Unit* caster, uint8 effMask)
 {
     // mark as selfcast if needed
-    _flags |= (GetBase()->GetCasterGUID() == GetTarget()->GetGUID()) ? AFLAG_CASTER : AFLAG_NONE;
+    _flags |= (GetBase()->GetCasterGUID() == GetTarget()->GetGUID()) ? AFLAG_SELF_CAST : AFLAG_NONE;
 
     // aura is cast by self or an enemy
     // one negative effect and we know aura is negative
@@ -215,36 +216,35 @@ void AuraApplication::UpdateApplyEffectMask(uint8 newEffMask, bool canHandleNewE
                 _HandleEffect(i, true);
 }
 
-void AuraApplication::BuildUpdatePacket(ByteBuffer& data, bool remove) const
+void AuraApplication::BuildUpdatePacket(WorldPackets::Spells::AuraInfo& auraInfo, bool remove) const
 {
-    data << uint8(_slot);
+    ASSERT((_target->GetVisibleAura(_slot) != nullptr) != remove);
 
+    auraInfo.Slot = GetSlot();
     if (remove)
-    {
-        ASSERT(!_target->GetVisibleAura(_slot));
-        data << uint32(0);
         return;
-    }
-    ASSERT(_target->GetVisibleAura(_slot));
 
     Aura const* aura = GetBase();
-    data << uint32(aura->GetId());
-    uint32 flags = _flags;
+
+    WorldPackets::Spells::AuraDataInfo& auraData = auraInfo.AuraData.emplace();
+    auraData.SpellID = aura->GetId();
+    auraData.Flags = GetFlags();
     if (aura->GetType() != DYNOBJ_AURA_TYPE && aura->GetMaxDuration() > 0 && !aura->GetSpellInfo()->HasAttribute(SPELL_ATTR5_HIDE_DURATION))
-        flags |= AFLAG_DURATION;
-    data << uint8(flags);
-    data << uint8(aura->GetCasterLevel());
+        auraData.Flags |= AFLAG_DURATION;
+
+    auraData.CastLevel = aura->GetCasterLevel();
+
     // send stack amount for aura which could be stacked (never 0 - causes incorrect display) or charges
     // stack amount has priority over charges (checked on retail with spell 50262)
-    data << uint8(aura->GetSpellInfo()->StackAmount ? aura->GetStackAmount() : aura->GetCharges());
+    auraData.Applications = aura->GetSpellInfo()->StackAmount ? aura->GetStackAmount() : aura->GetCharges();
 
-    if (!(flags & AFLAG_CASTER))
-        data << aura->GetCasterGUID().WriteAsPacked();
+    if (!(auraData.Flags & AFLAG_SELF_CAST))
+        auraData.CastUnit = aura->GetCasterGUID();
 
-    if (flags & AFLAG_DURATION)
+    if (auraData.Flags & AFLAG_DURATION)
     {
-        data << uint32(aura->GetMaxDuration());
-        data << uint32(aura->GetDuration());
+        auraData.Duration = aura->GetMaxDuration();
+        auraData.Remaining = aura->GetDuration();
     }
 }
 
@@ -252,11 +252,11 @@ void AuraApplication::ClientUpdate(bool remove)
 {
     _needClientUpdate = false;
 
-    WorldPacket data(SMSG_AURA_UPDATE);
-    data << GetTarget()->GetPackGUID();
-    BuildUpdatePacket(data, remove);
+    WorldPackets::Spells::AuraUpdate update;
+    update.UnitGUID = GetTarget()->GetGUID();
+    BuildUpdatePacket(update.Aura, remove);
 
-    _target->SendMessageToSet(&data, true);
+    _target->SendMessageToSet(update.Write(), true);
 }
 
 std::string AuraApplication::GetDebugInfo() const
@@ -1344,10 +1344,6 @@ void Aura::HandleAuraSpecificMods(AuraApplication const* aurApp, Unit* caster, b
             case SPELLFAMILY_GENERIC:
                 switch (GetId())
                 {
-                    case 33572: // Gronn Lord's Grasp, becomes stoned
-                        if (GetStackAmount() >= 5 && !target->HasAura(33652))
-                            target->CastSpell(target, 33652, true);
-                        break;
                     case 50836: //Petrifying Grip, becomes stoned
                         if (GetStackAmount() >= 5 && !target->HasAura(50812))
                             target->CastSpell(target, 50812, true);
@@ -1552,7 +1548,7 @@ void Aura::HandleAuraSpecificMods(AuraApplication const* aurApp, Unit* caster, b
                             for (std::list<Unit*>::iterator itr = PartyMembers.begin(); itr != PartyMembers.end(); ++itr)
                             {
                                 if ((*itr)!= target)
-                                    (*itr)->RemoveAurasWithFamily(SPELLFAMILY_WARRIOR, 0, 0x2, 0, GetCasterGUID());
+                                    (*itr)->RemoveAurasWithFamily(SPELLFAMILY_WARRIOR, flag96(0, 0x2, 0), GetCasterGUID());
                             }
                         }
                     }
@@ -1682,7 +1678,7 @@ void Aura::HandleAuraSpecificMods(AuraApplication const* aurApp, Unit* caster, b
             case SPELLFAMILY_ROGUE:
                 // Remove Vanish on stealth remove
                 if (GetId() == 1784)
-                    target->RemoveAurasWithFamily(SPELLFAMILY_ROGUE, 0x0000800, 0, 0, target->GetGUID());
+                    target->RemoveAurasWithFamily(SPELLFAMILY_ROGUE, flag96(0x0000800, 0, 0), target->GetGUID());
                 break;
             case SPELLFAMILY_PALADIN:
                 // Remove the immunity shield marker on Forbearance removal if AW marker is not present

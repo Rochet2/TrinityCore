@@ -140,7 +140,7 @@ public:
 
                 DeletedInfo info;
 
-                info.guid       = ObjectGuid(HighGuid::Player, fields[0].GetUInt32());
+                info.guid       = ObjectGuid::Create<HighGuid::Player>(fields[0].GetUInt32());
                 info.name       = fields[1].GetString();
                 info.accountId  = fields[2].GetUInt32();
 
@@ -269,7 +269,7 @@ public:
                 if (target->GetUInt32Value(PLAYER_CHOSEN_TITLE) == titleInfo->MaskID)
                     activeStr = handler->GetTrinityString(LANG_ACTIVE);
 
-                std::string titleName = fmt::sprintf(name, player->GetName());
+                std::string titleName = ChatHandler::PGetParseString(name, player->GetName());
 
                 // send title in "id (idx:idx) - [namedlink locale]" format
                 if (handler->GetSession())
@@ -334,7 +334,7 @@ public:
             }
 
             // Remove declined name from db
-            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_DECLINED_NAME);
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_DECLINED_NAME);
             stmt->setUInt32(0, player->GetGUID().GetCounter());
             CharacterDatabase.Execute(stmt);
 
@@ -946,7 +946,7 @@ public:
 
         if (characterGUID)
         {
-            if (sCharacterCache->GetCharacterCacheByGuid(ObjectGuid(HighGuid::Player, *characterGUID)))
+            if (sCharacterCache->GetCharacterCacheByGuid(ObjectGuid::Create<HighGuid::Player>(*characterGUID)))
             {
                 handler->PSendSysMessage(LANG_CHARACTER_GUID_IN_USE, *characterGUID);
                 handler->SetSentErrorMessage(true);

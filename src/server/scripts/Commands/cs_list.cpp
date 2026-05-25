@@ -78,7 +78,7 @@ public:
         CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(creatureId);
         if (!cInfo)
         {
-            handler->PSendSysMessage(LANG_COMMAND_INVALIDCREATUREID, creatureId);
+            handler->PSendSysMessage(LANG_COMMAND_INVALIDCREATUREID, *creatureId);
             handler->SetSentErrorMessage(true);
             return false;
         }
@@ -153,14 +153,14 @@ public:
             while (result->NextRow());
         }
 
-        handler->PSendSysMessage(LANG_COMMAND_LISTCREATUREMESSAGE, creatureId, creatureCount);
+        handler->PSendSysMessage(LANG_COMMAND_LISTCREATUREMESSAGE, *creatureId, creatureCount);
 
         return true;
     }
 
     static bool HandleListItemCommand(ChatHandler* handler, Hyperlink<item> item, Optional<uint32> countArg)
     {
-        uint32 itemId = item->Item->ItemId;
+        uint32 itemId = item->Item->GetId();
         uint32 count = countArg.value_or(10);
 
         if (count == 0)
@@ -356,7 +356,7 @@ public:
         GameObjectTemplate const* gInfo = sObjectMgr->GetGameObjectTemplate(gameObjectId);
         if (!gInfo)
         {
-            handler->PSendSysMessage(LANG_COMMAND_LISTOBJINVALIDID, gameObjectId);
+            handler->PSendSysMessage(LANG_COMMAND_LISTOBJINVALIDID, *gameObjectId);
             handler->SetSentErrorMessage(true);
             return false;
         }
@@ -432,7 +432,7 @@ public:
             while (result->NextRow());
         }
 
-        handler->PSendSysMessage(LANG_COMMAND_LISTOBJMESSAGE, gameObjectId, objectCount);
+        handler->PSendSysMessage(LANG_COMMAND_LISTOBJMESSAGE, *gameObjectId, objectCount);
 
         return true;
     }
