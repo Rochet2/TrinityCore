@@ -147,6 +147,7 @@ jobs:
         owner: TrinityCore
         repo: TrinityCore
         paginate: 'true'
+        per_page: 100
     - name: Download latest DB
       if: steps.upstream.outputs.merge_needed == 'true'
       env:
@@ -342,6 +343,7 @@ jobs:
         owner: TrinityCore
         repo: TrinityCore
         paginate: 'true'
+        per_page: 100
     - name: Download latest DB
       if: steps.upstream.outputs.merge_needed == 'true'
       env:
