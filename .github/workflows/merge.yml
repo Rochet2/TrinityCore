@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   _master:
@@ -36,8 +37,14 @@ jobs:
       SQL_CHAR: ${{ join( matrix.char, ' ' ) }}
       SQL_AUTH: ${{ join( matrix.auth, ' ' ) }}
       SQL_HOTFIX: ${{ join( matrix.hotfix, ' ' ) }}
+      CCACHE_MAXSIZE: 500M
+      CCACHE_COMPRESS: true
+      CCACHE_COMPRESSLEVEL: 6
+      CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
 
     - uses: actions/checkout@v6
@@ -46,61 +53,138 @@ jobs:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Check upstream
+      id: upstream
+      run: |
+        git remote add Trinity https://github.com/TrinityCore/TrinityCore.git || git remote set-url Trinity https://github.com/TrinityCore/TrinityCore.git
+        git fetch Trinity master
+        if git merge-base --is-ancestor Trinity/master HEAD; then
+          echo "Already up to date with TrinityCore master"
+        else
+          echo "Upstream merge required"
+        fi
+        # BENCHMARK: upstream skip disabled — restore merge_needed=false branch below
+        echo "merge_needed=true" >> "$GITHUB_OUTPUT"
+
     - name: Configure user
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         git config user.email "rochet2@post.com" && git config user.name "Rochet2"
 
     - name: Merge TC
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        git status
-        git remote add Trinity https://github.com/TrinityCore/TrinityCore.git
-        git fetch Trinity master
         git merge -m "Merge TrinityCore master to ${BRANCH} [skip ci]" Trinity/master
         git submodule update --init --recursive
         git status
 
     - name: Dependencies
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        sudo apt-get update && sudo apt-get install -yq libboost-all-dev clang-15
+        sudo apt-get update && sudo apt-get install -yq ccache clang-17 \
+          libboost-dev libboost-filesystem-dev libboost-locale-dev \
+          libboost-program-options-dev libboost-regex-dev libboost-thread-dev \
+          libssl-dev libreadline-dev zlib1g-dev libbz2-dev
+
+    - name: Restore ccache
+      if: steps.upstream.outputs.merge_needed == 'true'
+      uses: actions/cache/restore@v5
+      with:
+        path: .ccache
+        key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}
+
+    - name: Init ccache directory
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: mkdir -p .ccache
+
     - name: Setup
+      if: steps.upstream.outputs.merge_needed == 'true'
+      env:
+        CC: /usr/bin/clang-17
+        CXX: /usr/bin/clang++-17
       run: |
         mkdir bin
         cd bin
-        cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15
+        cmake ../ -DWITH_WARNINGS=1 -DWITH_WARNINGS_AS_ERRORS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         cd ..
     - name: Build
+      if: steps.upstream.outputs.merge_needed == 'true'
+      id: build
       run: |
+        echo "build_start=$EPOCHSECONDS" >> "$GITHUB_OUTPUT"
+        ccache -z
         cd bin
         make -j 4 -k && make install
+
+    - name: ccache stats
+      if: always() && steps.upstream.outputs.merge_needed == 'true'
+      run: ccache -s
+
+    - name: Prune ccache
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: ccache --evict-older-than "$(( $EPOCHSECONDS - ${{ steps.build.outputs.build_start }} ))s"
+
+    - name: Check ccache has data
+      id: ccache_has_data
+      if: success() && steps.upstream.outputs.merge_needed == 'true'
+      run: |
+        if find .ccache -type f -print -quit 2>/dev/null | grep -q .; then
+          echo "has_data=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_data=false" >> "$GITHUB_OUTPUT"
+          echo "No ccache objects produced, skipping cache save"
+        fi
+
+    - name: Delete previous ccache entry
+      if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh cache delete "ccache-master-${{ matrix.branch }}-${{ matrix.pch }}" --repo "${{ github.repository }}" || true
+
+    - name: Save ccache
+      if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: .ccache
+        key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}
+
     - name: Check executables
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin/check_install/bin
         ./bnetserver --version
         ./worldserver --version
     - name: Find latest DB release tag
+      if: steps.upstream.outputs.merge_needed == 'true'
       id: find_matching_tags
-      uses: Rochet2/find-matching-tags-ghapi@v1.3
+      uses: Rochet2/find-matching-tags-ghapi@v2
       with:
         regex: ^TDB\d{4,}\.\d+$
         sort: desc
         owner: TrinityCore
         repo: TrinityCore
         per_page: 100
-        token: ${{ secrets.GITHUB_TOKEN }}
     - name: Download latest DB
-      uses: i3h/download-release-asset@a987f9dc3559bd1024d7ed353b59c9d0bbb8ab61
-      with:
-        owner: TrinityCore
-        repo: TrinityCore
-        tag: ${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}
-        file: /TDB_full.*\.7z/
-        path: bin/check_install/bin
-        token: ${{ secrets.GITHUB_TOKEN }}
+      if: steps.upstream.outputs.merge_needed == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        MATCHED_COUNT: ${{ steps.find_matching_tags.outputs.count }}
+      run: |
+        if [ "${MATCHED_COUNT}" -eq 0 ]; then
+          echo "::error::No TDB release tag matched the regex"
+          exit 1
+        fi
+        TAG='${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}'
+        gh release download "$TAG" --repo TrinityCore/TrinityCore --pattern 'TDB_full*.7z' --dir bin/check_install/bin
     - name: Set configs
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin/check_install/etc
         sed "s/127.0.0.1;3306;trinity;trinity;/localhost;3306;root;;/g" worldserver.conf.dist > worldserver.conf
     - name: Build DB
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         echo "start mysql"
         sudo systemctl start mysql.service
@@ -113,7 +197,7 @@ jobs:
         yes | ./worldserver --update-databases-only
 
     - name: Run SQLs
-      if: matrix.pch == 'ON'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON'
       run: |
         for f in $SQL_WORLD; do echo "$f"; cat "$f" | mysql -uroot world; done
         for f in $SQL_CHAR; do echo "$f"; cat "$f" | mysql -uroot characters; done
@@ -121,7 +205,7 @@ jobs:
         for f in $SQL_HOTFIX; do echo "$f"; cat "$f" | mysql -uroot hotfixes; done
 
     - name: Push changes
-      if: matrix.pch == 'ON'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON'
       run: |
         git push
 
@@ -160,6 +244,12 @@ jobs:
       SQL_WORLD: ${{ join( matrix.world, ' ' ) }}
       SQL_CHAR: ${{ join( matrix.char, ' ' ) }}
       SQL_AUTH: ${{ join( matrix.auth, ' ' ) }}
+      CCACHE_MAXSIZE: 500M
+      CCACHE_COMPRESS: true
+      CCACHE_COMPRESSLEVEL: 6
+      CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
 
     runs-on: ubuntu-22.04
     steps:
@@ -170,72 +260,144 @@ jobs:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Check upstream
+      id: upstream
+      run: |
+        git remote add Trinity https://github.com/TrinityCore/TrinityCore.git || git remote set-url Trinity https://github.com/TrinityCore/TrinityCore.git
+        git fetch Trinity 3.3.5
+        if git merge-base --is-ancestor Trinity/3.3.5 HEAD; then
+          echo "Already up to date with TrinityCore 3.3.5"
+        else
+          echo "Upstream merge required"
+        fi
+        # BENCHMARK: upstream skip disabled — restore merge_needed=false branch below
+        echo "merge_needed=true" >> "$GITHUB_OUTPUT"
+
     - name: Configure user
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         git config user.email "rochet2@post.com" && git config user.name "Rochet2"
 
     - name: Merge TC
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        git status
-        git remote add Trinity https://github.com/TrinityCore/TrinityCore.git
-        git fetch Trinity 3.3.5
         git merge -m "Merge TrinityCore 3.3.5 to ${BRANCH} [skip ci]" Trinity/3.3.5
         git submodule update --init --recursive
         git status
 
     - name: Dependencies
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        sudo apt-get update && sudo apt-get install -yq libboost-all-dev g++-11
+        sudo apt-get update && sudo apt-get install -yq libboost-all-dev g++-11 ccache
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 --slave /usr/bin/g++ g++ /usr/bin/g++-11
+
+    - name: Restore ccache
+      if: steps.upstream.outputs.merge_needed == 'true'
+      uses: actions/cache/restore@v5
+      with:
+        path: .ccache
+        key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}
+
+    - name: Init ccache directory
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: mkdir -p .ccache
+
     - name: Setup
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         mkdir bin
         cd bin
-        cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DBUILD_TESTING=1
+        cmake ../ -DWITH_WARNINGS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=$PCH -DUSE_SCRIPTPCH=$PCH -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Werror" -DCMAKE_CXX_FLAGS="-Werror" -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG" -DCMAKE_INSTALL_PREFIX=check_install -DBUILD_TESTING=1 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         cd ..
     - name: Build
+      if: steps.upstream.outputs.merge_needed == 'true'
+      id: build
       run: |
+        echo "build_start=$EPOCHSECONDS" >> "$GITHUB_OUTPUT"
+        ccache -z
         cd bin
         make -j 4 -k && make install
+
+    - name: ccache stats
+      if: always() && steps.upstream.outputs.merge_needed == 'true'
+      run: ccache -s
+
+    - name: Prune ccache
+      if: steps.upstream.outputs.merge_needed == 'true'
+      run: ccache --evict-older-than "$(( $EPOCHSECONDS - ${{ steps.build.outputs.build_start }} ))s"
+
+    - name: Check ccache has data
+      id: ccache_has_data
+      if: success() && steps.upstream.outputs.merge_needed == 'true'
+      run: |
+        if find .ccache -type f -print -quit 2>/dev/null | grep -q .; then
+          echo "has_data=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_data=false" >> "$GITHUB_OUTPUT"
+          echo "No ccache objects produced, skipping cache save"
+        fi
+
+    - name: Delete previous ccache entry
+      if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh cache delete "ccache-335-${{ matrix.branch }}-${{ matrix.pch }}" --repo "${{ github.repository }}" || true
+
+    - name: Save ccache
+      if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: .ccache
+        key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}
+
     - name: Unit tests
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin
         make test
     - name: Check executables
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin/check_install/bin
         ./authserver --version
         ./worldserver --version
     - name: Find latest DB release tag
+      if: steps.upstream.outputs.merge_needed == 'true'
       id: find_matching_tags
-      uses: Rochet2/find-matching-tags-ghapi@v1.3
+      uses: Rochet2/find-matching-tags-ghapi@v2
       with:
-        regex: ^TDB335\.\d+$
+        regex: ^TDB335\.\d{5,}$
         sort: desc
         owner: TrinityCore
         repo: TrinityCore
-        per_page: 70
-        token: ${{ secrets.GITHUB_TOKEN }}
-    - name: Print matched tags
-      run: |
-        echo ${{ steps.find_matching_tags.outputs.tags }}
+        per_page: 100
     - name: Download latest DB
-      uses: i3h/download-release-asset@a987f9dc3559bd1024d7ed353b59c9d0bbb8ab61
-      with:
-        owner: TrinityCore
-        repo: TrinityCore
-        tag: ${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}
-        file: /TDB_full.*\.7z/
-        path: bin/check_install/bin
-        token: ${{ secrets.GITHUB_TOKEN }}
+      if: steps.upstream.outputs.merge_needed == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        MATCHED_COUNT: ${{ steps.find_matching_tags.outputs.count }}
+        MATCHED_TAGS: ${{ steps.find_matching_tags.outputs.tags }}
+      run: |
+        echo "Matched ${MATCHED_COUNT} tag(s): ${MATCHED_TAGS}"
+        if [ "${MATCHED_COUNT}" -eq 0 ]; then
+          echo "::error::No TDB release tag matched the regex"
+          exit 1
+        fi
+        TAG='${{ fromJson(steps.find_matching_tags.outputs.tags)[0] }}'
+        gh release download "$TAG" --repo TrinityCore/TrinityCore --pattern 'TDB_full*.7z' --dir bin/check_install/bin
     - name: Print downloaded files
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         ls -lah bin/check_install/bin
     - name: Set configs
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         cd bin/check_install/etc
         sed "s/127.0.0.1;3306;trinity;trinity;/localhost;3306;root;;/g" worldserver.conf.dist > worldserver.conf
     - name: Build DB
+      if: steps.upstream.outputs.merge_needed == 'true'
       run: |
         echo "start mysql"
         sudo systemctl start mysql.service
@@ -248,20 +410,20 @@ jobs:
         yes | ./worldserver --update-databases-only
 
     - name: Run SQLs
-      if: matrix.pch == 'ON'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON'
       run: |
         for f in $SQL_WORLD; do echo "$f"; cat "$f" | mysql -uroot world; done
         for f in $SQL_CHAR; do echo "$f"; cat "$f" | mysql -uroot characters; done
         for f in $SQL_AUTH; do echo "$f"; cat "$f" | mysql -uroot auth; done
 
     - name: Run External SQLs
-      if: matrix.pch == 'ON' && matrix.branch == '3.3.5'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON' && matrix.branch == '3.3.5'
       run: |
-        echo 'Trinity_Jukebox' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Jukebox.sql | mysql -uroot world
-        echo 'Trinity_Portal_Master' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Portal_Master.sql | mysql -uroot world
-        echo 'Trinity_Portal_Master_Option' ; curl -sSf http://rochet2.github.io/downloads/Trinity_Portal_Master_Option.sql | mysql -uroot world
+        echo 'Trinity_Jukebox' ; curl -sSf https://rochet2.github.io/downloads/Trinity_Jukebox.sql | mysql -uroot world
+        echo 'Trinity_Portal_Master' ; curl -sSf https://rochet2.github.io/downloads/Trinity_Portal_Master.sql | mysql -uroot world
+        echo 'Trinity_Portal_Master_Option' ; curl -sSf https://rochet2.github.io/downloads/Trinity_Portal_Master_Option.sql | mysql -uroot world
 
     - name: Push changes
-      if: matrix.pch == 'ON'
+      if: steps.upstream.outputs.merge_needed == 'true' && matrix.pch == 'ON'
       run: |
         git push
