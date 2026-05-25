@@ -1076,9 +1076,9 @@ bool GameObject::Create(uint32 entry, Map* map, Position const& pos, QuaternionD
 
     SetDisplayId(goInfo->displayId);
 
-    CreateModel();
     // GAMEOBJECT_BYTES_1, index at 0, 1, 2 and 3
     SetGoType(GameobjectTypes(goInfo->type));
+    CreateModel();
     m_prevGoState = goState;
     SetGoState(goState);
     SetGoArtKit(artKit);
@@ -1147,6 +1147,12 @@ bool GameObject::Create(uint32 entry, Map* map, Position const& pos, QuaternionD
         case GAMEOBJECT_TYPE_PHASEABLE_MO:
             RemoveFlag(GameObjectFlags(0xF00));
             SetFlag(GameObjectFlags((m_goInfo->phaseableMO.AreaNameSet & 0xF) << 8));
+
+            if (GetGOInfo()->phaseableMO.DoodadSetA)
+                AddDynamicUpdateFieldValue(m_values.ModifyValue(&GameObject::m_gameObjectData).ModifyValue(&UF::GameObjectData::EnableDoodadSets)) = static_cast<int32>(GetGOInfo()->phaseableMO.DoodadSetA);
+
+            if (GetGOInfo()->phaseableMO.DoodadSetB)
+                AddDynamicUpdateFieldValue(m_values.ModifyValue(&GameObject::m_gameObjectData).ModifyValue(&UF::GameObjectData::EnableDoodadSets)) = static_cast<int32>(GetGOInfo()->phaseableMO.DoodadSetB);
             break;
         case GAMEOBJECT_TYPE_CAPTURE_POINT:
             SetUpdateFieldValue(m_values.ModifyValue(&GameObject::m_gameObjectData).ModifyValue(&UF::GameObjectData::SpellVisualID), m_goInfo->capturePoint.SpellVisual1);
@@ -4599,7 +4605,7 @@ bool GameObject::IsAtInteractDistance(Player const* player, SpellInfo const* spe
         float maxRange = spell->GetMaxRange(spell->IsPositive());
 
         if (GetGoType() == GAMEOBJECT_TYPE_SPELL_FOCUS)
-            return maxRange * maxRange >= GetExactDistSq(player);
+            return IsInDist(player, maxRange);
 
         if (sGameObjectDisplayInfoStore.LookupEntry(GetGOInfo()->displayId))
             return IsAtInteractDistance(*player, maxRange);
@@ -4666,7 +4672,7 @@ SpellInfo const* GameObject::GetSpellForLock(Player const* player) const
             if (SpellInfo const* spell = sSpellMgr->GetSpellInfo(playerSpell.first, GetMap()->GetDifficultyID()))
                 for (auto&& effect : spell->GetEffects())
                     if (effect.Effect == SPELL_EFFECT_OPEN_LOCK && effect.MiscValue == lock->Index[i])
-                        if (effect.CalcValue(player) >= int32(lock->Skill[i]))
+                        if (effect.CalcValueAsInt(player) >= int32(lock->Skill[i]))
                             return spell;
     }
 

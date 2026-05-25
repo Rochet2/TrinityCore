@@ -139,7 +139,7 @@ namespace WorldPackets
         class SetActionButton final : public ClientPacket
         {
         public:
-            explicit SetActionButton(WorldPacket&& packet) : ClientPacket(CMSG_SET_ACTION_BUTTON, std::move(packet)) {}
+            explicit SetActionButton(WorldPacket&& packet) : ClientPacket(CMSG_SET_ACTION_BUTTON, std::move(packet)) { }
 
             void Read() override;
 
@@ -422,6 +422,7 @@ namespace WorldPackets
             std::vector<LearnedSpellInfo> ClientLearnedSpellData;
             uint32 SpecializationID = 0;
             bool SuppressMessaging = false;
+            bool TraitGrantedByAura = false;
         };
 
         class SupercededSpells final : public ServerPacket
@@ -525,6 +526,7 @@ namespace WorldPackets
 
             std::vector<uint32> SpellID;
             bool SuppressMessaging = false;
+            bool TraitGrantedByAura = false;
         };
 
         class CooldownEvent final : public ServerPacket

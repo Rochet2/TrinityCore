@@ -260,20 +260,20 @@ bool LootStoreItem::Roll(bool rate) const
 
             float qualityModifier = pProto && rate && QualityToRate[pProto->GetQuality()] != MAX_RATES ? sWorld->getRate(QualityToRate[pProto->GetQuality()]) : 1.0f;
 
-            return roll_chance_f(chance * qualityModifier);
+            return roll_chance(chance * qualityModifier);
         }
         case Type::Reference:
-            return roll_chance_f(chance * (rate ? sWorld->getRate(RATE_DROP_ITEM_REFERENCED) : 1.0f));
+            return roll_chance(chance * (rate ? sWorld->getRate(RATE_DROP_ITEM_REFERENCED) : 1.0f));
         case Type::Currency:
         {
             CurrencyTypesEntry const* currency = sCurrencyTypesStore.AssertEntry(itemid);
 
             float qualityModifier = currency && rate && QualityToRate[currency->Quality] != MAX_RATES ? sWorld->getRate(QualityToRate[currency->Quality]) : 1.0f;
 
-            return roll_chance_f(chance * qualityModifier);
+            return roll_chance(chance * qualityModifier);
         }
         case Type::TrackingQuest:
-            return roll_chance_f(chance);
+            return roll_chance(chance);
         default:
             break;
     }
@@ -697,14 +697,13 @@ void LootTemplate::Process(Loot& loot, bool rate, uint16 lootMode, uint8 groupId
 
 void LootTemplate::ProcessPersonalLoot(std::unordered_map<Player*, std::unique_ptr<Loot>>& personalLoot, bool rate, uint16 lootMode) const
 {
-    auto getLootersForItem = [&personalLoot](auto&& predicate)
+    auto getLootersForItem = [&personalLoot](auto&& predicate) -> std::vector<Player*>
     {
         std::vector<Player*> lootersForItem;
         for (auto&& [looter, loot] : personalLoot)
-        {
             if (predicate(looter))
                 lootersForItem.push_back(looter);
-        }
+
         return lootersForItem;
     };
 
