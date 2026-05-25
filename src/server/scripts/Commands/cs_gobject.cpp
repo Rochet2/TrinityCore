@@ -644,7 +644,7 @@ public:
         GameObject* object = handler->GetObjectFromPlayerMapByDbGuid(guidLow);
         if (!object)
         {
-            handler->PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, guidLow);
+            handler->PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, *guidLow);
             handler->SetSentErrorMessage(true);
             return false;
         }
@@ -664,7 +664,7 @@ public:
         object->UpdateObjectVisibility();
         object->SaveToDB();
 
-        handler->PSendSysMessage("Set %s scale to %f", object->GetGUID().ToString(), scale);
+        handler->PSendSysMessage("Set %s scale to %f", object->GetGUID().ToString().c_str(), scale);
         return true;
     }
 };
