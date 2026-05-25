@@ -54,7 +54,7 @@ Location MoveSpline::computePosition(int32 time_point, int32 point_index) const
     }
     else if (splineflags.Turning)
     {
-        c.orientation = Position::NormalizeOrientation(turn->StartFacing + float(time_point) / float(IN_MILLISECONDS) * turn->RadsPerSec);
+        c.orientation = Position::NormalizeOrientation(turn->StartFacing + std::copysign(float(time_point) / float(IN_MILLISECONDS) * turn->RadsPerSec, turn->TotalTurnRads));
     }
     else
     {
@@ -120,9 +120,8 @@ void MoveSpline::computeFallElevation(int32 time_point, float& el) const
 
 struct FallInitializer
 {
-    FallInitializer(float _start_elevation) : start_elevation(_start_elevation) { }
     float start_elevation;
-    inline int32 operator()(Spline<int32>& s, int32 i)
+    inline int32 operator()(Spline<int32> const& s, int32 i) const
     {
         return Movement::computeFallTime(start_elevation - s.getPoint(i+1).z, false) * 1000.f;
     }
@@ -132,11 +131,21 @@ enum{
     minimal_duration = 1
 };
 
+struct ParabolicInPlaceInitializer
+{
+    float parabolic_amplitude;
+    inline int32 operator()(Spline<int32> const& /*s*/, int32 /*i*/)
+    {
+        return time += Movement::computeFallTime(parabolic_amplitude, false) * 1000.f;
+    }
+
+    int32 time = minimal_duration;
+};
+
 struct CommonInitializer
 {
-    CommonInitializer(float _velocity) : velocityInv(1000.f/_velocity), time(minimal_duration) { }
     float velocityInv;
-    int32 time;
+    int32 time = minimal_duration;
     inline int32 operator()(Spline<int32>& s, int32 i)
     {
         time += (s.SegLength(i) * velocityInv);
@@ -160,12 +169,17 @@ void MoveSpline::init_spline(MoveSplineInitArgs const& args)
     // init spline timestamps
     if (splineflags.Falling)
     {
-        FallInitializer init(spline.getPoint(spline.first()).z);
+        FallInitializer init{ .start_elevation = spline.getPoint(spline.first()).z };
+        spline.initLengths(init);
+    }
+    else if (splineflags.Parabolic && args.velocity < 0.01f)
+    {
+        ParabolicInPlaceInitializer init{ .parabolic_amplitude = args.parabolic_amplitude };
         spline.initLengths(init);
     }
     else
     {
-        CommonInitializer init(args.velocity);
+        CommonInitializer init{ .velocityInv = 1000.0f / args.velocity };
         spline.initLengths(init);
     }
 
@@ -178,7 +192,7 @@ void MoveSpline::init_spline(MoveSplineInitArgs const& args)
 
     if (turn)
     {
-        MySpline::LengthType totalTurnTime = static_cast<MySpline::LengthType>(turn->TotalTurnRads / turn->RadsPerSec * float(IN_MILLISECONDS));
+        MySpline::LengthType totalTurnTime = std::abs(static_cast<MySpline::LengthType>(turn->TotalTurnRads / turn->RadsPerSec * float(IN_MILLISECONDS)));
         spline.set_length(spline.last(), std::max(spline.length(), totalTurnTime));
     }
 
@@ -199,7 +213,7 @@ void MoveSpline::Initialize(MoveSplineInitArgs const& args)
     spell_effect_extra = args.spellEffectExtra;
     turn = args.turnData;
     anim_tier = args.animTier;
-    splineIsFacingOnly = args.path.size() == 2 && args.facing.type != MONSTER_MOVE_NORMAL && ((args.path[1] - args.path[0]).length() < 0.1f);
+    splineIsFacingOnly = args.path.size() == 2 && args.facing.type != MONSTER_MOVE_NORMAL && ((args.path[1] - args.path[0]).squaredLength() < 0.01f);
 
     velocity = args.velocity;
 
@@ -214,7 +228,7 @@ void MoveSpline::Initialize(MoveSplineInitArgs const& args)
 
     // init parabolic / animation
     // spline initialized, duration known and i able to compute parabolic acceleration
-    if (args.flags.HasFlag(MoveSplineFlagEnum::Parabolic | MoveSplineFlagEnum::FadeObject) || args.animTier)
+    if (args.flags.Parabolic || args.animTier)
     {
         int32 spline_duration = Duration();
         effect_start_time = spline.length(spline.first() + args.effect_start_point);
@@ -228,12 +242,10 @@ void MoveSpline::Initialize(MoveSplineInitArgs const& args)
                 float f_duration = MSToSec(spline_duration - effect_start_time);
                 vertical_acceleration = args.parabolic_amplitude * 8.f / (f_duration * f_duration);
             }
-            else if (args.vertical_acceleration != 0.0f)
-            {
-                vertical_acceleration = args.vertical_acceleration;
-            }
         }
     }
+    else if (args.flags.FadeObject)
+        effect_start_time = std::max(Duration() - args.fade_object_duration_ms, 0);
 }
 
 MoveSpline::MoveSpline() : m_Id(0), time_passed(0),
@@ -254,13 +266,18 @@ bool MoveSplineInitArgs::Validate(Unit const* unit)
     }()
 
     CHECK(path.size() > 1, unit->GetDebugInfo());
-    CHECK(velocity >= 0.01f, unit->GetDebugInfo());
+    CHECK(velocity >= 0.01f || (flags.Parabolic && parabolic_amplitude != 0.0f), unit->GetDebugInfo());
     CHECK(effect_start_point < std::ssize(path), unit->GetDebugInfo());
     CHECK(_checkPathLengths(), unit->GetGUID().ToString());
     if (spellEffectExtra)
     {
         CHECK(!spellEffectExtra->ProgressCurveId || sCurveStore.LookupEntry(spellEffectExtra->ProgressCurveId), unit->GetDebugInfo());
         CHECK(!spellEffectExtra->ParabolicCurveId || sCurveStore.LookupEntry(spellEffectExtra->ParabolicCurveId), unit->GetDebugInfo());
+    }
+    if (turnData)
+    {
+        CHECK(G3D::fuzzyNe(turnData->TotalTurnRads, 0.0f), unit->GetDebugInfo());
+        CHECK(turnData->RadsPerSec > 0.0f, unit->GetDebugInfo());
     }
     return true;
 #undef CHECK
@@ -295,7 +312,7 @@ bool MoveSplineInitArgs::_checkPathLengths()
 }
 
 MoveSplineInitArgs::MoveSplineInitArgs() : path_Idx_offset(0), velocity(0.f),
-parabolic_amplitude(0.f), vertical_acceleration(0.0f), effect_start_point(0),
+parabolic_amplitude(0.f), effect_start_point(0), fade_object_duration_ms(0),
 splineId(0), initialOrientation(0.f),
 walk(false), HasVelocity(false), TransformForTransport(true)
 {

@@ -63,20 +63,18 @@ struct std::hash<TileCacheKey>
 {
     static std::size_t Compute(TileCacheKey const& key) noexcept
     {
-        size_t hashVal = 0;
-        Trinity::hash_combine(hashVal, key.TerrainMapId);
-        Trinity::hash_combine(hashVal, key.X);
-        Trinity::hash_combine(hashVal, key.Y);
+        Trinity::HashFnv1a<> hash;
+        hash.UpdateData(key.TerrainMapId);
+        hash.UpdateData(key.X);
+        hash.UpdateData(key.Y);
         for (TileCacheKeyObject const& object : key.Objects)
         {
-            Trinity::hash_combine(hashVal, object.DisplayId);
-            Trinity::hash_combine(hashVal, object.Scale);
-            Trinity::hash_combine(hashVal, object.Position[0]);
-            Trinity::hash_combine(hashVal, object.Position[1]);
-            Trinity::hash_combine(hashVal, object.Position[2]);
-            Trinity::hash_combine(hashVal, object.Rotation);
+            hash.UpdateData(object.DisplayId);
+            hash.UpdateData(object.Scale);
+            hash.UpdateData(object.Position);
+            hash.UpdateData(object.Rotation);
         }
-        return hashVal;
+        return hash.Value;
     }
 
     std::size_t operator()(TileCacheKey const& key) const noexcept
@@ -138,7 +136,7 @@ struct TileCache
         MMAP::CreateVMapManager = &CreateVMapManager;
 
         // init timer
-        OnCacheCleanupTimerTick({});
+        OnCacheCleanupTimerTick();
 
         // start the worker
         _builderThread = std::thread([this] { _taskContext.run(); });
@@ -163,20 +161,23 @@ struct TileCache
     }
 
 private:
-    void OnCacheCleanupTimerTick(boost::system::error_code const& error)
+    void OnCacheCleanupTimerTick()
     {
-        if (error)
-            return;
-
         TimePoint now = GameTime::Now();
         RemoveOldCacheEntries(now - CACHE_MAX_AGE);
         _cacheCleanupTimer.expires_at(now + CACHE_CLEANUP_INTERVAL);
-        _cacheCleanupTimer.async_wait([this](boost::system::error_code const& error) { OnCacheCleanupTimerTick(error); });
+        _cacheCleanupTimer.async_wait([this](boost::system::error_code const& error)
+        {
+            if (error || !_builderThread.joinable() /*shutting down*/)
+                return;
+
+            OnCacheCleanupTimerTick();
+        });
     }
 
     void RemoveOldCacheEntries(TimePoint oldestPreservedEntryTimestamp)
     {
-        std::lock_guard lock(TilesMutex);
+        std::scoped_lock lock(TilesMutex);
         Trinity::Containers::EraseIf(Tiles, [=](std::unordered_map<TileCacheKey, Tile>::value_type const& kv)
         {
             return kv.second.LastAccessed < oldestPreservedEntryTimestamp;
@@ -273,23 +274,37 @@ void DynamicTileBuilder::Update(Milliseconds diff)
 
 std::weak_ptr<DynamicTileBuilder::AsyncTileResult> DynamicTileBuilder::BuildTile(uint32 terrainMapId, uint32 tileX, uint32 tileY)
 {
-    std::vector<std::shared_ptr<GameObjectModel const>> gameObjectModelReferences; // hold strong refs to models
+    struct GameObjectModelWorkData
+    {
+        explicit GameObjectModelWorkData(std::shared_ptr<VMAP::WorldModel const> worldModel, G3D::Vector3 const& position, float scale,
+            G3D::Quat const& rotation, GameObjectModel const* gameObject) : WorldModel(std::move(worldModel)), Position(position),
+            Rotation(rotation), Scale(scale), GameObject(gameObject) { }
+
+        std::shared_ptr<VMAP::WorldModel const> WorldModel;
+        G3D::Vector3 Position;
+        G3D::Quat Rotation;
+        float Scale;
+        GameObjectModel const* GameObject;
+    };
+
+    std::vector<GameObjectModelWorkData> modelSpawns;
     for (GameObjectModel const* gameObjectModel : m_map->GetGameObjectModelsInGrid(tileX, tileY))
     {
-        if (!gameObjectModel->IsMapObject() || !gameObjectModel->IsIncludedInNavMesh())
+        if (!gameObjectModel->IsIncludedInNavMesh())
             continue;
 
         std::shared_ptr<VMAP::WorldModel const> worldModel = gameObjectModel->GetWorldModel();
         if (!worldModel)
             continue;
 
-        gameObjectModelReferences.emplace_back(worldModel, gameObjectModel);
+        modelSpawns.emplace_back(std::move(worldModel), gameObjectModel->GetPosition(),
+            gameObjectModel->GetScale(), gameObjectModel->GetRotation(), gameObjectModel);
     }
 
-    TileCacheKey cacheKey{ .TerrainMapId = terrainMapId, .X = tileX, .Y = tileY, .CachedHash = 0, .Objects = std::vector<TileCacheKeyObject>(gameObjectModelReferences.size()) };
-    for (std::size_t i = 0; i < gameObjectModelReferences.size(); ++i)
+    TileCacheKey cacheKey{ .TerrainMapId = terrainMapId, .X = tileX, .Y = tileY, .CachedHash = 0, .Objects = std::vector<TileCacheKeyObject>(modelSpawns.size()) };
+    for (std::size_t i = 0; i < modelSpawns.size(); ++i)
     {
-        GameObjectModel const* gameObjectModel = gameObjectModelReferences[i].get();
+        GameObjectModel const* gameObjectModel = modelSpawns[i].GameObject;
         TileCacheKeyObject& object = cacheKey.Objects[i];
         object.DisplayId = gameObjectModel->GetDisplayId();
         object.Scale = int16(gameObjectModel->GetScale() * 1024.0f);
@@ -306,14 +321,14 @@ std::weak_ptr<DynamicTileBuilder::AsyncTileResult> DynamicTileBuilder::BuildTile
     cacheKey.CachedHash = std::hash<TileCacheKey>::Compute(cacheKey);
 
     TileCache* tileCache = TileCache::Instance();
-    std::lock_guard lock(tileCache->TilesMutex);
+    std::scoped_lock lock(tileCache->TilesMutex);
     auto [itr, isNew] = tileCache->Tiles.try_emplace(std::move(cacheKey));
     itr->second.LastAccessed = GameTime::Now();
     if (!isNew)
         return itr->second.Data;
 
     itr->second.Data = std::make_shared<AsyncTileResult>();
-    tileCache->StartTask([result = itr->second.Data, hash = cacheKey.CachedHash, selfRef = weak_from_this(), terrainMapId, tileX, tileY, gameObjectModelReferences = std::move(gameObjectModelReferences)]() mutable
+    tileCache->StartTask([result = itr->second.Data, hash = cacheKey.CachedHash, selfRef = weak_from_this(), terrainMapId, tileX, tileY, modelSpawns = std::move(modelSpawns)]() mutable
     {
         auto isReadyGuard = Trinity::make_unique_ptr_with_deleter<SetAsyncCallbackReady>(result.get());
 
@@ -337,15 +352,15 @@ std::weak_ptr<DynamicTileBuilder::AsyncTileResult> DynamicTileBuilder::BuildTile
         // get model data
         self->m_terrainBuilder.loadVMap(terrainMapId, tileX, tileY, meshData, vmapManager.get());
 
-        for (std::shared_ptr<GameObjectModel const> const& gameObjectModel : gameObjectModelReferences)
+        for (GameObjectModelWorkData const& model : modelSpawns)
         {
-            G3D::Vector3 position = gameObjectModel->GetPosition();
+            G3D::Vector3 position = model.Position;
             position.x = -position.x;
             position.y = -position.y;
 
-            G3D::Matrix3 invRotation = (G3D::Quat(0, 0, 1, 0) * gameObjectModel->GetRotation()).toRotationMatrix().inverse();
+            G3D::Matrix3 invRotation = (G3D::Quat(0, 0, 1, 0) * model.Rotation).toRotationMatrix().inverse();
 
-            self->m_terrainBuilder.loadVMapModel(gameObjectModel->GetWorldModel().get(), position, invRotation, gameObjectModel->GetScale(),
+            self->m_terrainBuilder.loadVMapModel(model.WorldModel.get(), position, invRotation, model.Scale,
                 meshData, vmapManager.get());
         }
 

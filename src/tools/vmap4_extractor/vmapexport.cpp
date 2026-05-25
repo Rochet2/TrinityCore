@@ -182,7 +182,7 @@ uint32 GenerateUniqueObjectId(uint32 clientId, uint16 clientDoodadId, bool isWmo
 {
     // WMO client ids must be preserved, they are used in DB2 files
     uint32 newId = isWmo ? clientId : UniqueObjectIdGenerator--;
-    std::lock_guard lock(UniqueObjectIdsMutex);
+    std::scoped_lock lock(UniqueObjectIdsMutex);
     return UniqueObjectIds.emplace(std::make_pair(clientId, clientDoodadId), newId).first->second;
 }
 
@@ -191,7 +191,7 @@ std::unordered_map<std::string, ExtractedModelData> ExtractedModels;
 
 std::pair<ExtractedModelData*, bool> BeginModelExtraction(std::string const& outputName)
 {
-    std::lock_guard lock(ExtractedModelsMutex);
+    std::scoped_lock lock(ExtractedModelsMutex);
     auto [itr, isNew] = ExtractedModels.try_emplace(outputName);
     return { &itr->second, isNew };
 }
@@ -736,7 +736,7 @@ int main(int argc, char ** argv)
     return 0;
 }
 
-#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
+#if TRINITY_COMPILER_IS_MICROSOFT
 #include "WheatyExceptionReport.h"
 // must be at end of file because of init_seg pragma
 INIT_CRASH_HANDLER();

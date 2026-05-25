@@ -701,7 +701,7 @@ class boss_thorim : public CreatureScript
                             me->SetReactState(REACT_AGGRESSIVE);
                             me->SetDisableGravity(false);
                             me->SetControlled(false, UNIT_STATE_ROOT);
-                            me->GetMotionMaster()->MoveJump(2134.8f, -263.056f, 419.983f, 30.0f, 20.0f);
+                            me->GetMotionMaster()->MoveJump(EVENT_JUMP, { 2134.8f, -263.056f, 419.983f }, {}, 5.0f);
                             events.ScheduleEvent(EVENT_START_PERIODIC_CHARGE, 2s, 0, PHASE_2);
                             events.ScheduleEvent(EVENT_UNBALANCING_STRIKE, 15s, 0, PHASE_2);
                             events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 20s, 0, PHASE_2);
@@ -951,27 +951,27 @@ struct npc_thorim_trashAI : public ScriptedAI
         /// returns heal amount of the given spell including hots
         static uint32 GetTotalHeal(SpellInfo const* spellInfo, Unit const* caster)
         {
-            uint32 heal = 0;
+            SpellEffectValue heal = 0;
             for (SpellEffectInfo const& spellEffectInfo : spellInfo->GetEffects())
             {
                 if (spellEffectInfo.IsEffect(SPELL_EFFECT_HEAL))
                     heal += spellEffectInfo.CalcValue(caster);
 
                 if (spellEffectInfo.IsEffect(SPELL_EFFECT_APPLY_AURA) && spellEffectInfo.IsAura(SPELL_AURA_PERIODIC_HEAL))
-                    heal += spellInfo->GetMaxTicks() * spellEffectInfo.CalcValue(caster);
+                    heal += spellEffectInfo.GetPeriodicTickCount() * spellEffectInfo.CalcValue(caster);
             }
-            return heal;
+            return static_cast<uint32>(heal);
         }
 
         /// returns remaining heal amount on given target
         static uint32 GetRemainingHealOn(Unit* target)
         {
-            uint32 heal = 0;
+            SpellEffectValue heal = 0;
             Unit::AuraEffectList const& auras = target->GetAuraEffectsByType(SPELL_AURA_PERIODIC_HEAL);
             for (AuraEffect const* aurEff : auras)
                 heal += aurEff->GetAmount() * aurEff->GetRemainingTicks();
 
-            return heal;
+            return static_cast<uint32>(heal);
         }
 
         class MostHPMissingInRange
@@ -1026,7 +1026,7 @@ struct npc_thorim_trashAI : public ScriptedAI
         static Unit* GetHealTarget(SpellInfo const* spellInfo, Unit* caster)
         {
             Unit* healTarget = nullptr;
-            if (!spellInfo->HasAttribute(SPELL_ATTR1_EXCLUDE_CASTER) && !roll_chance_f(caster->GetHealthPct()) && ((caster->GetHealth() + GetRemainingHealOn(caster) + GetTotalHeal(spellInfo, caster)) <= caster->GetMaxHealth()))
+            if (!spellInfo->HasAttribute(SPELL_ATTR1_EXCLUDE_CASTER) && !roll_chance(caster->GetHealthPct()) && ((caster->GetHealth() + GetRemainingHealOn(caster) + GetTotalHeal(spellInfo, caster)) <= caster->GetMaxHealth()))
                 healTarget = caster;
             else
                 healTarget = GetUnitWithMostMissingHp(spellInfo, caster);
@@ -1053,7 +1053,8 @@ struct npc_thorim_trashAI : public ScriptedAI
         if (_info->Type == MERCENARY_SOLDIER)
         {
             bool allowMove = true;
-            if (me->IsInRange(target, spellInfo->GetMinRange(), spellInfo->GetMaxRange()))
+            auto [minRange, maxRange] = spellInfo->GetMinMaxRange();
+            if (me->IsInRange(target, minRange, maxRange))
                 allowMove = false;
 
             if (IsCombatMovementAllowed() != allowMove)

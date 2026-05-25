@@ -252,7 +252,7 @@ struct GuildReward
 {
     uint32 ItemID;
     uint8 MinGuildRep;
-    Trinity::RaceMask<uint64> RaceMask;
+    Trinity::RaceMask<std::array<int32, 2>> RaceMask;
     uint64 Cost;
     std::vector<uint32> AchievementsRequired;
 };
@@ -764,7 +764,7 @@ class TC_GAME_API Guild
 
         // Handle client commands
         void HandleRoster(WorldSession* session);
-        void SendQueryResponse(WorldSession* session);
+        void HandleQuery(WorldSession* session);
         void HandleSetAchievementTracking(WorldSession* session, uint32 const* achievementIdsBegin, uint32 const* achievementIdsEnd);
         void HandleGetAchievementMembers(WorldSession* session, uint32 achievementId) const;
         void HandleSetMOTD(WorldSession* session, std::string_view motd);
