@@ -21,6 +21,7 @@
 #include "DBCEnums.h"
 #include "Duration.h"
 #include "ObjectGuid.h"
+#include "Optional.h"
 #include "Position.h"
 #include "SharedDefines.h"
 #include "UniqueTrackablePtr.h"
@@ -43,6 +44,7 @@ struct BattlegroundScore;
 struct BattlegroundTemplate;
 struct PVPDifficultyEntry;
 struct WorldSafeLocsEntry;
+enum class HonorGainSource : uint8;
 
 namespace WorldPackets
 {
@@ -368,7 +370,6 @@ class TC_GAME_API Battleground
         void BlockMovement(Player* player);
 
         void SendMessageToAll(uint32 entry, ChatMsg type, Player const* source = nullptr);
-        void PSendMessageToAll(uint32 entry, ChatMsg type, Player const* source, ...);
 
         // Raid Group
         Group* GetBgRaid(Team team) const { return team == ALLIANCE ? m_BgRaids[TEAM_ALLIANCE] : m_BgRaids[TEAM_HORDE]; }
@@ -378,7 +379,7 @@ class TC_GAME_API Battleground
 
         BattlegroundScore const* GetBattlegroundScore(Player* player) const;
 
-        bool UpdatePlayerScore(Player* player, uint32 type, uint32 value, bool doAddHonor = true);
+        bool UpdatePlayerScore(Player* player, uint32 type, uint32 value, bool doAddHonor = true, Optional<HonorGainSource> source = {});
         void UpdatePvpStat(Player* player, uint32 pvpStatId, uint32 value);
 
         static TeamId GetTeamIndexByTeamId(Team team) { return team == ALLIANCE ? TEAM_ALLIANCE : TEAM_HORDE; }
@@ -535,7 +536,6 @@ class TC_GAME_API Battleground
         int32  m_StartDelayTime;
         bool   m_IsRated;                                   // is this battle rated?
         bool   m_PrematureCountDown;
-        uint32 m_PrematureCountDownTimer;
         uint32 m_LastPlayerPositionBroadcast;
 
         // Player lists

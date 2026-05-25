@@ -39,6 +39,7 @@ EndScriptData */
 #include "GridNotifiersImpl.h"
 #include "InstanceScript.h"
 #include "Language.h"
+#include "LFG.h"
 #include "Log.h"
 #include "M2Stores.h"
 #include "MapManager.h"
@@ -51,9 +52,9 @@ EndScriptData */
 #include "SpellMgr.h"
 #include "SpellPackets.h"
 #include "Transport.h"
-#include "Warden.h"
 #include "World.h"
 #include "WorldSession.h"
+#include "WorldStateMgr.h"
 #include <fstream>
 #include <limits>
 #include <map>
@@ -67,7 +68,7 @@ class debug_commandscript : public CommandScript
 public:
     debug_commandscript() : CommandScript("debug_commandscript") { }
 
-    ChatCommandTable GetCommands() const override
+    std::span<ChatCommandBuilder const> GetCommands() const override
     {
         static ChatCommandTable debugPlayCommandTable =
         {
@@ -120,6 +121,7 @@ public:
             { "neargraveyard",      HandleDebugNearGraveyard,              rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "instancespawn",      HandleDebugInstanceSpawns,             rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "conversation",       HandleDebugConversationCommand,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
+            { "modifiertree",       HandleDebugModifierTreeCommand,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "wsexpression",       HandleDebugWSExpressionCommand,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "playercondition",    HandleDebugPlayerConditionCommand,     rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No },
             { "pvp warmode",        HandleDebugWarModeBalanceCommand,      rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
@@ -129,7 +131,6 @@ public:
             { "guidlimits",         HandleDebugGuidLimitsCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "objectcount",        HandleDebugObjectCountCommand,         rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "questreset",         HandleDebugQuestResetCommand,          rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
-            { "warden force",       HandleDebugWardenForce,                rbac::RBAC_PERM_COMMAND_DEBUG,   Console::Yes },
             { "personalclone",      HandleDebugBecomePersonalClone,        rbac::RBAC_PERM_COMMAND_DEBUG,   Console::No }
         };
         static ChatCommandTable commandTable =
@@ -300,7 +301,6 @@ public:
         castFailed.FailedArg1 = failArg1.value_or(-1);
         castFailed.FailedArg2 = failArg2.value_or(-1);
         handler->GetSession()->SendPacket(castFailed.Write());
-
         return true;
     }
 
@@ -514,9 +514,9 @@ public:
         return true;
     }
 
-    static bool HandleDebugUpdateWorldStateCommand(ChatHandler* handler, uint32 variable, uint32 value)
+    static bool HandleDebugUpdateWorldStateCommand(ChatHandler const* handler, int32 variable, int32 value)
     {
-        handler->GetPlayer()->SendUpdateWorldState(variable, value);
+        WorldStateMgr::SetValue(variable, value, false, handler->GetPlayer()->GetMap());
         return true;
     }
 
@@ -856,9 +856,20 @@ public:
         return true;
     }
 
-    static bool HandleDebugArenaCommand(ChatHandler* /*handler*/)
+    static bool HandleDebugArenaCommand(ChatHandler* handler, uint32 battlemasterListId)
     {
-        sBattlegroundMgr->ToggleArenaTesting();
+        bool successful = sBattlegroundMgr->ToggleArenaTesting(battlemasterListId);
+        if (!successful)
+        {
+            handler->PSendSysMessage("BattlemasterListId %u does not exist or is not an arena.", battlemasterListId);
+            handler->SetSentErrorMessage(true);
+            return true;
+        }
+
+        if (!battlemasterListId || !handler || !handler->GetSession())
+            return true;
+
+        BattlegroundMgr::QueuePlayerForArena(handler->GetSession()->GetPlayer(), 0, lfg::PLAYER_ROLE_DAMAGE);
         return true;
     }
 
@@ -993,7 +1004,7 @@ public:
                 for (auto const& pair : redirectInfo)
                 {
                     Unit* unit = ObjectAccessor::GetUnit(*target, pair.first);
-                    handler->PSendSysMessage(" |-- %02u%% to %s", pair.second, unit ? unit->GetName().c_str() : pair.first.ToString().c_str());
+                    handler->PSendSysMessage(" |-- % 2.1f%% to %s", pair.second, unit ? unit->GetName().c_str() : pair.first.ToString().c_str());
                 }
             }
         }
@@ -1013,7 +1024,7 @@ public:
                     for (auto const& innerPair : outerPair.second) // (guid, pct)
                     {
                         Unit* unit = ObjectAccessor::GetUnit(*target, innerPair.first);
-                        handler->PSendSysMessage("   |-- %02u%% to %s", innerPair.second, unit ? unit->GetName().c_str() : innerPair.first.ToString().c_str());
+                        handler->PSendSysMessage("   |-- % 2.1f%% to %s", innerPair.second, unit ? unit->GetName().c_str() : innerPair.first.ToString().c_str());
                     }
                 }
             }
@@ -1579,6 +1590,25 @@ public:
         return Conversation::CreateConversation(conversationEntry, target, *target, target->GetGUID()) != nullptr;
     }
 
+    static bool HandleDebugModifierTreeCommand(ChatHandler* handler, uint32 modifierTreeId)
+    {
+        Player* target = handler->getSelectedPlayerOrSelf();
+
+        if (!target)
+        {
+            handler->SendSysMessage(LANG_PLAYER_NOT_FOUND);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        if (target->ModifierTreeSatisfied(modifierTreeId))
+            handler->PSendSysMessage("ModifierTree %u met", modifierTreeId);
+        else
+            handler->PSendSysMessage("ModifierTree %u not met", modifierTreeId);
+
+        return true;
+    }
+
     static bool HandleDebugWSExpressionCommand(ChatHandler* handler, uint32 expressionId)
     {
         Player* target = handler->getSelectedPlayerOrSelf();
@@ -1595,9 +1625,9 @@ public:
             return false;
 
         if (ConditionMgr::IsMeetingWorldStateExpression(target->GetMap(), wsExpressionEntry))
-            handler->PSendSysMessage("Expression %u meet", expressionId);
+            handler->PSendSysMessage("WorldStateExpression %u met", expressionId);
         else
-            handler->PSendSysMessage("Expression %u not meet", expressionId);
+            handler->PSendSysMessage("WorldStateExpression %u not met", expressionId);
 
         return true;
     }
@@ -1638,23 +1668,6 @@ public:
         uint8* leak = new uint8();
         handler->PSendSysMessage("Leaked 1 uint8 object at address %p", static_cast<void*>(leak));
 #endif
-        return true;
-    }
-
-    static bool HandleDebugWardenForce(ChatHandler* handler, std::vector<uint16> checkIds)
-    {
-        if (checkIds.empty())
-            return false;
-
-        Warden* const warden = handler->GetSession()->GetWarden();
-        if (!warden)
-        {
-            handler->SendSysMessage("Warden system is not enabled");
-            return true;
-        }
-
-        size_t const nQueued = warden->DEBUG_ForceSpecificChecks(checkIds);
-        handler->PSendSysMessage("%zu/%zu checks queued for your Warden, they should be sent over the next few minutes (depending on settings)", nQueued, checkIds.size());
         return true;
     }
 

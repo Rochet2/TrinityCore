@@ -19,6 +19,7 @@
 #define TRINITY_MOVEMENTDEFINES_H
 
 #include "Common.h"
+#include "Duration.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
 #include "Position.h"
@@ -88,7 +89,7 @@ enum MovementSlot : uint8
     MAX_MOTION_SLOT
 };
 
-enum class MovementWalkRunSpeedSelectionMode
+enum class MovementWalkRunSpeedSelectionMode : uint8
 {
     Default,
     ForceRun,
@@ -147,8 +148,10 @@ struct JumpChargeParams
     };
 
     bool TreatSpeedAsMoveTimeSeconds = false;
+    bool UnlimitedSpeed = false;
 
-    float JumpGravity = 0.0f;
+    Optional<float> MinHeight;
+    Optional<float> MaxHeight;
 
     Optional<uint32> SpellVisualId;
     Optional<uint32> ProgressCurveId;
@@ -157,6 +160,19 @@ struct JumpChargeParams
 };
 
 using MovementFacingTarget = std::variant<std::monostate, Position, Unit const*, float>;
+
+struct MovementFadeObject
+{
+    constexpr MovementFadeObject() = default;
+
+    template <typename DurationRep, typename DurationPeriod>
+    constexpr MovementFadeObject(std::chrono::duration<DurationRep, DurationPeriod> duration) : Duration(duration) { }
+
+    template <typename DurationRep, typename DurationPeriod>
+    constexpr MovementFadeObject(Optional<std::chrono::duration<DurationRep, DurationPeriod>> duration) : Duration(duration) { }
+
+    Optional<Milliseconds> Duration;
+};
 
 inline bool IsInvalidMovementGeneratorType(uint8 const type) { return type == MAX_DB_MOTION_TYPE || type >= MAX_MOTION_TYPE; }
 inline bool IsInvalidMovementSlot(uint8 const slot) { return slot >= MAX_MOTION_SLOT; }
