@@ -16,10 +16,8 @@
  */
 
 #include "ScriptMgr.h"
-#include "CellImpl.h"
 #include "Containers.h"
 #include "CreatureAIImpl.h"
-#include "GridNotifiersImpl.h"
 #include "Player.h"
 #include "SpellAuraEffects.h"
 #include "SpellScript.h"
@@ -75,21 +73,16 @@ class spell_love_is_in_the_air_romantic_picnic : public AuraScript
         bool foundSomeone = false;
         // For nearby players, check if they have the same aura. If so, cast Romantic Picnic (45123)
         // required by achievement and "hearts" visual
-        std::list<Player*> playerList;
-        Trinity::AnyPlayerInObjectRangeCheck checker(target, INTERACTION_DISTANCE*2);
-        Trinity::PlayerListSearcher<Trinity::AnyPlayerInObjectRangeCheck> searcher(target, playerList, checker);
-        Cell::VisitWorldObjects(target, searcher, INTERACTION_DISTANCE * 2);
-        for (std::list<Player*>::const_iterator itr = playerList.begin(); itr != playerList.end(); ++itr)
+        std::vector<Player*> playerList;
+        target->GetPlayerListInGrid(playerList, INTERACTION_DISTANCE * 2);
+        for (Player* playerFound : playerList)
         {
-            if (Player* playerFound = (*itr))
+            if (target != playerFound && playerFound->HasAura(GetId()))
             {
-                if (target != playerFound && playerFound->HasAura(GetId()))
-                {
-                    playerFound->CastSpell(playerFound, SPELL_ROMANTIC_PICNIC_ACHIEV, true);
-                    target->CastSpell(target, SPELL_ROMANTIC_PICNIC_ACHIEV, true);
-                    foundSomeone = true;
-                    break;
-                }
+                playerFound->CastSpell(playerFound, SPELL_ROMANTIC_PICNIC_ACHIEV, true);
+                target->CastSpell(target, SPELL_ROMANTIC_PICNIC_ACHIEV, true);
+                foundSomeone = true;
+                break;
             }
         }
 
@@ -159,12 +152,12 @@ class spell_love_is_in_the_air_fragrant_air_analysis : public SpellScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ uint32(spellInfo->GetEffect(EFFECT_0).CalcValue()) });
+        return ValidateSpellInfo({ uint32(spellInfo->GetEffect(EFFECT_0).CalcValueAsInt()) });
     }
 
     void HandleScript(SpellEffIndex /*effIndex*/)
     {
-        GetHitUnit()->RemoveAurasDueToSpell(uint32(GetEffectValue()));
+        GetHitUnit()->RemoveAurasDueToSpell(uint32(GetEffectValueAsInt()));
     }
 
     void Register() override
@@ -178,12 +171,12 @@ class spell_love_is_in_the_air_heavily_perfumed : public AuraScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ uint32(spellInfo->GetEffect(EFFECT_0).CalcValue()) });
+        return ValidateSpellInfo({ uint32(spellInfo->GetEffect(EFFECT_0).CalcValueAsInt()) });
     }
 
     void AfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
-        GetTarget()->CastSpell(GetTarget(), uint32(GetEffectInfo(EFFECT_0).CalcValue()));
+        GetTarget()->CastSpell(GetTarget(), uint32(GetEffectInfo(EFFECT_0).CalcValueAsInt()));
     }
 
     void Register() override
@@ -221,7 +214,7 @@ class spell_love_is_in_the_air_sample_satisfaction : public AuraScript
 {
     void OnPeriodic(AuraEffect const* /*aurEff*/)
     {
-        if (roll_chance_i(30))
+        if (roll_chance(30))
             Remove();
     }
 
@@ -248,7 +241,7 @@ class spell_love_is_in_the_air_service_uniform : public AuraScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ uint32(spellInfo->GetEffect(EFFECT_0).CalcValue()) });
+        return ValidateSpellInfo({ uint32(spellInfo->GetEffect(EFFECT_0).CalcValueAsInt()) });
     }
 
     void AfterApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
@@ -265,7 +258,7 @@ class spell_love_is_in_the_air_service_uniform : public AuraScript
 
     void AfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
-        GetTarget()->RemoveAurasDueToSpell(uint32(GetEffectInfo(EFFECT_0).CalcValue()));
+        GetTarget()->RemoveAurasDueToSpell(uint32(GetEffectInfo(EFFECT_0).CalcValueAsInt()));
     }
 
     void Register() override
@@ -307,14 +300,14 @@ class spell_love_is_in_the_air_perfume_cologne_immune : public SpellScript
     {
         return ValidateSpellInfo(
         {
-            uint32(spellInfo->GetEffect(EFFECT_0).CalcValue()),
-            uint32(spellInfo->GetEffect(EFFECT_1).CalcValue())
+            uint32(spellInfo->GetEffect(EFFECT_0).CalcValueAsInt()),
+            uint32(spellInfo->GetEffect(EFFECT_1).CalcValueAsInt())
         });
     }
 
     void HandleScript(SpellEffIndex /*effIndex*/)
     {
-        GetCaster()->RemoveAurasDueToSpell(uint32(GetEffectValue()));
+        GetCaster()->RemoveAurasDueToSpell(uint32(GetEffectValueAsInt()));
     }
 
     void Register() override
