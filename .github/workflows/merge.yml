@@ -59,12 +59,11 @@ jobs:
         git remote add Trinity https://github.com/TrinityCore/TrinityCore.git || git remote set-url Trinity https://github.com/TrinityCore/TrinityCore.git
         git fetch Trinity master
         if git merge-base --is-ancestor Trinity/master HEAD; then
-          echo "Already up to date with TrinityCore master"
+          echo "merge_needed=false" >> "$GITHUB_OUTPUT"
+          echo "Already up to date with TrinityCore master, skipping merge and build"
         else
-          echo "Upstream merge required"
+          echo "merge_needed=true" >> "$GITHUB_OUTPUT"
         fi
-        # BENCHMARK: upstream skip disabled — restore merge_needed=false branch below
-        echo "merge_needed=true" >> "$GITHUB_OUTPUT"
 
     - name: Configure user
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -266,12 +265,11 @@ jobs:
         git remote add Trinity https://github.com/TrinityCore/TrinityCore.git || git remote set-url Trinity https://github.com/TrinityCore/TrinityCore.git
         git fetch Trinity 3.3.5
         if git merge-base --is-ancestor Trinity/3.3.5 HEAD; then
-          echo "Already up to date with TrinityCore 3.3.5"
+          echo "merge_needed=false" >> "$GITHUB_OUTPUT"
+          echo "Already up to date with TrinityCore 3.3.5, skipping merge and build"
         else
-          echo "Upstream merge required"
+          echo "merge_needed=true" >> "$GITHUB_OUTPUT"
         fi
-        # BENCHMARK: upstream skip disabled — restore merge_needed=false branch below
-        echo "merge_needed=true" >> "$GITHUB_OUTPUT"
 
     - name: Configure user
       if: steps.upstream.outputs.merge_needed == 'true'
