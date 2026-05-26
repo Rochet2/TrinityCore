@@ -269,7 +269,7 @@ class spell_hun_chimera_shot : public SpellScript
 
             if (spellId)
             {
-                CastSpellExtraArgs args(TriggerCastFlags(TRIGGERED_FULL_MASK & ~TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD));
+                CastSpellExtraArgs args(TRIGGERED_FULL_MASK & ~TRIGGERED_IGNORE_SPELL_AND_CATEGORY_CD);
                 args.AddSpellBP0(basePoint);
                 caster->CastSpell(unitTarget, spellId, args);
             }
@@ -367,7 +367,7 @@ class spell_hun_glyph_of_arcane_shot : public AuraScript
                     continue;
                 // Search only Serpent Sting, Viper Sting, Scorpid Sting, Wyvern Sting
                 if (aura->GetSpellInfo()->SpellFamilyName == SPELLFAMILY_HUNTER
-                    && aura->GetSpellInfo()->SpellFamilyFlags.HasFlag(0xC000, 0x1080))
+                    && aura->GetSpellInfo()->SpellFamilyFlags & flag96(0xC000, 0x1080))
                     return true;
             }
         }

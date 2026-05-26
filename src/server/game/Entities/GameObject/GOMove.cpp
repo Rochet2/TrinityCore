@@ -44,9 +44,9 @@ void GOMove::SendAddonMessage(Player * player, const char * msg)
     data.Initialize(SMSG_MESSAGECHAT, 100);
     data << uint8(CHAT_MSG_SYSTEM);
     data << int32(LANG_ADDON);
-    data << uint64(player->GetGUID());
+    data << player->GetGUID();
     data << uint32(0);
-    data << uint64(player->GetGUID());
+    data << player->GetGUID();
     data << uint32(messageLength);
     data << buf;
     data << uint8(0);
@@ -86,7 +86,8 @@ void GOMove::DeleteGameObject(GameObject * object)
 
     // copy paste .gob del command
     auto spawnid = object->GetSpawnId();
-    if (ObjectGuid ownerGuid = object->GetOwnerGUID())
+    ObjectGuid ownerGuid = object->GetOwnerGUID();
+    if (!ownerGuid.IsEmpty())
     {
         Unit* owner = ObjectAccessor::GetUnit(*object, ownerGuid);
         if (owner && ownerGuid.IsPlayer())
