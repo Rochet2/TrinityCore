@@ -37,7 +37,7 @@ jobs:
       SQL_CHAR: ${{ join( matrix.char, ' ' ) }}
       SQL_AUTH: ${{ join( matrix.auth, ' ' ) }}
       SQL_HOTFIX: ${{ join( matrix.hotfix, ' ' ) }}
-      CCACHE_MAXSIZE: 500M
+      CCACHE_MAXSIZE: 200M
       CCACHE_COMPRESS: true
       CCACHE_COMPRESSLEVEL: 6
       CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
@@ -108,9 +108,7 @@ jobs:
         cd ..
     - name: Build
       if: steps.upstream.outputs.merge_needed == 'true'
-      id: build
       run: |
-        echo "build_start=$EPOCHSECONDS" >> "$GITHUB_OUTPUT"
         ccache -z
         cd bin
         make -j 4 -k && make install
@@ -118,10 +116,6 @@ jobs:
     - name: ccache stats
       if: always() && steps.upstream.outputs.merge_needed == 'true'
       run: ccache -s
-
-    - name: Prune ccache
-      if: steps.upstream.outputs.merge_needed == 'true'
-      run: ccache --evict-older-than "$(( $EPOCHSECONDS - ${{ steps.build.outputs.build_start }} ))s"
 
     - name: Check ccache has data
       id: ccache_has_data
@@ -243,7 +237,7 @@ jobs:
       SQL_WORLD: ${{ join( matrix.world, ' ' ) }}
       SQL_CHAR: ${{ join( matrix.char, ' ' ) }}
       SQL_AUTH: ${{ join( matrix.auth, ' ' ) }}
-      CCACHE_MAXSIZE: 500M
+      CCACHE_MAXSIZE: 200M
       CCACHE_COMPRESS: true
       CCACHE_COMPRESSLEVEL: 6
       CCACHE_SLOPPINESS: time_macros,pch_defs,include_file_mtime,include_file_ctime
@@ -309,9 +303,7 @@ jobs:
         cd ..
     - name: Build
       if: steps.upstream.outputs.merge_needed == 'true'
-      id: build
       run: |
-        echo "build_start=$EPOCHSECONDS" >> "$GITHUB_OUTPUT"
         ccache -z
         cd bin
         make -j 4 -k && make install
@@ -319,10 +311,6 @@ jobs:
     - name: ccache stats
       if: always() && steps.upstream.outputs.merge_needed == 'true'
       run: ccache -s
-
-    - name: Prune ccache
-      if: steps.upstream.outputs.merge_needed == 'true'
-      run: ccache --evict-older-than "$(( $EPOCHSECONDS - ${{ steps.build.outputs.build_start }} ))s"
 
     - name: Check ccache has data
       id: ccache_has_data
