@@ -176,8 +176,7 @@ enum ScriptsType
 {
     SCRIPTS_FIRST = 1,
 
-    SCRIPTS_SPELL = SCRIPTS_FIRST,
-    SCRIPTS_EVENT,
+    SCRIPTS_EVENT = SCRIPTS_FIRST,
     SCRIPTS_WAYPOINT,
 
     SCRIPTS_LAST
@@ -415,7 +414,6 @@ typedef std::multimap<uint32, ScriptInfo> ScriptMap;
 typedef std::map<uint32, ScriptMap> ScriptMapMap;
 typedef std::multimap<uint32 /*spell id*/, std::pair<uint32 /*script id*/, bool /*enabled*/>> SpellScriptsContainer;
 typedef std::pair<SpellScriptsContainer::iterator, SpellScriptsContainer::iterator> SpellScriptsBounds;
-TC_GAME_API extern ScriptMapMap sSpellScripts;
 TC_GAME_API extern ScriptMapMap sEventScripts;
 TC_GAME_API extern ScriptMapMap sWaypointScripts;
 
@@ -474,25 +472,19 @@ struct AccessRequirement
     std::string questFailedText;
 };
 
-struct BroadcastText
+struct BroadcastTextEntry
 {
-    BroadcastText() : Id(0), LanguageID(0), EmoteId1(0), EmoteId2(0), EmoteId3(0),
-                      EmoteDelay1(0), EmoteDelay2(0), EmoteDelay3(0), SoundEntriesID(0), EmotesID(0), Flags(0)
+    explicit BroadcastTextEntry(uint32 id) : Id(id), LanguageID(0), Text(DEFAULT_LOCALE + 1), Text1(DEFAULT_LOCALE + 1), EmoteID(),
+        EmoteDelay(), SoundEntriesID(0), EmotesID(0), Flags(0)
     {
-        Text.resize(DEFAULT_LOCALE + 1);
-        Text1.resize(DEFAULT_LOCALE + 1);
     }
 
     uint32 Id;
     uint32 LanguageID;
     std::vector<std::string> Text;
     std::vector<std::string> Text1;
-    uint32 EmoteId1;
-    uint32 EmoteId2;
-    uint32 EmoteId3;
-    uint32 EmoteDelay1;
-    uint32 EmoteDelay2;
-    uint32 EmoteDelay3;
+    std::array<uint32, 3> EmoteID;
+    std::array<uint32, 3> EmoteDelay;
     uint32 SoundEntriesID;
     uint32 EmotesID;
     uint32 Flags;
@@ -515,7 +507,7 @@ struct BroadcastText
     }
 };
 
-typedef std::unordered_map<uint32, BroadcastText> BroadcastTextContainer;
+typedef std::unordered_map<uint32, BroadcastTextEntry> BroadcastTextContainer;
 
 typedef std::set<ObjectGuid::LowType> CellGuidSet;
 struct CellObjectGuids
@@ -1143,7 +1135,6 @@ class TC_GAME_API ObjectMgr
         bool LoadTrinityStrings();
 
         void LoadEventScripts();
-        void LoadSpellScripts();
         void LoadWaypointScripts();
 
         void LoadSpellScriptNames();
@@ -1256,7 +1247,8 @@ class TC_GAME_API ObjectMgr
         template<HighGuid type>
         ObjectGuidGenerator& GetGenerator()
         {
-            static_assert(ObjectGuidTraits<type>::Global, "Only global guid can be generated in ObjectMgr context");
+            static_assert(ObjectGuidTraits<type>::SequenceSource.HasFlag(ObjectGuidSequenceSource::Global),
+                "Only global guid can be generated in ObjectMgr context");
             return GetGuidSequenceGenerator(type);
         }
 
@@ -1309,7 +1301,7 @@ class TC_GAME_API ObjectMgr
             return nullptr;
         }
 
-        BroadcastText const* GetBroadcastText(uint32 id) const
+        BroadcastTextEntry const* GetBroadcastText(uint32 id) const
         {
             BroadcastTextContainer::const_iterator itr = _broadcastTextStore.find(id);
             if (itr != _broadcastTextStore.end())
@@ -1534,7 +1526,7 @@ class TC_GAME_API ObjectMgr
         GraveyardContainer GraveyardStore;
 
         static void AddLocaleString(std::string&& value, LocaleConstant localeConstant, std::vector<std::string>& data);
-        static std::string_view GetLocaleString(std::vector<std::string> const& data, size_t locale)
+        static std::string_view GetLocaleString(std::vector<std::string> const& data, LocaleConstant locale)
         {
             if (locale < data.size())
                 return data[locale];
@@ -1543,8 +1535,14 @@ class TC_GAME_API ObjectMgr
         }
         static void GetLocaleString(std::vector<std::string> const& data, LocaleConstant localeConstant, std::string& value)
         {
-            if (std::string_view str = GetLocaleString(data, static_cast<size_t>(localeConstant)); !str.empty())
+            if (std::string_view str = GetLocaleString(data, localeConstant); !str.empty())
                 value.assign(str);
+        }
+
+        static void GetLocaleString(std::vector<std::string> const& data, LocaleConstant localeConstant, std::string_view& value)
+        {
+            if (std::string_view str = GetLocaleString(data, localeConstant); !str.empty())
+                value = str;
         }
 
         CharacterConversionMap FactionChangeAchievements;
@@ -1633,7 +1631,7 @@ class TC_GAME_API ObjectMgr
         SpellScriptsContainer _spellScriptsStore;
 
         std::unordered_map<uint32, VehicleTemplate> _vehicleTemplateStore;
-        VehicleAccessoryContainer _vehicleTemplateAccessoryStore;
+        VehicleAccessoryTemplateContainer _vehicleTemplateAccessoryStore;
         VehicleAccessoryContainer _vehicleAccessoryStore;
 
         LocaleConstant DBCLocaleIndex;

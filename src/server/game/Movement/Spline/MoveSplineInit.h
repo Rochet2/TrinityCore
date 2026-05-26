@@ -62,7 +62,7 @@ namespace Movement
 
         /*  Final pass of initialization that stops movement.
          */
-        void Stop();
+        void Stop(bool force = false);
 
         /* Adds movement by parabolic trajectory
          * @param amplitude  - the maximum height of parabola, value could be negative and positive
@@ -144,6 +144,8 @@ namespace Movement
          */
         void SetVelocity(float velocity);
 
+        void SetSwim();
+
         PointsArray& Path() { return args.path; }
 
         /* Disables transport coordinate transformations for cases where raw offsets are available
@@ -164,6 +166,7 @@ namespace Movement
     inline void MoveSplineInit::SetTransportEnter() { args.flags.EnableTransportEnter(); }
     inline void MoveSplineInit::SetTransportExit() { args.flags.EnableTransportExit(); }
     inline void MoveSplineInit::SetOrientationFixed(bool enable) { args.flags.orientationFixed = enable; }
+    inline void MoveSplineInit::SetSwim() { args.flags.EnableSwim(); }
 
     inline void MoveSplineInit::SetParabolic(float amplitude, float time_shift)
     {
