@@ -65,6 +65,12 @@ enum class AreaTriggerPathType : int32
     MovementScript  = 3
 };
 
+enum class AreaTriggerExitReason : uint8
+{
+    NotInside   = 0, // Unit leave areatrigger
+    ByExpire    = 1  // On areatrigger despawn
+};
+
 class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<AreaTrigger>, public MapObject
 {
     public:
@@ -72,21 +78,22 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
         ~AreaTrigger();
 
     protected:
-        void BuildValuesCreate(ByteBuffer* data, UF::UpdateFieldFlag flags, Player const* target) const override;
-        void BuildValuesUpdate(ByteBuffer* data, UF::UpdateFieldFlag flags, Player const* target) const override;
-        void ClearUpdateMask(bool remove) override;
+        void BuildValuesCreate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const override;
+        void BuildValuesUpdate(UF::UpdateFieldFlag flags, ByteBuffer& data, Player const* target) const override;
+        void ClearValuesChangesMask() override;
 
     public:
         void BuildValuesUpdateForPlayerWithMask(UpdateData* data, UF::ObjectData::Mask const& requestedObjectMask,
-            UF::AreaTriggerData::Mask const& requestedAreaTriggerMask, Player const* target) const;
+            UF::AreaTriggerData::Mask const& requestedAreaTriggerMask, Player const* target, bool ignoreNestedChangesMask) const;
 
         struct ValuesUpdateForPlayerWithMaskSender // sender compatible with MessageDistDeliverer
         {
-            explicit ValuesUpdateForPlayerWithMaskSender(AreaTrigger const* owner) : Owner(owner) { }
+            explicit ValuesUpdateForPlayerWithMaskSender(AreaTrigger const* owner) : Owner(owner), IgnoreNestedChangesMask(false) { }
 
             AreaTrigger const* Owner;
             UF::ObjectData::Base ObjectMask;
             UF::AreaTriggerData::Base AreaTriggerMask;
+            bool IgnoreNestedChangesMask;
 
             void operator()(Player const* player) const;
         };
@@ -190,6 +197,8 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
         bool HasOrbit() const { return m_areaTriggerData->PathData.Is<UF::AreaTriggerOrbit>(); }
         UF::AreaTriggerOrbit const& GetOrbit() const { return *m_areaTriggerData->PathData.Get<UF::AreaTriggerOrbit>(); }
 
+        void SetPathTarget(ObjectGuid pathTarget) { SetUpdateFieldValue(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::OrbitPathTarget), pathTarget); }
+
         bool HasOverridePosition() const;
 
         void UpdateShape();
@@ -228,9 +237,9 @@ class TC_GAME_API AreaTrigger final : public WorldObject, public GridObject<Area
         void SearchUnitInCylinder(UF::AreaTriggerCylinder const& cylinder, std::vector<Unit*>& targetList);
         void SearchUnitInDisk(UF::AreaTriggerDisk const& disk, std::vector<Unit*>& targetList);
         void SearchUnitInBoundedPlane(UF::AreaTriggerBoundedPlane const& boundedPlane, std::vector<Unit*>& targetList);
-        void HandleUnitEnterExit(std::vector<Unit*> const& targetList);
+        void HandleUnitEnterExit(std::vector<Unit*> const& targetList, AreaTriggerExitReason exitMode = AreaTriggerExitReason::NotInside);
         void HandleUnitEnter(Unit* unit);
-        void HandleUnitExitInternal(Unit* unit);
+        void HandleUnitExitInternal(Unit* unit, AreaTriggerExitReason exitMode = AreaTriggerExitReason::NotInside);
 
         void DoActions(Unit* unit);
         void UndoActions(Unit* unit);

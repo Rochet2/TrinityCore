@@ -26,7 +26,8 @@ target_compile_options(trinity-warning-interface
 # disable permissive mode to make msvc more eager to reject code that other compilers don't already accept
 target_compile_options(trinity-compile-option-interface
   INTERFACE
-    /permissive-)
+    /permissive-
+    /utf-8)
 
 if(PLATFORM EQUAL 32)
   # mark 32 bit executables large address aware so they can use > 2GB address space
@@ -47,7 +48,7 @@ if("${CMAKE_MAKE_PROGRAM}" MATCHES "MSBuild")
   target_compile_options(trinity-compile-option-interface
     INTERFACE
       /MP)
-else()
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   # Forces writes to the PDB file to be serialized through mspdbsrv.exe (/FS)
   # Enable faster PDB generation in parallel builds by minimizing RPC calls to mspdbsrv.exe (/Zf)
   target_compile_options(trinity-compile-option-interface

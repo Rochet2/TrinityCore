@@ -189,8 +189,10 @@ enum SMART_EVENT
     SMART_EVENT_ON_DESPAWN               = 86,      // NONE
     SMART_EVENT_SEND_EVENT_TRIGGER       = 87,      // NONE
     SMART_EVENT_AREATRIGGER_EXIT         = 88,      // NONE
+    SMART_EVENT_ON_AURA_APPLIED          = 89,      // SpellID, CooldownMin, CooldownMax
+    SMART_EVENT_ON_AURA_REMOVED          = 90,      // SpellID, CooldownMin, CooldownMax
 
-    SMART_EVENT_END                      = 89
+    SMART_EVENT_END                      = 91
 };
 
 struct SmartEvent
@@ -611,7 +613,9 @@ enum SMART_ACTION
     SMART_ACTION_ENTER_VEHICLE                      = 155,    // seat id
     SMART_ACTION_BOARD_PASSENGER                    = 156,    // seat id
     SMART_ACTION_EXIT_VEHICLE                       = 157,
-    SMART_ACTION_END                                = 158
+    SMART_ACTION_RESUME_MOVEMENT                    = 158,    // UNUSED NEEDS CHERRYPICK
+    SMART_ACTION_FALL                               = 159,    // pointId
+    SMART_ACTION_END                                = 160
 };
 
 enum class SmartActionSummonCreatureFlags
@@ -874,12 +878,18 @@ struct SmartAction
 
         struct
         {
+            uint32 pointId;
+        } fall;
+
+        struct
+        {
             SAIBool run; // unused defined by waypoint_path
             uint32 pathID;
             SAIBool repeat;
             uint32 quest;
             uint32 despawnTime;
-            // uint32 reactState; DO NOT REUSE
+            uint32 reactState_DEPRECATED_DO_NOT_REUSE;
+            uint32 FadeObjectDuration;
         } wpStart;
 
         struct
@@ -996,9 +1006,9 @@ struct SmartAction
         struct
         {
             uint32 SpeedXY;
-            uint32 SpeedZ;
-            uint32 Gravity;
-            SAIBool UseDefaultGravity;
+            uint32 minHeight;
+            uint32 maxHeight;
+            uint32 unused;
             uint32 PointId;
             uint32 ContactDistance;
         } jump;
@@ -1019,6 +1029,7 @@ struct SmartAction
             SAIBool transport;
             SAIBool disablePathfinding;
             uint32 ContactDistance;
+            uint32 FadeObjectDuration;
         } moveToPos;
 
         struct
@@ -1089,6 +1100,7 @@ struct SmartAction
         struct
         {
             uint32 PointId;
+            uint32 FadeObjectDuration;
         } moveOffset;
 
         struct
@@ -1608,7 +1620,9 @@ const uint32 SmartAIEventMask[SMART_EVENT_END][2] =
     {SMART_EVENT_ON_SPELL_START,            SMART_SCRIPT_TYPE_MASK_CREATURE },
     {SMART_EVENT_ON_DESPAWN,                SMART_SCRIPT_TYPE_MASK_CREATURE },
     {SMART_EVENT_SEND_EVENT_TRIGGER,        SMART_SCRIPT_TYPE_MASK_EVENT },
-    {SMART_EVENT_AREATRIGGER_EXIT,          SMART_SCRIPT_TYPE_MASK_AREATRIGGER + SMART_SCRIPT_TYPE_MASK_AREATRIGGER_ENTITY }
+    {SMART_EVENT_AREATRIGGER_EXIT,          SMART_SCRIPT_TYPE_MASK_AREATRIGGER + SMART_SCRIPT_TYPE_MASK_AREATRIGGER_ENTITY },
+    {SMART_EVENT_ON_AURA_APPLIED,           SMART_SCRIPT_TYPE_MASK_CREATURE },
+    {SMART_EVENT_ON_AURA_REMOVED,           SMART_SCRIPT_TYPE_MASK_CREATURE },
 };
 
 enum SmartEventFlags
@@ -1628,7 +1642,7 @@ enum SmartEventFlags
     SMART_EVENT_FLAGS_ALL                     = (SMART_EVENT_FLAG_NOT_REPEATABLE| SMART_EVENT_FLAGS_DEPRECATED | SMART_EVENT_FLAG_ACTIONLIST_WAITS | SMART_EVENT_FLAG_RESERVED_6 | SMART_EVENT_FLAG_DEBUG_ONLY | SMART_EVENT_FLAG_DONT_RESET | SMART_EVENT_FLAG_WHILE_CHARMED),
 
     // Temp flags, used only at runtime, never stored in DB
-    SMART_EVENT_FLAG_TEMP_IGNORE_CHANCE_ROLL = 0x40000000,              //Event occurs no matter what roll_chance_i(e.event.event_chance) returns.
+    SMART_EVENT_FLAG_TEMP_IGNORE_CHANCE_ROLL = 0x40000000,              //Event occurs no matter what roll_chance(e.event.event_chance) returns.
 };
 
 enum SmartCastFlags

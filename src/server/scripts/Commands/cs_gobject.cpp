@@ -58,7 +58,7 @@ class gobject_commandscript : public CommandScript
 public:
     gobject_commandscript() : CommandScript("gobject_commandscript") { }
 
-    ChatCommandTable GetCommands() const override
+    std::span<ChatCommandBuilder const> GetCommands() const override
     {
         static ChatCommandTable gobjectCommandTable =
         {
@@ -638,7 +638,7 @@ public:
         GameObject* object = handler->GetObjectFromPlayerMapByDbGuid(guidLow);
         if (!object)
         {
-            handler->PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, std::to_string(*guidLow).c_str());
+            handler->PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, *guidLow);
             handler->SetSentErrorMessage(true);
             return false;
         }
@@ -667,7 +667,7 @@ public:
         if (!object)
             return false;
 
-        handler->PSendSysMessage("Set %s scale to %f", object->GetGUID().ToString(), scale);
+        handler->PSendSysMessage("Set %s scale to %f", object->GetGUID().ToString().c_str(), scale);
         return true;
     }
 };

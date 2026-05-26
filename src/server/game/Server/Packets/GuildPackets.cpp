@@ -89,12 +89,12 @@ ByteBuffer& operator<<(ByteBuffer& data, GuildRosterMemberData const& rosterMemb
     data << uint8(rosterMemberData.Gender);
     data << uint64(rosterMemberData.GuildClubMemberID);
     data << uint8(rosterMemberData.RaceID);
+    data << int32(rosterMemberData.TimerunningSeasonID);
 
     data << SizedString::BitsSize<6>(rosterMemberData.Name);
     data << SizedString::BitsSize<8>(rosterMemberData.Note);
     data << SizedString::BitsSize<8>(rosterMemberData.OfficerNote);
     data << Bits<1>(rosterMemberData.Authenticated);
-    data << Bits<1>(rosterMemberData.SorEligible);
     data.FlushBits();
 
     data << rosterMemberData.DungeonScore;
@@ -531,7 +531,8 @@ ByteBuffer& operator<<(ByteBuffer& data, GuildRewardItem const& rewardItem)
     data << uint32(rewardItem.ItemID);
     data << uint32(rewardItem.AchievementLogic);
     data << Size<uint32>(rewardItem.AchievementsRequired);
-    data << uint64(rewardItem.RaceMask.RawValue);
+    for (int32 raceMask : rewardItem.RaceMask.RawValue)
+        data << int32(raceMask);
     data << int32(rewardItem.MinGuildLevel);
     data << int32(rewardItem.MinGuildRep);
     data << uint64(rewardItem.Cost);
@@ -861,7 +862,7 @@ ByteBuffer& operator<<(ByteBuffer& data, GuildNewsEvent const& newsEvent)
 {
     data << int32(newsEvent.Id);
     data << newsEvent.CompletedDate;
-    data << int32(newsEvent.Type);
+    data << int8(newsEvent.Type);
     data << int32(newsEvent.Flags);
 
     for (std::size_t i = 0; i < newsEvent.Data.size(); ++i)
@@ -870,7 +871,7 @@ ByteBuffer& operator<<(ByteBuffer& data, GuildNewsEvent const& newsEvent)
     data << newsEvent.MemberGuid;
     data << Size<uint32>(newsEvent.MemberList);
 
-    for (ObjectGuid memberGuid : newsEvent.MemberList)
+    for (ObjectGuid const& memberGuid : newsEvent.MemberList)
         data << memberGuid;
 
     data << OptionalInit(newsEvent.Item);
