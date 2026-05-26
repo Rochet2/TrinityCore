@@ -611,7 +611,8 @@ enum SMART_ACTION
     SMART_ACTION_ENTER_VEHICLE                      = 155,    // seat id (RESERVED, PENDING CHERRYPICK)
     SMART_ACTION_BOARD_PASSENGER                    = 156,    // seat id (RESERVED, PENDING CHERRYPICK)
     SMART_ACTION_EXIT_VEHICLE                       = 157,    // (RESERVED, PENDING CHERRYPICK)
-    SMART_ACTION_END                                = 158
+    SMART_ACTION_RESUME_MOVEMENT                    = 158,    // MovementSlot (default = 0, active = 1, controlled = 2), ResumeTime (ms)
+    SMART_ACTION_END                                = 159
 };
 
 enum class SmartActionSummonCreatureFlags
@@ -863,7 +864,7 @@ struct SmartAction
 
         struct
         {
-            SAIBool run;
+            SAIBool run; // unused / overridden by waypoint_data
             uint32 pathID;
             SAIBool repeat;
             uint32 quest;
@@ -1188,6 +1189,12 @@ struct SmartAction
         {
             uint32 id;
         } addToStoredTargets;
+
+        struct
+        {
+            uint32 movementSlot;
+            uint32 resumeTimer;
+        } resumeMovement;
 
         //! Note for any new future actions
         //! All parameters must have type uint32
@@ -1638,24 +1645,6 @@ class ObjectGuidVector
         void UpdateObjects(WorldObject const& ref) const;
 };
 typedef std::unordered_map<uint32, ObjectGuidVector> ObjectVectorMap;
-
-class TC_GAME_API SmartWaypointMgr
-{
-    public:
-        static SmartWaypointMgr* instance();
-
-        void LoadFromDB();
-
-        WaypointPath const* GetPath(uint32 id);
-
-    private:
-        SmartWaypointMgr() { }
-        ~SmartWaypointMgr() { }
-
-        std::unordered_map<uint32, WaypointPath> _waypointStore;
-};
-
-#define sSmartWaypointMgr SmartWaypointMgr::instance()
 
 // all events for a single entry
 typedef std::vector<SmartScriptHolder> SmartAIEventList;
