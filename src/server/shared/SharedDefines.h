@@ -110,15 +110,24 @@ enum Races
 // max+1 for player race
 #define MAX_RACES         12
 
-#define RACEMASK_ALL_PLAYABLE \
-    ((1<<(RACE_HUMAN-1))   |(1<<(RACE_ORC-1))          |(1<<(RACE_DWARF-1))   | \
-     (1<<(RACE_NIGHTELF-1))|(1<<(RACE_UNDEAD_PLAYER-1))|(1<<(RACE_TAUREN-1))  | \
-     (1<<(RACE_GNOME-1))   |(1<<(RACE_TROLL-1))        |(1<<(RACE_BLOODELF-1))| \
+#define RACEMASK_ALL_PLAYABLE      \
+    ((1<<(RACE_HUMAN-1))         | \
+     (1<<(RACE_ORC-1))           | \
+     (1<<(RACE_DWARF-1))         | \
+     (1<<(RACE_NIGHTELF-1))      | \
+     (1<<(RACE_UNDEAD_PLAYER-1)) | \
+     (1<<(RACE_TAUREN-1))        | \
+     (1<<(RACE_GNOME-1))         | \
+     (1<<(RACE_TROLL-1))         | \
+     (1<<(RACE_BLOODELF-1))      | \
      (1<<(RACE_DRAENEI-1)))
 
-#define RACEMASK_ALLIANCE \
-    ((1<<(RACE_HUMAN-1)) | (1<<(RACE_DWARF-1)) | (1<<(RACE_NIGHTELF-1)) | \
-     (1<<(RACE_GNOME-1)) | (1<<(RACE_DRAENEI-1)))
+#define RACEMASK_ALLIANCE     \
+    ((1<<(RACE_HUMAN-1))    | \
+     (1<<(RACE_DWARF-1))    | \
+     (1<<(RACE_NIGHTELF-1)) | \
+     (1<<(RACE_GNOME-1))    | \
+     (1<<(RACE_DRAENEI-1)))
 
 #define RACEMASK_HORDE RACEMASK_ALL_PLAYABLE & ~RACEMASK_ALLIANCE
 
@@ -143,11 +152,17 @@ enum Classes
 // max+1 for player class
 #define MAX_CLASSES       12
 
-#define CLASSMASK_ALL_PLAYABLE \
-    ((1<<(CLASS_WARRIOR-1))|(1<<(CLASS_PALADIN-1))|(1<<(CLASS_HUNTER-1))| \
-    (1<<(CLASS_ROGUE-1))  |(1<<(CLASS_PRIEST-1)) |(1<<(CLASS_SHAMAN-1))| \
-    (1<<(CLASS_MAGE-1))   |(1<<(CLASS_WARLOCK-1))|(1<<(CLASS_DRUID-1)) | \
-    (1<<(CLASS_DEATH_KNIGHT-1)))
+#define CLASSMASK_ALL_PLAYABLE     \
+    ((1<<(CLASS_WARRIOR-1))      | \
+     (1<<(CLASS_PALADIN-1))      | \
+     (1<<(CLASS_HUNTER-1))       | \
+     (1<<(CLASS_ROGUE-1))        | \
+     (1<<(CLASS_PRIEST-1))       | \
+     (1<<(CLASS_DEATH_KNIGHT-1)) | \
+     (1<<(CLASS_SHAMAN-1))       | \
+     (1<<(CLASS_MAGE-1))         | \
+     (1<<(CLASS_WARLOCK-1))      | \
+     (1<<(CLASS_DRUID-1)))
 
 #define MAX_TALENT_TREES 3
 
@@ -196,7 +211,7 @@ enum UnitClass
 
 #define CLASSMASK_ALL_CREATURES ((1<<(UNIT_CLASS_WARRIOR-1)) | (1<<(UNIT_CLASS_PALADIN-1)) | (1<<(UNIT_CLASS_ROGUE-1)) | (1<<(UNIT_CLASS_MAGE-1)))
 
-#define CLASSMASK_WAND_USERS ((1<<(CLASS_PRIEST-1))|(1<<(CLASS_MAGE-1))|(1<<(CLASS_WARLOCK-1)))
+#define CLASSMASK_WAND_USERS ((1<<(CLASS_PRIEST-1)) | (1<<(CLASS_MAGE-1)) | (1<<(CLASS_WARLOCK-1)))
 
 #define PLAYER_MAX_BATTLEGROUND_QUEUES 2
 
@@ -696,11 +711,11 @@ enum SpellAttr7 : uint32
     SPELL_ATTR7_CLIENT_INDICATOR                 = 0x80000000  // TITLE Client indicator (client only)
 };
 
-#define MIN_TALENT_SPEC         0
-#define MAX_TALENT_SPEC         1
-#define MIN_TALENT_SPECS        1
-#define MAX_TALENT_SPECS        2
-#define MAX_GLYPH_SLOT_INDEX    6
+#define MIN_TALENT_GROUP         0
+#define MAX_TALENT_GROUP         1
+#define MIN_TALENT_GROUPS        1
+#define MAX_TALENT_GROUPS        2
+#define MAX_GLYPH_SLOT_INDEX     6
 
 // Custom values
 enum SpellClickUserTypes
@@ -732,6 +747,51 @@ enum SheathTypes
 };
 
 #define MAX_SHEATHETYPE                  8
+
+enum CharacterFlags
+{
+    CHARACTER_FLAG_NONE                 = 0x00000000,
+    CHARACTER_FLAG_UNK1                 = 0x00000001,
+    CHARACTER_FLAG_UNK2                 = 0x00000002,
+    CHARACTER_LOCKED_FOR_TRANSFER       = 0x00000004,
+    CHARACTER_FLAG_UNK4                 = 0x00000008,
+    CHARACTER_FLAG_UNK5                 = 0x00000010,
+    CHARACTER_FLAG_UNK6                 = 0x00000020,
+    CHARACTER_FLAG_UNK7                 = 0x00000040,
+    CHARACTER_FLAG_UNK8                 = 0x00000080,
+    CHARACTER_FLAG_UNK9                 = 0x00000100,
+    CHARACTER_FLAG_UNK10                = 0x00000200,
+    CHARACTER_FLAG_HIDE_HELM            = 0x00000400,
+    CHARACTER_FLAG_HIDE_CLOAK           = 0x00000800,
+    CHARACTER_FLAG_UNK13                = 0x00001000,
+    CHARACTER_FLAG_GHOST                = 0x00002000,
+    CHARACTER_FLAG_RENAME               = 0x00004000,
+    CHARACTER_FLAG_UNK16                = 0x00008000,
+    CHARACTER_FLAG_UNK17                = 0x00010000,
+    CHARACTER_FLAG_UNK18                = 0x00020000,
+    CHARACTER_FLAG_UNK19                = 0x00040000,
+    CHARACTER_FLAG_UNK20                = 0x00080000,
+    CHARACTER_FLAG_UNK21                = 0x00100000,
+    CHARACTER_FLAG_UNK22                = 0x00200000,
+    CHARACTER_FLAG_UNK23                = 0x00400000,
+    CHARACTER_FLAG_UNK24                = 0x00800000,
+    CHARACTER_FLAG_LOCKED_BY_BILLING    = 0x01000000,
+    CHARACTER_FLAG_DECLINED             = 0x02000000,
+    CHARACTER_FLAG_UNK27                = 0x04000000,
+    CHARACTER_FLAG_UNK28                = 0x08000000,
+    CHARACTER_FLAG_UNK29                = 0x10000000,
+    CHARACTER_FLAG_UNK30                = 0x20000000,
+    CHARACTER_FLAG_UNK31                = 0x40000000,
+    CHARACTER_FLAG_UNK32                = 0x80000000
+};
+
+enum CharacterCustomizeFlags
+{
+    CHAR_CUSTOMIZE_FLAG_NONE            = 0x00000000,
+    CHAR_CUSTOMIZE_FLAG_CUSTOMIZE       = 0x00000001, // name, gender, etc...
+    CHAR_CUSTOMIZE_FLAG_FACTION         = 0x00010000, // name, gender, faction, etc...
+    CHAR_CUSTOMIZE_FLAG_RACE            = 0x00100000  // name, gender, race, etc...
+};
 
 enum CharacterSlot
 {
@@ -3213,10 +3273,22 @@ enum ChatMsg : uint8
     CHAT_MSG_ACHIEVEMENT            = 0x30,
     CHAT_MSG_GUILD_ACHIEVEMENT      = 0x31,
     CHAT_MSG_ARENA_POINTS           = 0x32,
-    CHAT_MSG_PARTY_LEADER           = 0x33
+    CHAT_MSG_PARTY_LEADER           = 0x33,
+
+    MAX_CHAT_MSG_TYPE
 };
 
-#define MAX_CHAT_MSG_TYPE 0x34
+#define GM_SILENCE_AURA 1852
+
+enum PlayerChatTag
+{
+    CHAT_TAG_NONE       = 0x00,
+    CHAT_TAG_AFK        = 0x01,
+    CHAT_TAG_DND        = 0x02,
+    CHAT_TAG_GM         = 0x04,
+    CHAT_TAG_COM        = 0x08, // Commentator
+    CHAT_TAG_DEV        = 0x10
+};
 
 enum ChatLinkColors : uint32
 {
@@ -3817,6 +3889,8 @@ enum LineOfSightChecks
 
     LINEOFSIGHT_ALL_CHECKS      = (LINEOFSIGHT_CHECK_VMAP | LINEOFSIGHT_CHECK_GOBJECT)
 };
+
+#define MAX_ACCOUNT_TUTORIAL_VALUES 8
 
 enum ServerProcessTypes
 {

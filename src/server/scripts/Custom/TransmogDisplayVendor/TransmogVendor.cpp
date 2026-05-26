@@ -329,7 +329,7 @@ public:
                             uint8 count = 0;
 
                             WorldPacket data(SMSG_LIST_INVENTORY, 8 + 1 + itemCount * 8 * 4);
-                            data << uint64(creature->GetGUID());
+                            data << creature->GetGUID();
 
                             size_t countPos = data.wpos();
                             data << uint8(count);
@@ -458,7 +458,7 @@ public:
             do
             {
                 Field* field = result->Fetch();
-                ObjectGuid itemGUID(HighGuid::Item, 0, field[0].GetUInt32());
+                ObjectGuid itemGUID = ObjectGuid::Create<HighGuid::Item>(field[0].GetUInt32());
                 uint32 fakeEntry = field[1].GetUInt32();
                 // Only load items that are in inventory / bank / etc
                 if (sObjectMgr->GetItemTemplate(fakeEntry) && player->GetItemByGuid(itemGUID))
