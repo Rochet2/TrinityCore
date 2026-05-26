@@ -29,6 +29,7 @@
 #include "Totem.h"
 #include "UpdateData.h"
 #include "Vehicle.h"
+#include "WorldPacket.h"
 #include <boost/dynamic_bitset.hpp>
 #include <sstream>
 
@@ -107,7 +108,7 @@ bool Transport::Create(ObjectGuid::LowType guidlow, uint32 entry, float x, float
         return false;
     }
 
-    Object::_Create(ObjectGuid::Create<HighGuid::Transport>(guidlow));
+    _Create(ObjectGuid::Create<HighGuid::Transport>(guidlow));
 
     GameObjectTemplate const* goinfo = sObjectMgr->GetGameObjectTemplate(entry);
     if (!goinfo)
@@ -523,6 +524,7 @@ void Transport::UpdatePosition(float x, float y, float z, float o)
 
     Relocate(x, y, z, o);
     m_stationaryPosition.SetOrientation(o);
+    SetLocalRotationAngles(o, 0.0f, 0.0f);
     UpdateModelPosition();
 
     UpdatePassengerPositions(_passengers);
@@ -689,6 +691,8 @@ void Transport::UpdatePassengerPositions(PassengerSet const& passengers)
 
 void Transport::BuildUpdate(UpdateDataMapType& data_map)
 {
+    BuildUpdateChangesMask();
+
     for (MapReference const& playerReference : GetMap()->GetPlayers())
         if (playerReference.GetSource()->InSamePhase(this))
             BuildFieldsUpdate(playerReference.GetSource(), data_map);

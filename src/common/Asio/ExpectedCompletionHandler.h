@@ -20,7 +20,7 @@
 
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
-#include <boost/asio/detail/handler_cont_helpers.hpp>
+#include <boost/asio/handler_continuation_hook.hpp>
 #include <boost/outcome/result.hpp>
 #include <boost/preprocessor/empty.hpp>
 #include <boost/preprocessor/comma.hpp>
@@ -165,7 +165,8 @@ public:
 template <typename Handler>
 inline bool asio_handler_is_continuation(AsExpectedHandler<Handler>* this_handler)
 {
-    return boost_asio_handler_cont_helpers::is_continuation(this_handler->handler_);
+    using boost::asio::asio_handler_is_continuation;
+    return asio_handler_is_continuation(std::addressof(this_handler->handler_));
 }
 
 template <typename Signature>
@@ -232,7 +233,7 @@ public:
     static inline auto initiate(Initiation&& initiation, RawCompletionToken&& token, Args&&... args)
     {
         return async_initiate<
-            conditional_t<
+            std::conditional_t<
             is_const<remove_reference_t<RawCompletionToken>>::value,
             CompletionToken const, CompletionToken>,
             typename Trinity::Asio::Impl::AsExpectedSignature<Signatures>::type...>(
@@ -311,7 +312,7 @@ public:
     static inline auto initiate(Initiation&& initiation, RawCompletionToken&& token, Args&&... args)
     {
         return async_initiate<
-            conditional_t<
+            std::conditional_t<
             is_const<remove_reference_t<RawCompletionToken>>::value,
             CompletionToken const, CompletionToken>,
             typename Trinity::Asio::Impl::AsExpectedSignature<Signature>::type>(

@@ -18,6 +18,7 @@
 #ifndef TRINITYSERVER_MOVESPLINEINIT_H
 #define TRINITYSERVER_MOVESPLINEINIT_H
 
+#include "Duration.h"
 #include "MoveSplineInitArgs.h"
 #include <span>
 #include <variant>
@@ -56,19 +57,18 @@ namespace Movement
         /** Adds movement by parabolic trajectory
          * @param amplitude   the maximum height of parabola, value could be negative and positive
          * @param start_point point index on the path where parabolic movement starts
-         * can't be combined with final animation
+         * can't be combined with final animation or fade object
          */
         void SetParabolic(float amplitude, int32 start_point);
-        /** Adds movement by parabolic trajectory
-         * @param vertical_acceleration  vertical acceleration
-         * @param start_point            point index on the path where parabolic movement starts
-         * can't be combined with final animation
-         */
-        void SetParabolicVerticalAcceleration(float vertical_acceleration, int32 start_point);
         /* Plays animation after movement done
-         * can't be combined with parabolic movement
+         * can't be combined with parabolic movement or fade object
          */
         void SetAnimation(AnimTier anim, uint32 tierTransitionId = 0, int32 transitionStartPoint = 0);
+
+        /* Plays fading animation while moving
+         * can't be combined with parabolic|animation movement
+         */
+        void SetFadeObject(Milliseconds fadeDuration = 1s);
 
         /* Adds final facing animation
          * sets unit's facing to specified point/angle after all path done
@@ -189,16 +189,6 @@ namespace Movement
     {
         args.effect_start_point = start_point;
         args.parabolic_amplitude = amplitude;
-        args.vertical_acceleration = 0.0f;
-        args.flags.Parabolic = true;
-        args.animTier.reset();
-    }
-
-    inline void MoveSplineInit::SetParabolicVerticalAcceleration(float vertical_acceleration, int32 start_point)
-    {
-        args.effect_start_point = start_point;
-        args.parabolic_amplitude = 0.0f;
-        args.vertical_acceleration = vertical_acceleration;
         args.flags.Parabolic = true;
         args.animTier.reset();
     }
@@ -211,6 +201,13 @@ namespace Movement
         animTier.AnimTier = anim;
         args.flags.Raw &= ~args.flags.Animation.DisallowedFlag;
         args.flags.Animation = tierTransitionId == 0;
+    }
+
+    inline void MoveSplineInit::SetFadeObject(Milliseconds fadeDuration)
+    {
+        args.fade_object_duration_ms = fadeDuration.count();
+        args.flags.FadeObject = true;
+        args.animTier.reset();
     }
 
     inline void MoveSplineInit::DisableTransportPathTransformations() { args.TransformForTransport = false; }
