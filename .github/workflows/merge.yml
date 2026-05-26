@@ -91,6 +91,8 @@ jobs:
       with:
         path: .ccache
         key: ccache-master-${{ matrix.branch }}-${{ matrix.pch }}
+        restore-keys: |
+          ccache-master-master-${{ matrix.pch }}
 
     - name: Init ccache directory
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -289,6 +291,8 @@ jobs:
       with:
         path: .ccache
         key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}
+        restore-keys: |
+          ccache-335-3.3.5-${{ matrix.pch }}
 
     - name: Init ccache directory
       if: steps.upstream.outputs.merge_needed == 'true'
