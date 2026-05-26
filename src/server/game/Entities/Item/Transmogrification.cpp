@@ -700,10 +700,10 @@ TransmogResult Transmogrification::CannotEquip(Player* player, ItemTemplate cons
 {
     if (!IgnoreReqFaction)
     {
-        if ((proto->Flags2 & ITEM_FLAG2_FACTION_HORDE) && player->GetTeam() != HORDE)
+        if (proto->HasFlag(ITEM_FLAG2_FACTION_HORDE) && player->GetTeam() != HORDE)
             return TransmogResult_InvalidFaction;
 
-        if ((proto->Flags2 & ITEM_FLAG2_FACTION_ALLIANCE) && player->GetTeam() != ALLIANCE)
+        if (proto->HasFlag(ITEM_FLAG2_FACTION_ALLIANCE) && player->GetTeam() != ALLIANCE)
             return TransmogResult_InvalidFaction;
     }
 
@@ -775,10 +775,10 @@ TransmogResult Transmogrification::CannotEverEquip(Player* player, ItemTemplate 
 {
     if (!IgnoreReqFaction)
     {
-        if ((proto->Flags2 & ITEM_FLAG2_FACTION_HORDE) && player->GetTeam() != HORDE)
+        if (proto->HasFlag(ITEM_FLAG2_FACTION_HORDE) && player->GetTeam() != HORDE)
             return TransmogResult_InvalidFaction;
 
-        if ((proto->Flags2 & ITEM_FLAG2_FACTION_ALLIANCE) && player->GetTeam() != ALLIANCE)
+        if (proto->HasFlag(ITEM_FLAG2_FACTION_ALLIANCE) && player->GetTeam() != ALLIANCE)
             return TransmogResult_InvalidFaction;
     }
 

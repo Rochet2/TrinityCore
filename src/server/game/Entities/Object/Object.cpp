@@ -30,7 +30,7 @@
 #include "Map.h"
 #include "MiscPackets.h"
 #include "MovementInfo.h"
-#include "MovementPacketBuilder.h"
+#include "MovementPackets.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
@@ -106,11 +106,10 @@ void Object::_InitValues()
     m_objectUpdated = false;
 }
 
-void Object::_Create(ObjectGuid::LowType guidlow, uint32 entry, HighGuid guidhigh)
+void Object::_Create(ObjectGuid const& guid)
 {
     if (!m_uint32Values) _InitValues();
 
-    ObjectGuid guid(guidhigh, entry, guidlow);
     SetGuidValue(OBJECT_FIELD_GUID, guid);
     SetUInt32Value(OBJECT_FIELD_TYPE, m_objectType);
     m_PackGUID.Set(guid);
@@ -314,7 +313,7 @@ void Object::BuildMovementUpdate(ByteBuffer* data, uint16 flags) const
 
         // 0x08000000
         if (unit->m_movementInfo.GetMovementFlags() & MOVEMENTFLAG_SPLINE_ENABLED)
-            Movement::PacketBuilder::WriteCreate(*unit->movespline, *data);
+            WorldPackets::Movement::CommonMovement::WriteCreateObjectSplineDataBlock(*unit->movespline, *data);
     }
     else
     {
@@ -937,7 +936,7 @@ void MovementInfo::OutDebug()
 WorldObject::WorldObject(bool isWorldObject) : Object(), WorldLocation(), LastUsedScriptID(0),
 m_movementInfo(), m_name(), m_isActive(false), m_isFarVisible(false), m_isStoredInWorldObjectGridContainer(isWorldObject), m_zoneScript(nullptr),
 m_transport(nullptr), m_zoneId(0), m_areaId(0), m_staticFloorZ(VMAP_INVALID_HEIGHT), m_outdoors(false), m_liquidStatus(LIQUID_MAP_NO_WATER),
-m_currMap(nullptr), m_InstanceId(0), m_phaseMask(PHASEMASK_NORMAL), m_notifyflags(0)
+m_currMap(nullptr), m_InstanceId(0), m_phaseMask(PHASEMASK_NORMAL), m_notifyflags(0), _heartbeatTimer(HEARTBEAT_INTERVAL)
 {
     m_serverSideVisibility.SetValue(SERVERSIDE_VISIBILITY_GHOST, GHOST_VISIBILITY_ALIVE | GHOST_VISIBILITY_GHOST);
     m_serverSideVisibilityDetect.SetValue(SERVERSIDE_VISIBILITY_GHOST, GHOST_VISIBILITY_ALIVE);
@@ -955,6 +954,18 @@ WorldObject::~WorldObject()
             ABORT();
         }
         ResetMap();
+    }
+}
+
+void WorldObject::Update(uint32 diff)
+{
+    m_Events.Update(diff);
+
+    _heartbeatTimer -= Milliseconds(diff);
+    while (_heartbeatTimer <= 0ms)
+    {
+        _heartbeatTimer += HEARTBEAT_INTERVAL;
+        Heartbeat();
     }
 }
 
@@ -1024,12 +1035,8 @@ void WorldObject::CleanupsBeforeDelete(bool /*finalCleanup*/)
 
     if (Transport* transport = GetTransport())
         transport->RemovePassenger(this);
-}
 
-void WorldObject::_Create(ObjectGuid::LowType guidlow, HighGuid guidhigh, uint32 phaseMask)
-{
-    Object::_Create(guidlow, 0, guidhigh);
-    m_phaseMask = phaseMask;
+    m_Events.KillAllEvents(false);                      // non-delatable (currently cast spells) will not deleted now but it will deleted at call in Map::RemoveAllObjectsInRemoveList
 }
 
 void WorldObject::UpdatePositionData()
@@ -1101,7 +1108,7 @@ bool WorldObject::_IsWithinDist(WorldObject const* obj, float dist2compare, bool
     Position const* thisOrTransport = this;
     Position const* objOrObjTransport = obj;
 
-    if (GetTransport() && obj->GetTransport() && obj->GetTransport()->GetGUID().GetCounter() == GetTransport()->GetGUID().GetCounter())
+    if (GetTransport() && obj->GetTransport() && obj->GetTransport()->GetGUID() == GetTransport()->GetGUID())
     {
         thisOrTransport = &m_movementInfo.transport.pos;
         objOrObjTransport = &obj->m_movementInfo.transport.pos;
@@ -3458,11 +3465,13 @@ void WorldObject::DestroyForNearbyPlayers()
         if (!player->HaveAtClient(this))
             continue;
 
-        if (Unit const* unit = ToUnit(); unit && unit->GetCharmerGUID() == player->GetGUID()) /// @todo this is for puppet
-            continue;
+        if (Unit const* unit = ToUnit())
+        {
+            if (unit->GetCharmerGUID() == player->GetGUID()) /// @todo this is for puppet
+                continue;
 
-        if (GetTypeId() == TYPEID_UNIT)
-            DestroyForPlayer(player, ToUnit()->IsDuringRemoveFromWorld() && ToCreature()->isDead()); // at remove from world (destroy) show kill animation
+            DestroyForPlayer(player, unit->IsDuringRemoveFromWorld() && unit->isDead()); // at remove from world (destroy) show kill animation
+        }
         else
             DestroyForPlayer(player);
 
