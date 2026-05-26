@@ -39,7 +39,6 @@ struct AchievementEntry;
 struct AreaTableEntry;
 struct AreaTriggerEntry;
 struct BarberShopStyleEntry;
-struct CharacterCustomizeInfo;
 struct CharTitlesEntry;
 struct ChatChannelsEntry;
 struct CreatureTemplate;
@@ -59,7 +58,6 @@ class Bag;
 class Battleground;
 class CinematicMgr;
 class Channel;
-class CharacterCreateInfo;
 class Creature;
 class DynamicObject;
 class GameClient;
@@ -81,6 +79,21 @@ enum InventoryType : uint8;
 enum ItemClass : uint8;
 enum LootError : uint8;
 enum LootType : uint8;
+enum TransferAbortReason : uint8;
+
+namespace WorldPackets
+{
+    namespace Character
+    {
+        struct CharacterCreateInfo;
+    }
+
+    namespace Talent
+    {
+        struct PetTalentInfoUpdate;
+        struct TalentInfoUpdate;
+    }
+}
 
 typedef std::deque<Mail*> PlayerMails;
 
@@ -148,12 +161,6 @@ struct PlayerSpell
     bool disabled          : 1;                             // first rank has been learned in result talent learn but currently talent unlearned, save max learned ranks
 };
 
-struct PlayerTalent
-{
-    PlayerSpellState state;
-    uint8 spec;
-};
-
 // Spell modifier (used for modify other spells)
 struct SpellModifier
 {
@@ -168,7 +175,7 @@ struct SpellModifier
     Aura* const ownerAura;
 };
 
-typedef std::unordered_map<uint32, PlayerTalent*> PlayerTalentMap;
+typedef std::unordered_map<uint32, PlayerSpellState> PlayerTalentMap;
 typedef std::unordered_map<uint32, PlayerSpell> PlayerSpellMap;
 typedef std::unordered_set<SpellModifier*> SpellModContainer;
 
@@ -624,26 +631,6 @@ struct ItemPosCount
 };
 typedef std::vector<ItemPosCount> ItemPosCountVec;
 
-enum TransferAbortReason
-{
-    TRANSFER_ABORT_NONE                         = 0x00,
-    TRANSFER_ABORT_ERROR                        = 0x01,
-    TRANSFER_ABORT_MAX_PLAYERS                  = 0x02,         // Transfer Aborted: instance is full
-    TRANSFER_ABORT_NOT_FOUND                    = 0x03,         // Transfer Aborted: instance not found
-    TRANSFER_ABORT_TOO_MANY_INSTANCES           = 0x04,         // You have entered too many instances recently.
-    TRANSFER_ABORT_ZONE_IN_COMBAT               = 0x06,         // Unable to zone in while an encounter is in progress.
-    TRANSFER_ABORT_INSUF_EXPAN_LVL              = 0x07,         // You must have <TBC, WotLK> expansion installed to access this area.
-    TRANSFER_ABORT_DIFFICULTY                   = 0x08,         // <Normal, Heroic, Epic> difficulty mode is not available for %s.
-    TRANSFER_ABORT_UNIQUE_MESSAGE               = 0x09,         // Until you've escaped TLK's grasp, you cannot leave this place!
-    TRANSFER_ABORT_TOO_MANY_REALM_INSTANCES     = 0x0A,         // Additional instances cannot be launched, please try again later.
-    TRANSFER_ABORT_NEED_GROUP                   = 0x0B,         // 3.1
-    TRANSFER_ABORT_NOT_FOUND1                   = 0x0C,         // 3.1
-    TRANSFER_ABORT_NOT_FOUND2                   = 0x0D,         // 3.1
-    TRANSFER_ABORT_NOT_FOUND3                   = 0x0E,         // 3.2
-    TRANSFER_ABORT_REALM_ONLY                   = 0x0F,         // All players on party must be from the same realm.
-    TRANSFER_ABORT_MAP_NOT_ALLOWED              = 0x10          // Map can't be entered at this time.
-};
-
 enum InstanceResetWarningType
 {
     RAID_INSTANCE_WARNING_HOURS     = 1,                    // WARNING! %s is scheduled to reset in %d hour(s).
@@ -696,16 +683,6 @@ enum EnviromentalDamage : uint8
     DAMAGE_SLIME     = 4,
     DAMAGE_FIRE      = 5,
     DAMAGE_FALL_TO_VOID = 6                                 // custom case for fall without durability loss
-};
-
-enum PlayerChatTag
-{
-    CHAT_TAG_NONE       = 0x00,
-    CHAT_TAG_AFK        = 0x01,
-    CHAT_TAG_DND        = 0x02,
-    CHAT_TAG_GM         = 0x04,
-    CHAT_TAG_COM        = 0x08, // Commentator
-    CHAT_TAG_DEV        = 0x10
 };
 
 enum PlayedTimeIndex
@@ -893,45 +870,32 @@ struct ResurrectionData
 
 #define SPELL_DK_RAISE_ALLY 46619
 
+struct TalentGroupInfo
+{
+    PlayerTalentMap Talents;
+    uint32 Glyphs[MAX_GLYPH_SLOT_INDEX] = { };
+};
+
 struct PlayerTalentInfo
 {
     PlayerTalentInfo() :
         UsedTalentCount(0), QuestRewardedTalentCount(0),
         ResetTalentsCost(0), ResetTalentsTime(0),
-        ActiveSpec(0), SpecsCount(1)
+        ActiveGroup(0), GroupsCount(1)
     {
-        for (uint8 i = 0; i < MAX_TALENT_SPECS; ++i)
-        {
-            SpecInfo[i].Talents = new PlayerTalentMap();
-            memset(SpecInfo[i].Glyphs, 0, MAX_GLYPH_SLOT_INDEX * sizeof(uint32));
-        }
     }
 
-    ~PlayerTalentInfo()
-    {
-        for (uint8 i = 0; i < MAX_TALENT_SPECS; ++i)
-        {
-            for (PlayerTalentMap::const_iterator itr = SpecInfo[i].Talents->begin(); itr != SpecInfo[i].Talents->end(); ++itr)
-                delete itr->second;
-            delete SpecInfo[i].Talents;
-        }
-    }
-
-    struct TalentSpecInfo
-    {
-        PlayerTalentMap* Talents;
-        uint32 Glyphs[MAX_GLYPH_SLOT_INDEX];
-    } SpecInfo[MAX_TALENT_SPECS];
-
+    TalentGroupInfo GroupInfo[MAX_TALENT_GROUPS];
     uint32 UsedTalentCount;
     uint32 QuestRewardedTalentCount;
     uint32 ResetTalentsCost;
     time_t ResetTalentsTime;
-    uint8 ActiveSpec;
-    uint8 SpecsCount;
+    uint8 ActiveGroup;
+    uint8 GroupsCount;
 
 private:
-    PlayerTalentInfo(PlayerTalentInfo const&);
+    PlayerTalentInfo(PlayerTalentInfo const&) = delete;
+    PlayerTalentInfo& operator=(PlayerTalentInfo const&) = delete;
 };
 
 class TC_GAME_API Player : public Unit, public GridObject<Player>
@@ -961,9 +925,11 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SendSummonRequestFrom(Unit* summoner);
         void SummonIfPossible(bool agree);
 
-        bool Create(ObjectGuid::LowType guidlow, CharacterCreateInfo* createInfo);
+        bool Create(ObjectGuid::LowType guidlow, WorldPackets::Character::CharacterCreateInfo const* createInfo);
 
         void Update(uint32 time) override;
+
+        void Heartbeat() override;
 
         static bool BuildEnumData(PreparedQueryResult result, WorldPacket* data);
 
@@ -1138,6 +1104,11 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         bool HasItemCount(uint32 item, uint32 count = 1, bool inBankAlso = false) const;
         bool HasItemFitToSpellRequirements(SpellInfo const* spellInfo, Item const* ignoreItem = nullptr) const;
         bool CanNoReagentCast(SpellInfo const* spellInfo) const;
+        void SetNoRegentCostMask(flag96 mask)
+        {
+            for (uint8 i = 0; i < 3; ++i)
+                SetUInt32Value(PLAYER_NO_REAGENT_COST_1 + i, mask[i]);
+        }
         bool HasItemOrGemWithIdEquipped(uint32 item, uint32 count, uint8 except_slot = NULL_SLOT) const;
         bool HasItemWithLimitCategoryEquipped(uint32 limitCategory, uint32 count, uint8 except_slot = NULL_SLOT) const;
         bool HasGemWithLimitCategoryEquipped(uint32 limitCategory, uint32 count, uint8 except_slot = NULL_SLOT) const;
@@ -1201,7 +1172,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         Item* GetItemFromBuyBackSlot(uint32 slot);
         void RemoveItemFromBuyBackSlot(uint32 slot, bool del);
         uint32 GetMaxKeyringSize() const { return KEYRING_SLOT_END-KEYRING_SLOT_START; }
-        void SendEquipError(InventoryResult msg, Item* pItem, Item* pItem2 = nullptr, uint32 itemid = 0) const;
+        void SendEquipError(InventoryResult msg, Item const* item1 = nullptr, Item const* item2 = nullptr, uint32 itemId = 0) const;
         void SendBuyError(BuyResult msg, Creature* creature, uint32 item, uint32 param) const;
         void SendSellError(SellResult msg, Creature* creature, ObjectGuid guid, uint32 param) const;
         void AddWeaponProficiency(uint32 newflag) { m_WeaponProficiency |= newflag; }
@@ -1238,7 +1209,6 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void ApplyEnchantment(Item* item, bool apply);
         void UpdateSkillEnchantments(uint16 skill_id, uint16 curr_value, uint16 new_value);
         void SendEnchantmentDurations();
-        void BuildEnchantmentsInfoData(WorldPacket* data);
         void AddItemDurations(Item* item);
         void RemoveItemDurations(Item* item);
         void SendItemDurations();
@@ -1401,7 +1371,6 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SaveInventoryAndGoldToDB(CharacterDatabaseTransaction trans);                    // fast save function for item/money cheating preventing
         void SaveGoldToDB(CharacterDatabaseTransaction trans) const;
 
-        static void Customize(CharacterCustomizeInfo const* customizeInfo, CharacterDatabaseTransaction trans);
         static void SavePositionInDB(WorldLocation const& loc, uint16 zoneId, ObjectGuid guid, CharacterDatabaseTransaction trans);
 
         static void DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRealmChars = true, bool deleteFinally = false);
@@ -1434,8 +1403,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         Unit* GetSelectedUnit() const;
         Player* GetSelectedPlayer() const;
 
-        void SetTarget(ObjectGuid /*guid*/) override { } /// Used for serverside target changes, does not apply to players
-        void SetSelection(ObjectGuid guid) { SetGuidValue(UNIT_FIELD_TARGET, guid); }
+        void SetTarget(ObjectGuid const& /*guid*/) override { } /// Used for serverside target changes, does not apply to players
+        void SetSelection(ObjectGuid const& guid) { SetGuidValue(UNIT_FIELD_TARGET, guid); }
 
         void SendMailResult(uint32 mailId, MailResponseType mailAction, MailResponseResult mailError, uint32 equipError = 0, ObjectGuid::LowType item_guid = 0, uint32 item_count = 0) const;
         void SendNewMail() const;
@@ -1507,17 +1476,17 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SetTalentResetCost(uint32 cost)  { _talentMgr->ResetTalentsCost = cost; }
         time_t GetTalentResetTime() const { return _talentMgr->ResetTalentsTime; }
         void SetTalentResetTime(time_t time_)  { _talentMgr->ResetTalentsTime = time_; }
-        uint8 GetActiveSpec() const { return _talentMgr->ActiveSpec; }
-        void SetActiveSpec(uint8 spec){ _talentMgr->ActiveSpec = spec; }
-        uint8 GetSpecsCount() const { return _talentMgr->SpecsCount; }
-        void SetSpecsCount(uint8 count) { _talentMgr->SpecsCount = count; }
+        uint8 GetActiveTalentGroup() const { return _talentMgr->ActiveGroup; }
+        void SetActiveTalentGroup(uint8 group){ _talentMgr->ActiveGroup = group; }
+        uint8 GetTalentGroupsCount() const { return _talentMgr->GroupsCount; }
+        void SetTalentGroupsCount(uint8 count) { _talentMgr->GroupsCount = count; }
 
         bool ResetTalents(bool involuntarily = false);
         uint32 ResetTalentsCost() const;
         void IncreaseResetTalentsCostAndCounters(uint32 lastResetTalentsCost);
         void InitTalentForLevel();
-        void BuildPlayerTalentsInfoData(WorldPacket* data);
-        void BuildPetTalentsInfoData(WorldPacket* data);
+        void BuildPlayerTalentsInfoData(WorldPackets::Talent::TalentInfoUpdate& talentInfo);
+        void BuildPetTalentsInfoData(WorldPackets::Talent::PetTalentInfoUpdate& petTalentInfo) const;
         void SendTalentsInfoData(bool pet);
         bool LearnTalent(uint32 talentId, uint32 talentRank);
         void LearnPetTalent(ObjectGuid petGuid, uint32 talentId, uint32 talentRank);
@@ -1527,18 +1496,18 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         uint32 CalculateTalentsPoints() const;
 
         // Dual Spec
-        void UpdateSpecCount(uint8 count);
-        void ActivateSpec(uint8 spec);
+        void UpdateTalentGroupCount(uint8 count);
+        void ActivateTalentGroup(uint8 group);
         void LoadActions(PreparedQueryResult result);
 
         void InitGlyphsForLevel();
         void SetGlyphSlot(uint8 slot, uint32 slottype) { SetUInt32Value(PLAYER_FIELD_GLYPH_SLOTS_1 + slot, slottype); }
         uint32 GetGlyphSlot(uint8 slot) const { return GetUInt32Value(PLAYER_FIELD_GLYPH_SLOTS_1 + slot); }
         void SetGlyph(uint8 slot, uint32 glyph);
-        uint32 GetGlyph(uint8 spec, uint8 slot) const { return _talentMgr->SpecInfo[spec].Glyphs[slot]; }
+        uint32 GetGlyph(uint8 group, uint8 slot) const { return _talentMgr->GroupInfo[group].Glyphs[slot]; }
 
-        PlayerTalentMap const* GetTalentMap(uint8 spec) const { return _talentMgr->SpecInfo[spec].Talents; }
-        PlayerTalentMap* GetTalentMap(uint8 spec) { return _talentMgr->SpecInfo[spec].Talents; }
+        PlayerTalentMap const* GetTalentMap(uint8 group) const { return &_talentMgr->GroupInfo[group].Talents; }
+        PlayerTalentMap* GetTalentMap(uint8 group) { return &_talentMgr->GroupInfo[group].Talents; }
         ActionButtonList const& GetActionButtons() const { return m_actionButtons; }
 
         uint32 GetFreePrimaryProfessionPoints() const { return GetUInt32Value(PLAYER_CHARACTER_POINTS2); }
@@ -1633,6 +1602,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SetGuildIdInvited(ObjectGuid::LowType GuildId) { m_GuildIdInvited = GuildId; }
         ObjectGuid::LowType GetGuildId() const { return GetUInt32Value(PLAYER_GUILDID);  }
         Guild* GetGuild();
+        Guild const* GetGuild() const;
         ObjectGuid::LowType GetGuildIdInvited() const { return m_GuildIdInvited; }
         static void RemovePetitionsAndSigns(ObjectGuid guid, CharterTypes type);
 
@@ -1838,9 +1808,11 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void SetSemaphoreTeleportFar(bool semphsetting) { mSemaphoreTeleport_Far = semphsetting; }
         void ProcessDelayedOperations();
 
-        void CheckAreaExploreAndOutdoor(void);
+        void CheckAreaExplore();
+        void CheckOutdoorsAuraRequirements();
 
         static uint32 TeamForRace(uint8 race);
+        static TeamId TeamIdForRace(uint8 race);
         uint32 GetTeam() const { return m_team; }
         TeamId GetTeamId() const { return m_team == ALLIANCE ? TEAM_ALLIANCE : TEAM_HORDE; }
         void SetFactionForRace(uint8 race);
@@ -1964,11 +1936,11 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void UpdateEquipSpellsAtFormChange();
         void CastItemCombatSpell(DamageInfo const& damageInfo);
         void CastItemCombatSpell(DamageInfo const& damageInfo, Item* item, ItemTemplate const* proto);
-        void CastItemUseSpell(Item* item, SpellCastTargets const& targets, uint8 cast_count, uint32 glyphIndex);
+        void CastItemUseSpell(Item* item, uint32 spellId, SpellCastTargets const& targets, uint8 cast_count, uint32 glyphIndex);
 
         void SendEquipmentSetList();
         void SetEquipmentSet(EquipmentSetInfo::EquipmentSetData const& eqset);
-        void DeleteEquipmentSet(uint64 setGuid);
+        void DeleteEquipmentSet(uint64 id);
 
         void SendInitWorldStates(uint32 zoneId, uint32 areaId);
         void SendUpdateWorldState(uint32 variable, uint32 value) const;
@@ -2092,6 +2064,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 
         void SetHomebind(WorldLocation const& loc, uint32 areaId);
         void SendBindPointUpdate();
+        void SendPlayerBound(ObjectGuid const& binderGuid, uint32 areaId) const;
 
         // Homebind coordinates
         uint32 m_homebindMapId;
@@ -2262,11 +2235,6 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         bool IsInWhisperWhiteList(ObjectGuid guid);
         void RemoveFromWhisperWhiteList(ObjectGuid guid) { WhisperList.remove(guid); }
 
-        bool SetDisableGravity(bool disable, bool packetOnly /* = false */, bool updateAnimTier = true) override;
-        bool SetCanFly(bool apply, bool packetOnly = false) override;
-        bool SetWaterWalking(bool apply, bool packetOnly = false) override;
-        bool SetFeatherFall(bool apply, bool packetOnly = false) override;
-        bool SetHover(bool enable, bool packetOnly = false, bool updateAnimTier = true) override;
         void SendMovementSetCollisionHeight(float height);
 
         bool CanFly() const override { return m_movementInfo.HasMovementFlag(MOVEMENTFLAG_CAN_FLY); }
@@ -2522,8 +2490,6 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         uint8 m_fishingSteps;
 
         bool m_needsZoneUpdate;
-
-        TimeTracker m_groupUpdateTimer;
 
     private:
         // internal common parts for CanStore/StoreItem functions

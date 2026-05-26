@@ -56,7 +56,7 @@ void RemoveReforge(Player* player, uint32 itemguid, bool update)
         player->reforgeMap.find(itemguid) == player->reforgeMap.end())
         return;
 
-    Item* invItem = update ? player->GetItemByGuid(ObjectGuid(HighGuid::Item, 0, itemguid)) : NULL;
+    Item* invItem = update ? player->GetItemByGuid(ObjectGuid::Create<HighGuid::Item>(itemguid)) : NULL;
     if (invItem && invItem->IsEquipped())
         player->_ApplyItemMods(invItem, invItem->GetSlot(), false);
     player->reforgeMap.erase(itemguid);
@@ -113,8 +113,8 @@ void SendReforgePacket(Player* player, uint32 entry, uint32 lowguid, const Refor
     data << uint8(0x00);                                //pProto->Name4; // blizz not send name there, just uint8(0x00);
     data << pProto->DisplayInfoID;
     data << pProto->Quality;
-    data << pProto->Flags;
-    data << pProto->Flags2;
+    data << pProto->Flags[0];
+    data << pProto->Flags[1];
     data << pProto->BuyPrice;
     data << pProto->SellPrice;
     data << pProto->InventoryType;
@@ -178,20 +178,20 @@ void SendReforgePacket(Player* player, uint32 entry, uint32 lowguid, const Refor
     {
         // send DBC data for cooldowns in same way as it used in Spell::SendSpellCooldown
         // use `item_template` or if not set then only use spell cooldowns
-        SpellInfo const* spell = sSpellMgr->GetSpellInfo(pProto->Spells[s].SpellId);
+        SpellInfo const* spell = sSpellMgr->GetSpellInfo(pProto->Effects[s].SpellID);
         if (spell)
         {
-            bool db_data = pProto->Spells[s].SpellCooldown >= 0 || pProto->Spells[s].SpellCategoryCooldown >= 0;
+            bool db_data = pProto->Effects[s].CoolDownMSec >= 0 || pProto->Effects[s].CategoryCoolDownMSec >= 0;
 
-            data << pProto->Spells[s].SpellId;
-            data << pProto->Spells[s].SpellTrigger;
-            data << uint32(-abs(pProto->Spells[s].SpellCharges));
+            data << pProto->Effects[s].SpellID;
+            data << pProto->Effects[s].TriggerType;
+            data << uint32(-abs(pProto->Effects[s].Charges));
 
             if (db_data)
             {
-                data << uint32(pProto->Spells[s].SpellCooldown);
-                data << uint32(pProto->Spells[s].SpellCategory);
-                data << uint32(pProto->Spells[s].SpellCategoryCooldown);
+                data << uint32(pProto->Effects[s].CoolDownMSec);
+                data << uint32(pProto->Effects[s].SpellCategoryID);
+                data << uint32(pProto->Effects[s].CategoryCoolDownMSec);
             }
             else
             {
