@@ -91,12 +91,12 @@ public:
 
             if (Player* player = done_by->ToPlayer())
             {
-                if (Group* group = player->GetGroup())
+                if (Group const* group = player->GetGroup())
                 {
-                    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+                    for (GroupReference const& itr : group->GetMembers())
                     {
-                        Player* groupie = itr->GetSource();
-                        if (groupie && groupie->IsInMap(player) &&
+                        Player* groupie = itr.GetSource();
+                        if (groupie->IsInMap(player) &&
                             groupie->GetQuestStatus(QUEST_DONTKILLTHEFATONE) == QUEST_STATUS_INCOMPLETE &&
                             groupie->GetReqKillOrCastCurrentCount(QUEST_DONTKILLTHEFATONE, NPC_BOULDERFIST_INVADER) == REQUIRED_KILL_COUNT)
                         {
@@ -211,7 +211,7 @@ class spell_terokkar_free_webbed_on_quest : public SpellScript
         Unit* caster = GetCaster();
         Unit* target = GetHitUnit();
 
-        if (roll_chance_i(66))
+        if (roll_chance(66))
             caster->CastSpell(caster, Trinity::Containers::SelectRandomContainerElement(CocoonSummonSpells), true);
         else
             target->CastSpell(caster, SPELL_FREE_WEBBED_6, true);

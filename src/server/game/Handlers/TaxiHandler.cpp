@@ -23,6 +23,7 @@
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "FlightPathMovementGenerator.h"
+#include "GossipDef.h"
 #include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
@@ -101,6 +102,8 @@ void WorldSession::SendTaxiMenu(Creature* unit)
     uint32 curloc = sObjectMgr->GetNearestTaxiNode(unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ(), unit->GetMapId(), GetPlayer()->GetTeam());
     if (!curloc)
         return;
+
+    GetPlayer()->PlayerTalkClass->GetInteractionData().StartInteraction(unit->GetGUID(), PlayerInteractionType::TaxiNode);
 
     bool lastTaxiCheaterState = GetPlayer()->isTaxiCheater();
     if (unit->GetEntry() == 29480)

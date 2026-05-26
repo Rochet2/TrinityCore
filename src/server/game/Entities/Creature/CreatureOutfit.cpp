@@ -1,6 +1,7 @@
 #include "CreatureOutfit.h"
 #include "DB2Structure.h" // ChrRacesEntry
 #include "DB2Stores.h" // sChrRacesStore, sDB2Manager
+#include "TransmogMgr.h"
 
 constexpr uint32 CreatureOutfit::invisible_model;
 constexpr uint32 CreatureOutfit::max_real_modelid;
@@ -19,9 +20,18 @@ CreatureOutfit::CreatureOutfit(uint8 race, Gender gender) : race(race), gender(g
 
 CreatureOutfit& CreatureOutfit::SetItemEntry(EquipmentSlots slot, uint32 item_entry, uint32 appearancemodid)
 {
-    if (uint32 display = sDB2Manager.GetItemDisplayId(item_entry, appearancemodid))
+    if (uint32 display = GetItemDisplayId(item_entry, appearancemodid))
         outfitdisplays[slot] = display;
     else
         outfitdisplays[slot] = 0;
     return *this;
+}
+
+uint32 CreatureOutfit::GetItemDisplayId(uint32 itemEntry, uint32 appearanceModId)
+{
+    if (ItemModifiedAppearanceEntry const* modifiedAppearance = TransmogMgr::GetItemModifiedAppearance(itemEntry, appearanceModId))
+        if (ItemAppearanceEntry const* itemAppearance = sItemAppearanceStore.LookupEntry(modifiedAppearance->ItemAppearanceID))
+            return itemAppearance->ItemDisplayInfoID;
+
+    return 0;
 }

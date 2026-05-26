@@ -57,6 +57,8 @@ public:
         return *this;
     }
 
+    static uint32 GetItemDisplayId(uint32 itemEntry, uint32 appearanceModId);
+
 private:
     CreatureOutfit() {};
     uint32 id = 0;

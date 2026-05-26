@@ -122,9 +122,7 @@ void SummonList::DoActionImpl(int32 action, StorageType& summons, uint16 max)
     }
 }
 
-ScriptedAI::ScriptedAI(Creature* creature) : ScriptedAI(creature, creature->GetScriptId()) { }
-
-ScriptedAI::ScriptedAI(Creature* creature, uint32 scriptId) : CreatureAI(creature, scriptId), IsFleeing(false), _isCombatMovementAllowed(true)
+ScriptedAI::ScriptedAI(Creature* creature, uint32 scriptId) noexcept : CreatureAI(creature, scriptId), _isCombatMovementAllowed(true)
 {
     _difficulty = me->GetMap()->GetDifficultyID();
 }
@@ -396,13 +394,14 @@ SpellInfo const* ScriptedAI::SelectSpell(Unit* target, uint32 school, uint32 mec
             continue;
 
         // Check if the spell meets our range requirements
-        if (rangeMin && me->GetSpellMinRangeForTarget(target, tempSpell) < rangeMin)
+        SpellRange spellRange = me->GetSpellMinMaxRangeForTarget(target, tempSpell);
+        if (rangeMin && spellRange.Min < rangeMin)
             continue;
-        if (rangeMax && me->GetSpellMaxRangeForTarget(target, tempSpell) > rangeMax)
+        if (rangeMax && spellRange.Max > rangeMax)
             continue;
 
         // Check if our target is in range
-        if (me->IsWithinDistInMap(target, float(me->GetSpellMinRangeForTarget(target, tempSpell))) || !me->IsWithinDistInMap(target, float(me->GetSpellMaxRangeForTarget(target, tempSpell))))
+        if (me->IsWithinDistInMap(target, spellRange.Min) || !me->IsWithinDistInMap(target, spellRange.Max))
             continue;
 
         // All good so lets add it to the spell list
@@ -528,7 +527,7 @@ void ScriptedAI::SetCombatMovement(bool allowMovement)
 }
 
 // BossAI - for instanced bosses
-BossAI::BossAI(Creature* creature, uint32 bossId) : ScriptedAI(creature), instance(creature->GetInstanceScript()), summons(creature), _bossId(bossId)
+BossAI::BossAI(Creature* creature, uint32 bossId) noexcept : ScriptedAI(creature), instance(creature->GetInstanceScript()), summons(creature), _bossId(bossId)
 {
     if (instance)
         SetBoundary(instance->GetBossBoundary(bossId));
@@ -537,6 +536,8 @@ BossAI::BossAI(Creature* creature, uint32 bossId) : ScriptedAI(creature), instan
         return !me->HasUnitState(UNIT_STATE_CASTING);
     });
 }
+
+BossAI::~BossAI() = default;
 
 void BossAI::_Reset()
 {
@@ -655,7 +656,9 @@ void BossAI::_DespawnAtEvade(Seconds delayToRespawn /*= 30s*/, Creature* who /*=
 }
 
 // WorldBossAI - for non-instanced bosses
-WorldBossAI::WorldBossAI(Creature* creature) : ScriptedAI(creature), summons(creature) { }
+WorldBossAI::WorldBossAI(Creature* creature) noexcept : ScriptedAI(creature), summons(creature) { }
+
+WorldBossAI::~WorldBossAI() = default;
 
 void WorldBossAI::_Reset()
 {
