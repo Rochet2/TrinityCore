@@ -22,17 +22,16 @@
 #include "ArtifactPackets.h"
 #include "AuctionHousePackets.h"
 #include "AuthenticationPackets.h"
+#include "BattlePetMgr.h"
 #include "Battleground.h"
 #include "BattlegroundPackets.h"
-#include "BattlePetMgr.h"
 #include "CalendarMgr.h"
 #include "CharacterCache.h"
 #include "CharacterPackets.h"
 #include "Chat.h"
 #include "Common.h"
-#include "Containers.h"
-#include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "DatabaseEnv.h"
 #include "EquipmentSetPackets.h"
 #include "GameObject.h"
 #include "GameTime.h"
@@ -45,6 +44,7 @@
 #include "Language.h"
 #include "Log.h"
 #include "Map.h"
+#include "MapUtils.h"
 #include "Metric.h"
 #include "MiscPackets.h"
 #include "MotionMaster.h"
@@ -61,8 +61,10 @@
 #include "SocialMgr.h"
 #include "StringConvert.h"
 #include "SystemPackets.h"
+#include "TransmogMgr.h"
 #include "Util.h"
 #include "World.h"
+#include <boost/circular_buffer.hpp>
 #include <sstream>
 
 class LoginQueryHolder : public CharacterDatabaseQueryHolder
@@ -133,6 +135,10 @@ bool LoginQueryHolder::Initialize()
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS, stmt);
 
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_QUESTSTATUS_OBJECTIVES_SPAWN_TRACKING);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_SPAWN_TRACKING, stmt);
+
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_QUESTSTATUS_DAILY);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_DAILY_QUEST_STATUS, stmt);
@@ -176,10 +182,6 @@ bool LoginQueryHolder::Initialize()
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ITEM_INSTANCE_AZERITE_EMPOWERED);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_AZERITE_EMPOWERED, stmt);
-
-    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHAR_VOID_STORAGE);
-    stmt->setUInt64(0, lowGuid);
-    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_VOID_STORAGE, stmt);
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_MAIL);
     stmt->setUInt64(0, lowGuid);
@@ -255,6 +257,18 @@ bool LoginQueryHolder::Initialize()
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_TRANSMOG_OUTFITS);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_TRANSMOG_OUTFITS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_TRANSMOG_OUTFIT);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_TRANSMOG_OUTFIT, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_TRANSMOG_OUTFIT_SITUATION);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_TRANSMOG_OUTFIT_SITUATION, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_TRANSMOG_OUTFIT_SLOT);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_TRANSMOG_OUTFIT_SLOT, stmt);
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHAR_CUF_PROFILES);
     stmt->setUInt64(0, lowGuid);
@@ -339,6 +353,18 @@ bool LoginQueryHolder::Initialize()
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHAR_TRAIT_CONFIGS);
     stmt->setUInt64(0, lowGuid);
     res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_TRAIT_CONFIGS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_PLAYER_DATA_ELEMENTS_CHARACTER);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_PLAYER_DATA_FLAGS_CHARACTER);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS, stmt);
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHARACTER_BANK_TAB_SETTINGS);
+    stmt->setUInt64(0, lowGuid);
+    res &= SetPreparedQuery(PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS, stmt);
 
     return res;
 }
@@ -431,13 +457,13 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
 
                     charInfo.Customizations.clear();
 
-                    if (!(charInfo.Flags2 & (CHAR_CUSTOMIZE_FLAG_CUSTOMIZE | CHAR_CUSTOMIZE_FLAG_FACTION | CHAR_CUSTOMIZE_FLAG_RACE)))
+                    if (!(charInfo.Flags2 & (CHARACTER_FLAG_2_CUSTOMIZE | CHARACTER_FLAG_2_FACTION_CHANGE | CHARACTER_FLAG_2_RACE_CHANGE)))
                     {
                         CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_ADD_AT_LOGIN_FLAG);
                         stmt->setUInt16(0, uint16(AT_LOGIN_CUSTOMIZE));
                         stmt->setUInt64(1, charInfo.Guid.GetCounter());
                         CharacterDatabase.Execute(stmt);
-                        charInfo.Flags2 = CHAR_CUSTOMIZE_FLAG_CUSTOMIZE;
+                        charInfo.Flags2 = CHARACTER_FLAG_2_CUSTOMIZE;
                     }
                 }
 
@@ -466,6 +492,9 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
     }
 
     SendPacket(charEnum.Write());
+
+    if (!charEnum.IsDeletedCharacters)
+        _collectionMgr->SendWarbandSceneCollectionData();
 }
 
 void WorldSession::HandleCharEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/)
@@ -513,7 +542,7 @@ bool WorldSession::MeetsChrCustomizationReq(ChrCustomizationReqEntry const* req,
     if (req->ClassMask && !(req->ClassMask & (1 << (playerClass - 1))))
         return false;
 
-    if (race != RACE_NONE && !req->RaceMask.IsEmpty() && req->RaceMask.RawValue != -1 && !req->RaceMask.HasRace(race))
+    if (race != RACE_NONE && !req->RaceMask.IsEmpty() && req->RaceMask != RACEMASK_ALL_v<int64> && !req->RaceMask.HasRace(race))
         return false;
 
     if (req->AchievementID /*&& !HasAchieved(req->AchievementID)*/)
@@ -1105,6 +1134,9 @@ void WorldSession::HandleContinuePlayerLogin()
 
     SendPacket(WorldPackets::Auth::ResumeComms(CONNECTION_TYPE_INSTANCE).Write());
 
+    // client will respond to SMSG_RESUME_COMMS with CMSG_QUEUED_MESSAGES_END
+    RegisterTimeSync(SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER);
+
     AddQueryHolderCallback(CharacterDatabase.DelayQueryHolder(holder)).AfterComplete([this](SQLQueryHolderBase const& holder)
     {
         HandlePlayerLogin(static_cast<LoginQueryHolder const&>(holder));
@@ -1146,6 +1178,12 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
         return;
     }
 
+    if (!_timeSyncClockDeltaQueue->empty())
+    {
+        pCurrChar->SetPlayerLocalFlag(PLAYER_LOCAL_FLAG_OVERRIDE_TRANSPORT_SERVER_TIME);
+        pCurrChar->SetTransportServerTime(_timeSyncClockDelta);
+    }
+
     pCurrChar->SetVirtualPlayerRealm(GetVirtualRealmAddress());
 
     SendAccountDataTimes(ObjectGuid::Empty, GLOBAL_CACHE_MASK);
@@ -1167,8 +1205,9 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
 
     // Send MOTD
     {
-        for (std::string const& motdLine : sWorld->GetMotd())
-            sWorld->SendServerMessage(SERVER_MSG_STRING, motdLine, pCurrChar);
+        WorldPackets::System::MOTD motd;
+        motd.Text = &sWorld->GetMotd();
+        SendPacket(motd.Write());
     }
 
     SendSetTimeZoneInformation();
@@ -1247,9 +1286,8 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
 
     if (!pCurrChar->GetMap()->AddPlayerToMap(pCurrChar))
     {
-        AreaTriggerStruct const* at = sObjectMgr->GetGoBackTrigger(pCurrChar->GetMapId());
-        if (at)
-            pCurrChar->TeleportTo(at->target_mapId, at->target_X, at->target_Y, at->target_Z, pCurrChar->GetOrientation());
+        if (AreaTriggerTeleport const* at = sObjectMgr->GetGoBackTrigger(pCurrChar->GetMapId()))
+            pCurrChar->TeleportTo(at->Loc);
         else
             pCurrChar->TeleportTo(pCurrChar->m_homebind);
     }
@@ -1309,6 +1347,10 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
             pCurrChar->CastSpell(pCurrChar, 8326, true); // auras SPELL_AURA_GHOST, SPELL_AURA_INCREASE_SPEED(why?), SPELL_AURA_INCREASE_SWIM_SPEED(why?)
 
         pCurrChar->SetWaterWalking(true);
+
+        int32 const delay = pCurrChar->CalculateCorpseReclaimDelay(true);
+        if (delay > 0)
+            pCurrChar->SendCorpseReclaimDelay(delay);
     }
 
     pCurrChar->ContinueTaxiFlight();
@@ -1472,10 +1514,9 @@ void WorldSession::SendFeatureSystemStatus()
     /// START OF DUMMY VALUES
     features.ComplaintStatus = COMPLAINT_ENABLED_WITH_AUTO_IGNORE;
     features.CfgRealmID = 2;
-    features.CfgRealmRecID = 0;
+    features.CfgRealmRecID = sRealmList->GetCurrentRealmId().Realm;
     features.CommercePricePollTimeSeconds = 300;
     features.VoiceEnabled = false;
-    features.BrowserEnabled = false; // Has to be false, otherwise client will crash if "Customer Support" is opened
 
     // Enable guilds only.
     // This is required to restore old guild channel behavior for GMs.
@@ -1501,10 +1542,30 @@ void WorldSession::SendFeatureSystemStatus()
     features.EuropaTicketSystemStatus->SuggestionsEnabled = sWorld->getBoolConfig(CONFIG_SUPPORT_SUGGESTIONS_ENABLED);
 
     features.CharUndeleteEnabled = sWorld->getBoolConfig(CONFIG_FEATURE_SYSTEM_CHARACTER_UNDELETE_ENABLED);
-    features.BpayStoreEnabled = sWorld->getBoolConfig(CONFIG_FEATURE_SYSTEM_BPAY_STORE_ENABLED);
     features.IsChatMuted = !CanSpeak();
 
     features.SpeakForMeAllowed = false;
+
+    for (World::GameRule const& gameRule : sWorld->GetGameRules())
+    {
+        WorldPackets::System::GameRuleValuePair& rule = features.GameRules.emplace_back();
+        rule.Rule = AsUnderlyingType(gameRule.Rule);
+        std::visit([&]<typename T>(T value)
+        {
+            if constexpr (std::is_same_v<T, float>)
+                rule.ValueF = value;
+            else
+                rule.Value = value;
+        }, gameRule.Value);
+    }
+
+    features.AddonChatThrottle.MaxTries = 10;
+    features.AddonChatThrottle.TriesRestoredPerSecond = 1;
+    features.AddonChatThrottle.UsedTriesPerMessage = 1;
+    features.GuildChatThrottle.UsedTriesPerMessage = 1;
+    features.GuildChatThrottle.TriesRestoredPerSecond = 20;
+    features.GroupChatThrottle.UsedTriesPerMessage = 1;
+    features.GroupChatThrottle.TriesRestoredPerSecond = 20;
 
     SendPacket(features.Write());
 }
@@ -1999,10 +2060,7 @@ void WorldSession::HandleEquipmentSetSave(WorldPackets::EquipmentSet::SaveEquipm
         auto validateIllusion = [this](uint32 enchantId) -> bool
         {
             SpellItemEnchantmentEntry const* illusion = sSpellItemEnchantmentStore.LookupEntry(enchantId);
-            if (!illusion)
-                return false;
-
-            if (!illusion->ItemVisual || !illusion->GetFlags().HasFlag(SpellItemEnchantmentFlags::AllowTransmog))
+            if (!illusion || !TransmogMgr::GetTransmogIllusionForSpellItemEnchantment(enchantId))
                 return false;
 
             if (!ConditionMgr::IsPlayerMeetingCondition(_player, illusion->TransmogUseConditionID))
@@ -2136,7 +2194,7 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
     Field* fields              = result->Fetch();
     uint16 atLoginFlags        = fields[0].GetUInt16();
     std::string knownTitlesStr = fields[1].GetString();
-    uint32 groupId             = !fields[2].IsNull() ? fields[2].GetUInt32() : 0;
+    uint32 groupId             = fields[2].GetUInt32();
 
     uint16 usedLoginFlag = (factionChangeInfo->FactionChange ? AT_LOGIN_CHANGE_FACTION : AT_LOGIN_CHANGE_RACE);
     if (!(atLoginFlags & usedLoginFlag))
@@ -2275,8 +2333,8 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
         trans->Append(stmt);
 
         // Race specific languages
-        std::array<uint8, 4> const racesWithoutSpecificLanguages = { RACE_ORC, RACE_HUMAN, RACE_MAGHAR_ORC, RACE_KUL_TIRAN };
-        if (std::find(racesWithoutSpecificLanguages.begin(), racesWithoutSpecificLanguages.end(), factionChangeInfo->RaceID) == racesWithoutSpecificLanguages.end())
+        constexpr std::array<uint8, 4> racesWithoutSpecificLanguages = { RACE_ORC, RACE_HUMAN, RACE_MAGHAR_ORC, RACE_KUL_TIRAN };
+        if (!advstd::ranges::contains(racesWithoutSpecificLanguages, factionChangeInfo->RaceID))
         {
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHAR_SKILL_LANGUAGE);
             stmt->setUInt64(0, lowGuid);
@@ -2337,6 +2395,10 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
                 case RACE_EARTHEN_DWARF_HORDE:
                 case RACE_EARTHEN_DWARF_ALLIANCE:
                     stmt->setUInt16(1, 140);
+                    break;
+                case RACE_HARANIR_ALLIANCE:
+                case RACE_HARANIR_HORDE:
+                    stmt->setUInt16(1, 2987);
                     break;
                 default:
                     TC_LOG_ERROR("entities.player", "Could not find language data for race ({}).", factionChangeInfo->RaceID);
@@ -2433,11 +2495,8 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
             Player::SavePositionInDB(loc, zoneId, factionChangeInfo->Guid, trans);
 
             // Achievement conversion
-            for (std::map<uint32, uint32>::const_iterator it = sObjectMgr->FactionChangeAchievements.begin(); it != sObjectMgr->FactionChangeAchievements.end(); ++it)
+            for (auto [achiev_alliance, achiev_horde] : sObjectMgr->FactionChangeAchievements)
             {
-                uint32 achiev_alliance = it->first;
-                uint32 achiev_horde = it->second;
-
                 stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_ACHIEVEMENT_BY_ACHIEVEMENT);
                 stmt->setUInt16(0, uint16(newTeamId == TEAM_ALLIANCE ? achiev_alliance : achiev_horde));
                 stmt->setUInt64(1, lowGuid);
@@ -2454,11 +2513,8 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
             ObjectMgr::CharacterConversionMap const& itemConversionMap = newTeamId == TEAM_ALLIANCE
                 ? sObjectMgr->FactionChangeItemsHordeToAlliance
                 : sObjectMgr->FactionChangeItemsAllianceToHorde;
-            for (std::map<uint32, uint32>::const_iterator it = itemConversionMap.begin(); it != itemConversionMap.end(); ++it)
+            for (auto [oldItemId, newItemId] : itemConversionMap)
             {
-                uint32 oldItemId = it->first;
-                uint32 newItemId = it->second;
-
                 stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_INVENTORY_FACTION_CHANGE);
                 stmt->setUInt32(0, newItemId);
                 stmt->setUInt32(1, oldItemId);
@@ -2472,11 +2528,8 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
             trans->Append(stmt);
 
             // Quest conversion
-            for (std::map<uint32, uint32>::const_iterator it = sObjectMgr->FactionChangeQuests.begin(); it != sObjectMgr->FactionChangeQuests.end(); ++it)
+            for (auto [quest_alliance, quest_horde] : sObjectMgr->FactionChangeQuests)
             {
-                uint32 quest_alliance = it->first;
-                uint32 quest_horde = it->second;
-
                 stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_QUESTSTATUS_REWARDED_BY_QUEST);
                 stmt->setUInt64(0, lowGuid);
                 stmt->setUInt32(1, (newTeamId == TEAM_ALLIANCE ? quest_alliance : quest_horde));
@@ -2499,8 +2552,10 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
                 ObjectMgr::QuestContainer const& questTemplates = sObjectMgr->GetQuestTemplates();
                 for (auto const& [questId, quest] : questTemplates)
                 {
-                    Trinity::RaceMask<uint64> newRaceMask = (newTeamId == TEAM_ALLIANCE) ? RACEMASK_ALLIANCE : RACEMASK_HORDE;
-                    if (quest->GetAllowableRaces().RawValue != uint64(-1) && (quest->GetAllowableRaces() & newRaceMask).IsEmpty())
+                    Trinity::RaceMask<std::array<int32, 2>> newRaceMask = newTeamId == TEAM_ALLIANCE
+                        ? RACEMASK_ALLIANCE_v<std::array<int32, 2>>
+                        : RACEMASK_HORDE_v<std::array<int32, 2>>;
+                    if (quest->GetAllowableRaces() != RACEMASK_ALL_v<std::array<int32, 2>> && (quest->GetAllowableRaces() & newRaceMask).IsEmpty())
                     {
                         stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_QUESTSTATUS_REWARDED_ACTIVE_BY_QUEST);
                         stmt->setUInt64(0, lowGuid);
@@ -2511,11 +2566,8 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
             }
 
             // Spell conversion
-            for (std::map<uint32, uint32>::const_iterator it = sObjectMgr->FactionChangeSpells.begin(); it != sObjectMgr->FactionChangeSpells.end(); ++it)
+            for (auto [spell_alliance, spell_horde] : sObjectMgr->FactionChangeSpells)
             {
-                uint32 spell_alliance = it->first;
-                uint32 spell_horde = it->second;
-
                 stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_SPELL_BY_SPELL);
                 stmt->setUInt32(0, (newTeamId == TEAM_ALLIANCE ? spell_alliance : spell_horde));
                 stmt->setUInt64(1, lowGuid);
@@ -2529,10 +2581,8 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
             }
 
             // Reputation conversion
-            for (std::map<uint32, uint32>::const_iterator it = sObjectMgr->FactionChangeReputation.begin(); it != sObjectMgr->FactionChangeReputation.end(); ++it)
+            for (auto [reputation_alliance, reputation_horde] : sObjectMgr->FactionChangeReputation)
             {
-                uint32 reputation_alliance = it->first;
-                uint32 reputation_horde = it->second;
                 uint32 newReputation = (newTeamId == TEAM_ALLIANCE) ? reputation_alliance : reputation_horde;
                 uint32 oldReputation = (newTeamId == TEAM_ALLIANCE) ? reputation_horde : reputation_alliance;
 
@@ -2589,11 +2639,8 @@ void WorldSession::HandleCharRaceOrFactionChangeCallback(std::shared_ptr<WorldPa
                     }
                 }
 
-                for (std::map<uint32, uint32>::const_iterator it = sObjectMgr->FactionChangeTitles.begin(); it != sObjectMgr->FactionChangeTitles.end(); ++it)
+                for (auto [title_alliance, title_horde] : sObjectMgr->FactionChangeTitles)
                 {
-                    uint32 title_alliance = it->first;
-                    uint32 title_horde = it->second;
-
                     CharTitlesEntry const* atitleInfo = sCharTitlesStore.AssertEntry(title_alliance);
                     CharTitlesEntry const* htitleInfo = sCharTitlesStore.AssertEntry(title_horde);
                     // new team
