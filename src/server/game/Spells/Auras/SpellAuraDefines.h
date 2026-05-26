@@ -24,7 +24,7 @@
 enum AURA_FLAGS
 {
     AFLAG_NONE                   = 0x0000,
-    AFLAG_NOCASTER               = 0x0001,
+    AFLAG_SELF_CAST              = 0x0001,
     AFLAG_POSITIVE               = 0x0002,
     AFLAG_DURATION               = 0x0004,
     AFLAG_SCALABLE               = 0x0008,
@@ -728,18 +728,24 @@ enum AuraType : uint32
     SPELL_AURA_641                                          = 641,
     SPELL_AURA_642                                          = 642,
     SPELL_AURA_MOD_RANGED_ATTACK_SPEED_FLAT                 = 643, // NYI
-    SPELL_AURA_644                                          = 644,
+    SPELL_AURA_MOD_GRAVITY                                  = 644, // NYI
     SPELL_AURA_645                                          = 645,
     SPELL_AURA_ADD_FLAT_PVP_MODIFIER                        = 646,
     SPELL_AURA_ADD_PCT_PVP_MODIFIER                         = 647,
     SPELL_AURA_ADD_FLAT_PVP_MODIFIER_BY_SPELL_LABEL         = 648,
     SPELL_AURA_ADD_PCT_PVP_MODIFIER_BY_SPELL_LABEL          = 649,
     SPELL_AURA_650                                          = 650,
-    SPELL_AURA_651                                          = 651,
+    SPELL_AURA_ENABLE_EVENT_TRANSMOG_OUTFIT                 = 651,
     SPELL_AURA_652                                          = 652,
     SPELL_AURA_653                                          = 653,
     SPELL_AURA_654                                          = 654,
     SPELL_AURA_MOD_TRANSMOG_OUTFIT_UPDATE_COST              = 655,
+    SPELL_AURA_656                                          = 656,
+    SPELL_AURA_657                                          = 657,
+    SPELL_AURA_658                                          = 658,
+    SPELL_AURA_659                                          = 659,
+    SPELL_AURA_660                                          = 660,
+    SPELL_AURA_ALTERED_FORM_IN_COMBAT                       = 661,
 
     TOTAL_AURAS
 };

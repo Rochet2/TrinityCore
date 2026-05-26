@@ -69,7 +69,7 @@ public:
         SPAWNSPELL,
     };
 
-    ChatCommandTable GetCommands() const override
+    std::span<ChatCommandBuilder const> GetCommands() const override
     {
         static ChatCommandTable GOMoveCommandTable =
         {
@@ -172,7 +172,7 @@ public:
             {
                 GameObject* target = GOMove::GetGameObject(player, lowguid);
                 if (!target)
-                    ChatHandler(player->GetSession()).PSendSysMessage("Object GUID: %u not found", lowguid);
+                    ChatHandler(player->GetSession()).PSendSysMessage("Object GUID: %s not found.", std::to_string(lowguid).c_str());
                 else
                 {
                     float x, y, z, o;
