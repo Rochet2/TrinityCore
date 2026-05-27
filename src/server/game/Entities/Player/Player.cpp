@@ -158,7 +158,7 @@ enum PlayerSpells
     SPELL_EXPERIENCE_ELIMINATED = 206662,
 };
 
-static uint32 copseReclaimDelay[MAX_DEATH_COUNT] = { 30, 60, 120 };
+static uint32 corpseReclaimDelay[MAX_DEATH_COUNT] = { 30, 60, 120 };
 
 Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
 {
@@ -963,13 +963,12 @@ void Player::Update(uint32 p_time)
 
     Unit::AIUpdateTick(p_time);
 
-    // Update items that have just a limited lifetime
+    // Once per second, update items that have just a limited lifetime
     if (now > m_Last_tick)
+    {
         UpdateItemDuration(uint32(now - m_Last_tick));
-
-    // check every second
-    if (now > m_Last_tick + 1)
         UpdateSoulboundTradeItems();
+    }
 
     // If mute expired, remove it from the DB
     if (GetSession()->m_muteTime && GetSession()->m_muteTime < now)
@@ -1193,7 +1192,7 @@ void Player::ToggleAFK()
         SetPlayerFlag(PLAYER_FLAGS_AFK);
 
     // afk player not allowed in battleground
-    if (!IsGameMaster() && isAFK() && InBattleground() && !InArena())
+    if (!GetSession()->HasPermission(rbac::RBAC_PERM_CAN_AFK_ON_BATTLEGROUND) && isAFK() && InBattleground() && !InArena())
         LeaveBattleground();
 }
 
@@ -3474,6 +3473,9 @@ void Player::RemoveArenaSpellCooldowns(bool removeActivePetCooldowns)
 
 uint32 Player::GetNextResetTalentsCost() const
 {
+    if (sWorld->getBoolConfig(CONFIG_NO_RESET_TALENT_COST))
+        return 0;
+
     // The first time reset costs 1 gold
     if (GetTalentResetCost() < 1*GOLD)
         return 1*GOLD;
@@ -3505,26 +3507,24 @@ uint32 Player::GetNextResetTalentsCost() const
     }
 }
 
-bool Player::ResetTalents(bool noCost)
+void Player::IncreaseResetTalentsCostAndCounters(uint32 lastResetTalentsCost)
 {
-    sScriptMgr->OnPlayerTalentsReset(this, noCost);
+    if (lastResetTalentsCost > 0) // We don't want to reset the accumulated talent reset cost if we decide to temporarily enable CONFIG_NO_RESET_TALENT_COST
+        SetTalentResetCost(lastResetTalentsCost);
+
+    SetTalentResetTime(GameTime::GetGameTime());
+
+    UpdateCriteria(CriteriaType::MoneySpentOnRespecs, lastResetTalentsCost);
+    UpdateCriteria(CriteriaType::TotalRespecs, 1);
+}
+
+bool Player::ResetTalents(bool involuntarily /*= false*/)
+{
+    sScriptMgr->OnPlayerTalentsReset(this, involuntarily);
 
     // not need after this call
     if (HasAtLoginFlag(AT_LOGIN_RESET_TALENTS))
         RemoveAtLoginFlag(AT_LOGIN_RESET_TALENTS, true);
-
-    uint32 cost = 0;
-
-    if (!noCost && !sWorld->getBoolConfig(CONFIG_NO_RESET_TALENT_COST))
-    {
-        cost = GetNextResetTalentsCost();
-
-        if (!HasEnoughMoney(uint64(cost)))
-        {
-            SendBuyError(BUY_ERR_NOT_ENOUGHT_MONEY, nullptr, 0, 0);
-            return false;
-        }
-    }
 
     RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT, true);
 
@@ -3552,23 +3552,8 @@ bool Player::ResetTalents(bool noCost)
     _SaveSpells(trans);
     CharacterDatabase.CommitTransaction(trans);
 
-    if (!noCost)
-    {
-        ModifyMoney(-(int64)cost);
-        UpdateCriteria(CriteriaType::MoneySpentOnRespecs, cost);
-        UpdateCriteria(CriteriaType::TotalRespecs, 1);
-
-        SetTalentResetCost(cost);
-        SetTalentResetTime(GameTime::GetGameTime());
-    }
-
-    /* when prev line will dropped use next line
-    if (Pet* pet = GetPet())
-    {
-        if (pet->getPetType() == HUNTER_PET && !pet->GetCreatureTemplate()->IsTameable(CanTameExoticPets()))
-            RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT, true);
-    }
-    */
+    if (involuntarily)
+        SendDirectMessage(WorldPackets::Talent::TalentsInvoluntarilyReset(false).Write());
 
     return true;
 }
@@ -4335,8 +4320,7 @@ void Player::BuildPlayerRepop()
     // there must be SMSG.STOP_MIRROR_TIMER
 
     // the player cannot have a corpse already on current map, only bones which are not returned by GetCorpse
-    WorldLocation corpseLocation = GetCorpseLocation();
-    if (corpseLocation.GetMapId() == GetMapId())
+    if (GetCorpseLocation().GetMapId() == GetMapId())
     {
         TC_LOG_ERROR("entities.player", "Player::BuildPlayerRepop: Player '{}' ({}) already has a corpse", GetName(), GetGUID().ToString());
         return;
@@ -13285,17 +13269,16 @@ bool Player::IsUsingTwoHandedWeaponInOneHand() const
     return true;
 }
 
-void Player::TradeCancel(bool sendback)
+void Player::TradeCancel(bool sendback, TradeStatus status /*= TRADE_STATUS_CANCELLED*/)
 {
     if (m_trade)
     {
         Player* trader = m_trade->GetTrader();
 
-        // send yellow "Trade canceled" message to both traders
         if (sendback)
-            GetSession()->SendCancelTrade();
+            GetSession()->SendCancelTrade(status);
 
-        trader->GetSession()->SendCancelTrade();
+        trader->GetSession()->SendCancelTrade(status);
 
         // cleanup
         delete m_trade;
@@ -14169,7 +14152,7 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             break;
         case GossipOptionNpc::TalentMaster:
             PlayerTalkClass->SendCloseGossip();
-            SendRespecWipeConfirm(guid, sWorld->getBoolConfig(CONFIG_NO_RESET_TALENT_COST) ? 0 : GetNextResetTalentsCost(), SPEC_RESET_TALENTS);
+            SendRespecWipeConfirm(guid, GetNextResetTalentsCost(), SPEC_RESET_TALENTS);
             break;
         case GossipOptionNpc::Stablemaster:
             SetStableMaster(guid);
@@ -14177,7 +14160,7 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
             break;
         case GossipOptionNpc::PetSpecializationMaster:
             PlayerTalkClass->SendCloseGossip();
-            SendRespecWipeConfirm(guid, sWorld->getBoolConfig(CONFIG_NO_RESET_TALENT_COST) ? 0 : GetNextResetTalentsCost(), SPEC_RESET_PET_TALENTS);
+            SendRespecWipeConfirm(guid, GetNextResetTalentsCost(), SPEC_RESET_PET_TALENTS);
             break;
         case GossipOptionNpc::GuildBanker:
             if (Guild* const guild = GetGuild())
@@ -23752,8 +23735,9 @@ bool Player::BuyItemFromVendorSlot(ObjectGuid vendorguid, uint32 vendorslot, uin
     if (count < 1) count = 1;
 
     // cheating attempt
-    if (slot > MAX_BAG_SIZE && slot != NULL_SLOT)
-        return false;
+    if (slot != NULL_SLOT)
+        if ((bag != INVENTORY_SLOT_BAG_0 && slot > MAX_BAG_SIZE) || (bag == INVENTORY_SLOT_BAG_0 && slot >= INVENTORY_SLOT_ITEM_END))
+            return false;
 
     if (!IsAlive())
         return false;
@@ -24400,14 +24384,18 @@ Team Player::GetBGTeam() const
     return m_bgData.bgTeam ? m_bgData.bgTeam : GetTeam();
 }
 
-void Player::LeaveBattleground(bool teleportToEntryPoint)
+void Player::LeaveBattleground(bool teleportToEntryPoint /*= true*/, bool withoutDeserterDebuff /*= false*/)
 {
-    if (Battleground* bg = GetBattleground())
-    {
-        bg->RemovePlayerAtLeave(GetGUID(), teleportToEntryPoint, true);
+    Battleground* bg = GetBattleground();
+    if (!bg)
+        return;
 
-        // call after remove to be sure that player resurrected for correct cast
-        if (bg->isBattleground() && !IsGameMaster() && sWorld->getBoolConfig(CONFIG_BATTLEGROUND_CAST_DESERTER))
+    bg->RemovePlayerAtLeave(GetGUID(), teleportToEntryPoint, true);
+
+    // call after remove to be sure that player resurrected for correct cast
+    if (bg->isBattleground() && sWorld->getBoolConfig(CONFIG_BATTLEGROUND_CAST_DESERTER))
+    {
+        if (!withoutDeserterDebuff && !GetSession()->HasPermission(rbac::RBAC_PERM_NO_BATTLEGROUND_DESERTER_DEBUFF))
         {
             if (bg->GetStatus() == STATUS_IN_PROGRESS || bg->GetStatus() == STATUS_WAIT_JOIN)
             {
@@ -26604,7 +26592,7 @@ uint32 Player::GetCorpseReclaimDelay(bool pvp) const
     if (pvp)
     {
         if (!sWorld->getBoolConfig(CONFIG_DEATH_CORPSE_RECLAIM_DELAY_PVP))
-            return copseReclaimDelay[0];
+            return corpseReclaimDelay[0];
     }
     else if (!sWorld->getBoolConfig(CONFIG_DEATH_CORPSE_RECLAIM_DELAY_PVE))
         return 0;
@@ -26613,7 +26601,7 @@ uint32 Player::GetCorpseReclaimDelay(bool pvp) const
     // 0..2 full period
     // should be ceil(x)-1 but not floor(x)
     uint64 count = (now < m_deathExpireTime - 1) ? (m_deathExpireTime - 1 - now) / DEATH_EXPIRE_STEP : 0;
-    return copseReclaimDelay[count];
+    return corpseReclaimDelay[count];
 }
 
 void Player::UpdateCorpseReclaimDelay()
@@ -26667,7 +26655,7 @@ int32 Player::CalculateCorpseReclaimDelay(bool load) const
                 count = MAX_DEATH_COUNT - 1;
         }
 
-        time_t expected_time = corpse->GetGhostTime() + copseReclaimDelay[count];
+        time_t expected_time = corpse->GetGhostTime() + corpseReclaimDelay[count];
         time_t now = GameTime::GetGameTime();
 
         if (now >= expected_time)
