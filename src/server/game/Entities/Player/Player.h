@@ -1653,7 +1653,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         Player* GetTrader() const;
         TradeData* GetTradeData() const { return m_trade; }
-        void TradeCancel(bool sendback);
+        void TradeCancel(bool sendback, TradeStatus status = TRADE_STATUS_CANCELLED);
 
         CinematicMgr* GetCinematicMgr() const { return _cinematicMgr.get(); }
 
@@ -2015,6 +2015,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool ResetTalents(bool noCost = false);
         void ResetPvpTalents();
         uint32 GetNextResetTalentsCost() const;
+        void IncreaseResetTalentsCostAndCounters(uint32 lastResetTalentsCost);
         void InitTalentForLevel();
         void SendTalentsInfoData();
         TalentLearnResult LearnTalent(uint32 talentId, int32* spellOnCooldown);
@@ -2610,7 +2611,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SetBGTeam(Team team);
         Team GetBGTeam() const;
 
-        void LeaveBattleground(bool teleportToEntryPoint = true);
+        void LeaveBattleground(bool teleportToEntryPoint = true, bool withoutDeserterDebuff = false);
         bool CanJoinToBattleground(BattlegroundTemplate const* bg) const;
         bool CanReportAfkDueToLimit();
         void ReportedAfkBy(Player* reporter);
