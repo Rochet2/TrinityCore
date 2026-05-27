@@ -102,6 +102,8 @@ enum RBACPermissions
     RBAC_PERM_EMAIL_CONFIRM_FOR_PASS_CHANGE                  = 49,
     RBAC_PERM_MAY_CHECK_OWN_EMAIL                            = 50,
     RBAC_PERM_ALLOW_TWO_SIDE_TRADE                           = 51,
+    RBAC_PERM_NO_BATTLEGROUND_DESERTER_DEBUFF                = 52,
+    RBAC_PERM_CAN_AFK_ON_BATTLEGROUND                        = 53,
 
     // Free space for core permissions (till 149)
     // Roles (Permissions with delegated permissions) use 199 and descending
@@ -749,6 +751,8 @@ enum RBACPermissions
     RBAC_PERM_COMMAND_RELOAD_VEHICLE_TEMPLATE                = 881,
     RBAC_PERM_COMMAND_RELOAD_SPELL_SCRIPT_NAMES              = 882,
     RBAC_PERM_COMMAND_QUEST_OBJECTIVE_COMPLETE               = 883,
+    RBAC_PERM_COMMAND_BG_START                               = 884,
+    RBAC_PERM_COMMAND_BG_STOP                                = 885,
     //
     // IF YOU ADD NEW PERMISSIONS, ADD THEM IN 3.3.5 BRANCH AS WELL!
     //

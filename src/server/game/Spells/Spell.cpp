@@ -2516,11 +2516,15 @@ void Spell::AddUnitTarget(Unit* target, uint32 effectMask, bool checkIfValid /*=
     // If target reflect spell back to caster
     if (targetInfo.MissCondition == SPELL_MISS_REFLECT)
     {
-        // Calculate reflected spell result on caster (shouldn't be able to reflect gameobject spells)
+        // Shouldn't be able to reflect gameobject spells
         Unit* unitCaster = ASSERT_NOTNULL(m_caster->ToUnit());
-        targetInfo.ReflectResult = unitCaster->SpellHitResult(unitCaster, m_spellInfo,
-            false /*can't reflect twice*/,
-            false /*immunity will be checked after complete EffectMask is known*/);
+
+        // Calculate reflected spell result on caster
+        targetInfo.ReflectResult = m_spellInfo->CheckTarget(target, unitCaster, implicit) == SPELL_CAST_OK
+            ? unitCaster->SpellHitResult(unitCaster, m_spellInfo,
+                false /*can't reflect twice*/,
+                false /*immunity will be checked after complete EffectMask is known*/)
+            : SPELL_MISS_IMMUNE;
 
         if (targetInfo.ReflectResult == SPELL_MISS_MISS && target->HasAuraType(SPELL_AURA_REFLECT_SPELLS))
             targetInfo.ReflectingSpellId = target->GetAuraEffectsByType(SPELL_AURA_REFLECT_SPELLS).front()->GetId();
@@ -6958,16 +6962,8 @@ SpellCastResult Spell::CheckCasterAuras(int32* param1) const
     // Get unit state
     uint32 const unitflag = unitCaster->m_unitData->Flags;
 
-    // this check should only be done when player does cast directly
-    // (ie not when it's called from a script) Breaks for example PlayerAI when charmed
-    /*
-    if (!unitCaster->GetCharmerGUID().IsEmpty())
-    {
-        if (Unit* charmer = unitCaster->GetCharmer())
-            if (charmer->GetUnitBeingMoved() != unitCaster && !CheckSpellCancelsCharm(param1))
-                result = SPELL_FAILED_CHARMED;
-    }
-    */
+    if (m_fromClient && unitCaster->IsCharmed() && unitCaster->IsPlayer() && !CheckSpellCancelsCharm(param1))
+        result = SPELL_FAILED_CHARMED;
 
     // spell has attribute usable while having a cc state, check if caster has allowed mechanic auras, another mechanic types must prevent cast spell
     auto mechanicCheck = [&](AuraType type) -> SpellCastResult
