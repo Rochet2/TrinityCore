@@ -2605,7 +2605,7 @@ void ScriptMgr::OnAddonMessage(Player *sender, const std::string &message)
 		if(!block.get(1).isnumber() || scriptKeyVal.isnil() || handlerKeyVal.isnil())
 			continue;
 
-		if(AIOScript *aioScript = _aioHandlers->GetScript<AIOScript>(scriptKeyVal))
+		if (AIOScript* aioScript = _aioHandlers->GetScript<AIOScript>(scriptKeyVal))
 			aioScript->OnHandle(sender, handlerKeyVal, block);
 	}
 }
@@ -2663,16 +2663,6 @@ void AIOScript::AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey, A
 		list->push_back(a6);
 }
 
-template<>
-AIOScript *AIOScript::GetScript(const LuaVal &scriptKey)
-{
-	AIOScriptByKeyMap::const_iterator itr = AIOScript::_scriptByKeyMap.find(scriptKey);
-	if(itr == AIOScript::_scriptByKeyMap.end())
-		return 0;
-
-	return itr->second;
-}
-
 template<class ScriptClass>
 ScriptClass *AIOScript::GetScript(const LuaVal &scriptKey)
 {
@@ -2694,7 +2684,11 @@ void AIOScript::OnHandle(Player *sender, const LuaVal &handlerKey, const LuaVal 
 	if(itr != _handlerMap.end())
 	{
 		itr->second(sender, args); //Call the handler function
+		return;
 	}
+
+	sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "AIO: No handler '%s' on script '%s'. Sender: %s",
+		handlerKey.tostring().c_str(), _key.tostring().c_str(), sender->GetName().c_str());
 }
 
 AIOHandlers::AIOHandlers()
@@ -2710,7 +2704,6 @@ void AIOHandlers::HandleInit(Player *sender, const LuaVal &args)
 	if(sender->isAIOInitOnCooldown())
 		return;
 
-	sender->setAIOIntOnCooldown(true);
 	LuaVal versionVal = args.get(4);
 	LuaVal clientDataVal = args.get(5);
 	if(!versionVal.isnumber() || !clientDataVal.istable())
@@ -2724,6 +2717,8 @@ void AIOHandlers::HandleInit(Player *sender, const LuaVal &args)
 		sender->AIOHandle("AIO", "Init", AIO_VERSION);
 		return;
 	}
+
+	sender->setAIOIntOnCooldown(true);
 
 	LuaVal addonTable(TTABLE);
 	LuaVal cacheTable(TTABLE);

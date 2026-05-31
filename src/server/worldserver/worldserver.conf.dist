@@ -4108,7 +4108,7 @@ PacketSpoof.BanDuration = 86400
 #
 #    AIO.MaxParts
 #        Maximum number of parts a client can send to server
-#        Default: 4
+#        Default: 64 (large init payloads may need many 255-byte parts)
 #
 #    AIO.MsgMaxLen
 #        Maximum size (bytes) of a single addon whisper packet (entire payload including AIO headers).
@@ -4133,7 +4133,7 @@ PacketSpoof.BanDuration = 86400
 #
 
 AIO.Prefix = "AIO"
-AIO.MaxParts = 4
+AIO.MaxParts = 64
 AIO.MsgMaxLen = 255
 AIO.InitCooldown = 5000
 AIO.BufferTimeout = 30000

@@ -221,8 +221,8 @@ public:
         if (!*args)
             return false;
 
-        uint32 perm = sWorld->RemoveAddon(args);
-        if (perm != 0)
+        uint32 perm = AIO_DEFAULT_ADDON_PERMISSION;
+        if (sWorld->RemoveAddon(args, &perm))
             sWorld->ForceReloadPlayerAddons(perm);
         else
             handler->PSendSysMessage(LANG_CAIO_REMOVEADDON_ERROR, args);

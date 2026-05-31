@@ -305,7 +305,7 @@ bool World::AddAddon(const AIOAddon &addon);
 // It is required to call World::ForceReloadPlayerAddons()
 // if addons are added after server is fully initialized
 // for online players to load the added addons.
-uint32 World::RemoveAddon(const std::string &addonName);
+bool World::RemoveAddon(std::string const& addonName, uint32* permission = nullptr);
 ```
 
 ## CAIO game commands

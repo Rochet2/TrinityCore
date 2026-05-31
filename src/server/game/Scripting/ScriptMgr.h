@@ -947,9 +947,6 @@ class AIOScript : public ScriptObject
 		template<class ScriptClass>
 		ScriptClass *GetScript(const LuaVal &key);
 
-		template<>
-		AIOScript *GetScript(const LuaVal &key);
-
 	private:
 		void OnHandle(Player *sender, const LuaVal &handlerKey, const LuaVal &args);
 

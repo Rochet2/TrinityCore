@@ -334,6 +334,12 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
                             }
 
                             uint32 partId = (msg[delimPos + 5] - 1) * 254 + msg[delimPos + 6] - 1;
+                            if (partId < 1 || partId > parts)
+                            {
+                                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "HandleAddonMessagechatOpcode: Invalid AIO part id %u for %u parts. Message Id: %u, Sender: %s", partId, parts, messageId, sender->GetName().c_str());
+                                return;
+                            }
+
                             std::string const partPayload = msg.substr(delimPos + 7);
                             uint32 const maxBufferSize = sWorld->getIntConfig(CONFIG_AIO_MAX_BUFFER_SIZE);
 
@@ -355,11 +361,25 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
 
                             messagePartsItr->second.Map[partId] = std::move(partPayload);
 
-                            if (messagePartsItr->second.Map.size() >= messagePartsItr->second.Parts)
+                            bool haveAllParts = messagePartsItr->second.Map.size() >= messagePartsItr->second.Parts;
+                            if (haveAllParts)
+                            {
+                                for (uint32 expectedPart = 1; expectedPart <= parts; ++expectedPart)
+                                {
+                                    if (messagePartsItr->second.Map.find(expectedPart) == messagePartsItr->second.Map.end())
+                                    {
+                                        haveAllParts = false;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (haveAllParts)
                             {
                                 std::string actualAIOMessage;
-                                for (AddonPartStringMap::const_iterator itr = messagePartsItr->second.Map.begin(); itr != messagePartsItr->second.Map.end(); ++itr)
-                                    actualAIOMessage += itr->second;
+                                actualAIOMessage.reserve(messagePartsItr->second.BufferedBytes);
+                                for (uint32 expectedPart = 1; expectedPart <= parts; ++expectedPart)
+                                    actualAIOMessage += messagePartsItr->second.Map.find(expectedPart)->second;
 
                                 sScriptMgr->OnAddonMessage(sender, actualAIOMessage);
                                 _addonMessageBuffer.erase(messagePartsItr);

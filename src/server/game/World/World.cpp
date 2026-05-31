@@ -20,6 +20,7 @@
 */
 
 #include "World.h"
+#include <algorithm>
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AddonMgr.h"
@@ -1568,7 +1569,7 @@ void World::LoadConfigSettings(bool reload)
     m_bool_configs[CONFIG_CALCULATE_GAMEOBJECT_ZONE_AREA_DATA] = sConfigMgr->GetBoolDefault("Calculate.Gameoject.Zone.Area.Data", false);
 
     // AIO (255 = max WoW addon whisper length; must match client AIO_MsgLen when using client-side AIO)
-    m_int_configs[CONFIG_AIO_MAXPARTS] = sConfigMgr->GetIntDefault("AIO.MaxParts", 4);
+    m_int_configs[CONFIG_AIO_MAXPARTS] = sConfigMgr->GetIntDefault("AIO.MaxParts", 64);
     m_int_configs[CONFIG_AIO_MSG_MAX_LEN] = std::min<uint32>(sConfigMgr->GetIntDefault("AIO.MsgMaxLen", AIO_MAX_WHISPER_LENGTH), AIO_MAX_WHISPER_LENGTH);
     m_int_configs[CONFIG_AIO_INIT_COOLDOWN] = sConfigMgr->GetIntDefault("AIO.InitCooldown", 5000);
     m_int_configs[CONFIG_AIO_BUFFER_TIMEOUT] = sConfigMgr->GetIntDefault("AIO.BufferTimeout", 30000);
@@ -3663,20 +3664,19 @@ bool World::AddAddon(AIOAddon const& addon)
 	return true;
 }
 
-uint32 World::RemoveAddon(const std::string &addonName)
+bool World::RemoveAddon(std::string const& addonName, uint32* permission)
 {
-	for(AddonCodeListType::iterator itr = m_AddonList.begin();
-		itr != m_AddonList.end();
-		++itr)
+	for (AddonCodeListType::iterator itr = m_AddonList.begin(); itr != m_AddonList.end(); ++itr)
 	{
-		if(itr->name == addonName)
+		if (itr->name == addonName)
 		{
-			uint32 sec = itr->permission;
+			if (permission)
+				*permission = itr->permission;
 			m_AddonList.erase(itr);
-			return sec;
+			return true;
 		}
 	}
-	return 0;
+	return false;
 }
 
 bool World::ReloadAddons()

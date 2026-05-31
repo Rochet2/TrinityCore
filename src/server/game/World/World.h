@@ -808,7 +808,7 @@ class TC_GAME_API World
         void SendAllSimpleAIOMessage(std::string const& message, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
         bool ReloadAddons();
         bool AddAddon(AIOAddon const& addon);
-        uint32 RemoveAddon(std::string const& addonName);
+        bool RemoveAddon(std::string const& addonName, uint32* permission = nullptr);
         size_t PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const;
 
         void RemoveOldCorpses();
