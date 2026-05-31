@@ -25,7 +25,7 @@
 #include <memory>
 #include <vector>
 
-#include "smallfolk_cpp/smallfolk.h"
+#include "smallfolk.h"
 
 #include "World.h"
 

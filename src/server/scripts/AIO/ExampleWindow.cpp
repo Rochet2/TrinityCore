@@ -1,7 +1,7 @@
 #include "ScriptMgr.h"
 #include "Player.h"
 #include "Chat.h"
-#include "smallfolk_cpp/smallfolk.h"
+#include "smallfolk.h"
 
 // Optional CAIO test script (from Rochet2). Pairs with AIO Examples/TestWindow client addons.
 // Place ExampleWindow.lua (and related client files) under lua_client_scripts/ExampleWindow/
