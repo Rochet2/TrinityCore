@@ -483,7 +483,7 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
 			itr != _addonMessageBuffer.end();)
 		{
 			itr->second.Timer += diff;
-			if(itr->second.Timer >= 30000)
+			if (itr->second.Timer >= sWorld->getIntConfig(CONFIG_AIO_BUFFER_TIMEOUT))
 			{
 				_addonMessageBuffer.erase(itr++);
 			}

@@ -23,8 +23,13 @@ Use `AIOMsg` / `AIO.Msg():Add(...)` rather than building tables manually.
 
 - Prefix: `S` + `AIO.Prefix` + `\t` (server→client) or `C` + prefix + `\t` (client→server).
 - Short message: two bytes `\1\1` then the smallfolk string.
-- Long message: `messageId` (2) + `parts` (2) + `partId` (2) + chunk; chunk size is `AIO.MsgMaxLen` in `worldserver.conf` (default **2560**, same as `AIO_MsgLen` in server `AIO.lua`).
+- Long message: 2-byte message id + 2-byte part count + 2-byte part id + chunk.
+- Each whisper packet must fit in **255 bytes** total (WoW addon limit). Configure `AIO.MsgMaxLen` (default **255**). Long payloads split using `chunkLen = MsgMaxLen - headerBytes` where `headerBytes = 1 + len(prefix) + 1 + 6`.
 
 ## Version handshake
 
-On init, client sends `AIO` / `Init` with `AIO_VERSION`. Server must define the same `AIO_VERSION` in `World.h` (currently **1.75**).
+On init, client sends `AIO` / `Init` with protocol version **1.75**. Server defines `AIO_VERSION` / `AIO_VERSION_STRING` in `World.h`.
+
+## Compression / obfuscation
+
+Not implemented on this branch. Addon files are sent with an `U` (uncompressed) prefix only.

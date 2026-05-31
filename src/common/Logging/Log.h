@@ -92,9 +92,7 @@ class TC_COMMON_API Log
             if (!ShouldLog("AIO", level))
                 return;
 
-            write(std::make_unique<LogMessage>(level, "AIO",
-                Trinity::StringFormat(fmt, std::forward<Args>(args)...),
-                account ? std::to_string(account) : "World"));
+            OutAIOMessageImpl(account, level, fmt, Trinity::MakeFormatArgs(args...));
         }
 
         void OutCharDump(char const* str, uint32 account_id, uint64 guid, char const* name);
@@ -124,6 +122,7 @@ class TC_COMMON_API Log
         void RegisterAppender(uint8 index, AppenderCreatorFn appenderCreateFn);
         void OutMessageImpl(std::string_view filter, LogLevel level, Trinity::FormatStringView messageFormat, Trinity::FormatArgs messageFormatArgs);
         void OutCommandImpl(uint32 account, Trinity::FormatStringView messageFormat, Trinity::FormatArgs messageFormatArgs);
+        void OutAIOMessageImpl(uint32 account, LogLevel level, Trinity::FormatStringView messageFormat, Trinity::FormatArgs messageFormatArgs);
 
         std::unordered_map<uint8, AppenderCreatorFn> appenderFactory;
         std::unordered_map<uint8, std::unique_ptr<Appender>> appenders;

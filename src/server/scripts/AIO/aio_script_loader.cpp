@@ -15,11 +15,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifdef WITH_CAIO_EXAMPLES
 void AddSC_ExampleWindow();
+#endif
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
 void AddAIOScripts()
 {
+#ifdef WITH_CAIO_EXAMPLES
     AddSC_ExampleWindow();
+#endif
 }

@@ -38,6 +38,11 @@
 #define AIO_VERSION 1.75
 #define AIO_VERSION_STRING "1.75"
 
+// RBAC permission id used when distributing addons/messages to players (see sql/CAIO/Auth.sql)
+constexpr uint32 AIO_DEFAULT_ADDON_PERMISSION = 195;
+// WoW addon whisper payload limit (matches client AIO.lua when AIO_SERVER is false)
+constexpr uint32 AIO_MAX_WHISPER_LENGTH = 255;
+
 class Object;
 class Player;
 class WorldPacket;
@@ -169,8 +174,6 @@ enum WorldBoolConfigs : uint32
     CONFIG_ALLOW_TRACK_BOTH_RESOURCES,
     CONFIG_CALCULATE_CREATURE_ZONE_AREA_DATA,
     CONFIG_CALCULATE_GAMEOBJECT_ZONE_AREA_DATA,
-    CONFIG_AIO_OBFUSCATE,
-    CONFIG_AIO_COMPRESS,
     CONFIG_RESET_DUEL_COOLDOWNS,
     CONFIG_RESET_DUEL_HEALTH_MANA,
     CONFIG_BASEMAP_LOAD_GRIDS,
@@ -399,6 +402,9 @@ enum WorldIntConfigs : uint32
     CONFIG_NO_GRAY_AGGRO_BELOW,
     CONFIG_AIO_MAXPARTS,
     CONFIG_AIO_MSG_MAX_LEN,
+    CONFIG_AIO_INIT_COOLDOWN,
+    CONFIG_AIO_BUFFER_TIMEOUT,
+    CONFIG_AIO_MAX_BUFFER_SIZE,
     CONFIG_AUCTION_GETALL_DELAY,
     CONFIG_AUCTION_SEARCH_DELAY,
     CONFIG_TALENTS_INSPECTING,
@@ -789,17 +795,17 @@ class TC_GAME_API World
             uint32 crc;
             uint32 permission;
 
-            AIOAddon(std::string const& addonName, std::string const& addonFile, uint32 permission = 195)
-                : name(addonName), file(addonFile), permission(permission), crc(0) { }
+            AIOAddon(std::string const& addonName, std::string const& addonFile, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION)
+                : name(addonName), file(addonFile), crc(0), permission(permission) { }
         };
 
         std::string GetAIOPrefix() const { return m_aioprefix; }
         std::string GetAIOClientScriptPath() const { return m_aioclientpath; }
 
-        void ForceReloadPlayerAddons(uint32 permission = 195);
-        void ForceResetPlayerAddons(uint32 permission = 195);
-        void AIOMessageAll(AIOMsg& msg, uint32 permission = 195);
-        void SendAllSimpleAIOMessage(std::string const& message, uint32 permission = 195);
+        void ForceReloadPlayerAddons(uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
+        void ForceResetPlayerAddons(uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
+        void AIOMessageAll(AIOMsg& msg, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
+        void SendAllSimpleAIOMessage(std::string const& message, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
         bool ReloadAddons();
         bool AddAddon(AIOAddon const& addon);
         uint32 RemoveAddon(std::string const& addonName);

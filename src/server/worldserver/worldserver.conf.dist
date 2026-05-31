@@ -4111,9 +4111,21 @@ PacketSpoof.BanDuration = 86400
 #        Default: 4
 #
 #    AIO.MsgMaxLen
-#        Maximum payload size (bytes) for a single server->client AIO addon message part
-#        Should match AIO_MsgLen in your AIO.lua (default 2560 on server in AIO 1.75)
-#        Default: 2560
+#        Maximum size (bytes) of a single addon whisper packet (entire payload including AIO headers).
+#        Must be 255 or less to match the WoW client addon message limit used by AIO.lua.
+#        Default: 255
+#
+#    AIO.InitCooldown
+#        Milliseconds before a player can call AIO Init again after a successful init.
+#        Default: 5000
+#
+#    AIO.BufferTimeout
+#        Milliseconds before incomplete incoming long AIO messages are discarded.
+#        Default: 30000
+#
+#    AIO.MaxBufferSize
+#        Maximum total bytes buffered per long AIO message while reassembling parts.
+#        Default: 1048576
 #
 #    AIO.ClientScriptPath
 #        Path to client lua scripts to send to the client
@@ -4122,10 +4134,11 @@ PacketSpoof.BanDuration = 86400
 
 AIO.Prefix = "AIO"
 AIO.MaxParts = 4
-AIO.MsgMaxLen = 2560
+AIO.MsgMaxLen = 255
+AIO.InitCooldown = 5000
+AIO.BufferTimeout = 30000
+AIO.MaxBufferSize = 1048576
 AIO.ClientScriptPath = "lua_client_scripts"
-AIO.Obfuscate = 1
-AIO.Compress = 1
 
 #
 ###################################################################################################

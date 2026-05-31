@@ -27,6 +27,8 @@
 
 #include "smallfolk_cpp/smallfolk.h"
 
+#include "World.h"
+
 class AccountMgr;
 class AuctionHouseObject;
 class Aura;
@@ -938,7 +940,7 @@ class AIOScript : public ScriptObject
 		// It is required to call World::ForceReloadPlayerAddons()
 		// if addons are added after server is fully initialized
 		// for online players to load the added addons.
-		bool AddAddon(const World::AIOAddon &addon) { return sWorld->AddAddon(addon); }
+		bool AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
 
 		// Returns pointer to an AIO script by its key and typename.
 		// Returns null if scriptName doesn't exist or typename was incorrect.

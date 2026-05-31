@@ -1353,13 +1353,10 @@ class TC_GAME_API WorldSession
 		typedef std::map<uint32, std::string> AddonPartStringMap;
 		struct LongMessageBufferInfo
 		{
-			uint32 Parts;
-			uint32 Timer;
+			uint32 Parts = 0;
+			uint32 Timer = 0;
+			uint32 BufferedBytes = 0;
 			AddonPartStringMap Map;
-
-			LongMessageBufferInfo()
-				: Parts(0), Timer(0)
-			{ }
 		};
 		typedef std::map<uint16, LongMessageBufferInfo> AddonMessageBufferMap;
 		AddonMessageBufferMap _addonMessageBuffer;

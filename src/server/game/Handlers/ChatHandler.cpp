@@ -322,7 +322,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
                             uint32 parts = (msg[delimPos + 3] - 1) * 254 + msg[delimPos + 4] - 1;
                             if (parts < 2)
                             {
-                                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "HandleAddonMessagechatOpcode: Received AIO addon message with number of parts: %u (< 2). Message Id: %u, Sender: %s", parts, messageId, sender->GetName().c_str());
+                                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "HandleAddonMessagechatOpcode: Received AIO addon message with number of parts: %u (< 2). Sender: %s", parts, sender->GetName().c_str());
                                 return;
                             }
 
@@ -334,6 +334,8 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
                             }
 
                             uint32 partId = (msg[delimPos + 5] - 1) * 254 + msg[delimPos + 6] - 1;
+                            std::string const partPayload = msg.substr(delimPos + 7);
+                            uint32 const maxBufferSize = sWorld->getIntConfig(CONFIG_AIO_MAX_BUFFER_SIZE);
 
                             AddonMessageBufferMap::iterator messagePartsItr = _addonMessageBuffer.find(messageId);
                             if (messagePartsItr == _addonMessageBuffer.end())
@@ -342,7 +344,16 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
                                 messagePartsItr->second = LongMessageBufferInfo();
 
                             messagePartsItr->second.Parts = parts;
-                            messagePartsItr->second.Map[partId] = msg.substr(delimPos + 7);
+                            messagePartsItr->second.Timer = 0;
+                            messagePartsItr->second.BufferedBytes += uint32(partPayload.size());
+                            if (messagePartsItr->second.BufferedBytes > maxBufferSize)
+                            {
+                                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "HandleAddonMessagechatOpcode: AIO reassembly buffer exceeded %u bytes. Message Id: %u, Sender: %s", maxBufferSize, messageId, sender->GetName().c_str());
+                                _addonMessageBuffer.erase(messagePartsItr);
+                                return;
+                            }
+
+                            messagePartsItr->second.Map[partId] = std::move(partPayload);
 
                             if (messagePartsItr->second.Map.size() >= messagePartsItr->second.Parts)
                             {

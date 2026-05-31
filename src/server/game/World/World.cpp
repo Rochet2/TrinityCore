@@ -1567,11 +1567,12 @@ void World::LoadConfigSettings(bool reload)
     m_bool_configs[CONFIG_CALCULATE_CREATURE_ZONE_AREA_DATA] = sConfigMgr->GetBoolDefault("Calculate.Creature.Zone.Area.Data", false);
     m_bool_configs[CONFIG_CALCULATE_GAMEOBJECT_ZONE_AREA_DATA] = sConfigMgr->GetBoolDefault("Calculate.Gameoject.Zone.Area.Data", false);
 
-    // AIO
+    // AIO (255 = max WoW addon whisper length; must match client AIO_MsgLen when using client-side AIO)
     m_int_configs[CONFIG_AIO_MAXPARTS] = sConfigMgr->GetIntDefault("AIO.MaxParts", 4);
-    m_int_configs[CONFIG_AIO_MSG_MAX_LEN] = sConfigMgr->GetIntDefault("AIO.MsgMaxLen", 2560);
-    m_bool_configs[CONFIG_AIO_OBFUSCATE] = sConfigMgr->GetBoolDefault("AIO.Obfuscate", true);
-    m_bool_configs[CONFIG_AIO_COMPRESS] = sConfigMgr->GetBoolDefault("AIO.Compress", true);
+    m_int_configs[CONFIG_AIO_MSG_MAX_LEN] = std::min<uint32>(sConfigMgr->GetIntDefault("AIO.MsgMaxLen", AIO_MAX_WHISPER_LENGTH), AIO_MAX_WHISPER_LENGTH);
+    m_int_configs[CONFIG_AIO_INIT_COOLDOWN] = sConfigMgr->GetIntDefault("AIO.InitCooldown", 5000);
+    m_int_configs[CONFIG_AIO_BUFFER_TIMEOUT] = sConfigMgr->GetIntDefault("AIO.BufferTimeout", 30000);
+    m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE] = sConfigMgr->GetIntDefault("AIO.MaxBufferSize", 1048576);
     m_aioclientpath = sConfigMgr->GetStringDefault("AIO.ClientScriptPath", "lua_client_scripts");
     m_aioprefix = sConfigMgr->GetStringDefault("AIO.Prefix", "AIO");
     if (m_aioprefix.size() > 15)
@@ -3654,19 +3655,8 @@ bool World::AddAddon(AIOAddon const& addon)
 	crc_result.process_bytes(copy.code.data(), copy.code.length());
 	copy.crc = crc_result.checksum();
 
-	//Process code
-	char compressPrefix = 'U';
-// 	if(sWorld->getBoolConfig(CONFIG_AIO_OBFUSCATE))
-// 	{
-// 		//Obf
-// 	}
-// 	if(sWorld->getBoolConfig(CONFIG_AIO_COMPRESS))
-// 	{
-// 		compressPrefix = 'C';
-// 	}
-
-	//Set final code and go
-	copy.code = std::string(1, compressPrefix) + copy.code;
+	// Uncompressed addon payload (compression/obfuscation not implemented)
+	copy.code = std::string(1, 'U') + copy.code;
 	m_AddonList.push_back(copy);
 
 	sLog->outAIOMessage(0, LOG_LEVEL_INFO, "AIO: Loaded addon %s from file %s", copy.name.c_str(), copy.file.c_str());
@@ -3721,6 +3711,9 @@ bool World::ReloadAddons()
 
 size_t World::PrepareClientAddons(const LuaVal &clientData, LuaVal &addonsTable, LuaVal &cacheTable, Player *forPlayer) const
 {
+	if (!clientData.istable())
+		return 0;
+
 	uint32 i = 0;
 	for(AddonCodeListType::const_iterator itr = m_AddonList.begin();
 		itr != m_AddonList.end();
@@ -3729,7 +3722,7 @@ size_t World::PrepareClientAddons(const LuaVal &clientData, LuaVal &addonsTable,
 		if(!forPlayer->GetSession()->HasPermission(itr->permission))
 			continue;
 
-		LuaVal &CRCVal = clientData[itr->name];
+		LuaVal CRCVal = clientData.get(itr->name);
 		if(CRCVal == itr->crc)
 		{
 			cacheTable[++i] = itr->name;
