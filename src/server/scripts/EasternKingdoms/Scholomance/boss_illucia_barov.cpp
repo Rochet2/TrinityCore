@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,95 +16,96 @@
  */
 
 /*
-Name: Boss_Illucia_Barov
-%Complete: 100
-Comment:
-Category: Scholomance
-*/
+ * Timers requires to be revisited
+ */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "scholomance.h"
+#include "ScriptedCreature.h"
 
-enum Spells
+enum IlluciaSpells
 {
-    SPELL_CURSEOFAGONY          = 34794,
-    SPELL_SHADOWSHOCK           = 34799,
-    SPELL_SILENCE               = 34803,
-    SPELL_FEAR                  = 34803
+    SPELL_CURSE_OF_AGONY        = 18671,
+    SPELL_DOMINATE_MIND         = 14515,
+    SPELL_FEAR                  = 12542,
+    SPELL_SHADOW_SHOCK          = 17289,
+    SPELL_SILENCE               = 12528
 };
 
-enum Events
+enum IlluciaEvents
 {
-    EVENT_CURSEOFAGONY          = 1,
-    EVENT_SHADOWSHOCK           = 2,
-    EVENT_SILENCE               = 3,
-    EVENT_FEAR                  = 4
+    EVENT_CURSE_OF_AGONY        = 1,
+    EVENT_DOMINATE_MIND,
+    EVENT_FEAR,
+    EVENT_SHADOW_SHOCK,
+    EVENT_SILENCE
 };
 
-class boss_illucia_barov : public CreatureScript
+// 10502 - Lady Illucia Barov
+struct boss_illucia_barov : public BossAI
 {
-    public: boss_illucia_barov() : CreatureScript("boss_illucia_barov") { }
+    boss_illucia_barov(Creature* creature) : BossAI(creature, DATA_LADY_ILLUCIA_BAROV) { }
 
-        struct boss_illuciabarovAI : public BossAI
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+
+        events.ScheduleEvent(EVENT_CURSE_OF_AGONY, 10s, 20s);
+        events.ScheduleEvent(EVENT_DOMINATE_MIND, 15s, 25s);
+        events.ScheduleEvent(EVENT_FEAR, 15s, 30s);
+        events.ScheduleEvent(EVENT_SHADOW_SHOCK, 10s, 15s);
+        events.ScheduleEvent(EVENT_SILENCE, 10s, 15s);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_illuciabarovAI(Creature* creature) : BossAI(creature, DATA_LADYILLUCIABAROV) { }
-
-            void EnterCombat(Unit* /*who*/) override
+            switch (eventId)
             {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_CURSEOFAGONY, 18000);
-                events.ScheduleEvent(EVENT_SHADOWSHOCK, 9000);
-                events.ScheduleEvent(EVENT_SILENCE, 5000);
-                events.ScheduleEvent(EVENT_FEAR, 30000);
+                case EVENT_CURSE_OF_AGONY:
+                    DoCastSelf(SPELL_CURSE_OF_AGONY);
+                    events.Repeat(20s, 30s);
+                    break;
+                case EVENT_DOMINATE_MIND:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1))
+                        DoCast(target, SPELL_DOMINATE_MIND);
+                    events.Repeat(25s, 40s);
+                    break;
+                case EVENT_FEAR:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                        DoCast(target, SPELL_FEAR);
+                    events.Repeat(15s, 25s);
+                    break;
+                case EVENT_SHADOW_SHOCK:
+                    DoCastVictim(SPELL_SHADOW_SHOCK);
+                    events.Repeat(10s, 15s);
+                    break;
+                case EVENT_SILENCE:
+                    DoCastSelf(SPELL_SILENCE);
+                    events.Repeat(20s, 30s);
+                    break;
+                default:
+                    break;
             }
 
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_CURSEOFAGONY:
-                            DoCastVictim(SPELL_CURSEOFAGONY, true);
-                            events.ScheduleEvent(EVENT_CURSEOFAGONY, 30000);
-                            break;
-                        case EVENT_SHADOWSHOCK:
-                            DoCast(SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true), SPELL_SHADOWSHOCK, true);
-                            events.ScheduleEvent(EVENT_SHADOWSHOCK, 12000);
-                            break;
-                        case EVENT_SILENCE:
-                            DoCastVictim(SPELL_SILENCE, true);
-                            events.ScheduleEvent(EVENT_SILENCE, 14000);
-                            break;
-                        case EVENT_FEAR:
-                            DoCastVictim(SPELL_FEAR, true);
-                            events.ScheduleEvent(EVENT_FEAR, 30000);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_illuciabarovAI(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+
+        DoMeleeAttackIfReady();
+    }
 };
 
 void AddSC_boss_illuciabarov()
 {
-    new boss_illucia_barov();
+    RegisterScholomanceCreatureAI(boss_illucia_barov);
 }

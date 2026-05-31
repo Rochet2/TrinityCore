@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,9 +15,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "zulgurub.h"
+#include "InstanceScript.h"
+#include "ObjectAccessor.h"
+#include "ScriptedCreature.h"
+#include "ScriptMgr.h"
+#include "TemporarySummon.h"
 
 enum Say
 {
@@ -65,205 +67,180 @@ Position const Formation[] =
     { -11580.5996f, -1254.7900f, 77.6298f, 0.0f }
 };
 
-class boss_jindo : public CreatureScript
+struct boss_jindo : public BossAI
 {
-    public:
-        boss_jindo() : CreatureScript("boss_jindo") { }
+    boss_jindo(Creature* creature) : BossAI(creature, DATA_JINDO) { }
 
-        struct boss_jindoAI : public BossAI
+    void Reset() override
+    {
+        _Reset();
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        _JustDied();
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        events.ScheduleEvent(EVENT_BRAIN_WASH_TOTEM, 20s);
+        events.ScheduleEvent(EVENT_POWERFULL_HEALING_WARD, 15s);
+        events.ScheduleEvent(EVENT_HEX, 8s);
+        events.ScheduleEvent(EVENT_DELUSIONS_OF_JINDO, 10s);
+        events.ScheduleEvent(EVENT_TELEPORT, 5s);
+        Talk(SAY_AGGRO);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_jindoAI(Creature* creature) : BossAI(creature, DATA_JINDO) { }
-
-            void Reset() override
+            switch (eventId)
             {
-                _Reset();
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                _JustDied();
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_BRAIN_WASH_TOTEM, 20000);
-                events.ScheduleEvent(EVENT_POWERFULL_HEALING_WARD, 16000);
-                events.ScheduleEvent(EVENT_HEX, 8000);
-                events.ScheduleEvent(EVENT_DELUSIONS_OF_JINDO, 10000);
-                events.ScheduleEvent(EVENT_TELEPORT, 5000);
-                Talk(SAY_AGGRO);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
+                case EVENT_BRAIN_WASH_TOTEM:
+                    DoCast(me, SPELL_BRAIN_WASH_TOTEM);
+                    events.ScheduleEvent(EVENT_BRAIN_WASH_TOTEM, 18s, 26s);
+                    break;
+                case EVENT_POWERFULL_HEALING_WARD:
+                    DoCast(me, SPELL_POWERFULL_HEALING_WARD);
+                    events.ScheduleEvent(EVENT_POWERFULL_HEALING_WARD, 14s, 20s);
+                    break;
+                case EVENT_HEX:
+                    if (Unit* target = me->GetVictim())
                     {
-                        case EVENT_BRAIN_WASH_TOTEM:
-                            DoCast(me, SPELL_BRAIN_WASH_TOTEM);
-                            events.ScheduleEvent(EVENT_BRAIN_WASH_TOTEM, urand(18000, 26000));
-                            break;
-                        case EVENT_POWERFULL_HEALING_WARD:
-                            DoCast(me, SPELL_POWERFULL_HEALING_WARD);
-                            events.ScheduleEvent(EVENT_POWERFULL_HEALING_WARD, urand(14000, 20000));
-                            break;
-                        case EVENT_HEX:
-                            if (Unit* target = me->GetVictim())
-                            {
-                                DoCast(target, SPELL_HEX, true);
-                                if (DoGetThreat(target))
-                                    DoModifyThreatPercent(target, -80);
-                            }
-                            events.ScheduleEvent(EVENT_HEX, urand(12000, 20000));
-                            break;
-                        case EVENT_DELUSIONS_OF_JINDO:
-                            // Casting the delusion curse with a shade so shade will attack the same target with the curse.
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100.0f, true))
-                            {
-                                DoCast(target, SPELL_SHADE_OF_JINDO, true);
-                                DoCast(target, SPELL_DELUSIONS_OF_JINDO);
-                            }
-                            events.ScheduleEvent(EVENT_DELUSIONS_OF_JINDO, urand(4000, 12000));
-                            break;
-                        case EVENT_TELEPORT:
-                            // Teleports a random player and spawns 9 Sacrificed Trolls to attack player
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100.0f, true))
-                            {
-                                DoTeleportPlayer(target, TeleportLoc.GetPositionX(), TeleportLoc.GetPositionY(), TeleportLoc.GetPositionZ(), TeleportLoc.GetOrientation());
-                                if (DoGetThreat(me->GetVictim()))
-                                    DoModifyThreatPercent(target, -100);
-
-                                // Summon a formation of trolls
-                                for (uint8 i = 0; i < 10; ++i)
-                                    if (Creature* SacrificedTroll = me->SummonCreature(NPC_SACRIFICED_TROLL, Formation[i].GetPositionX(), Formation[i].GetPositionY(), Formation[i].GetPositionZ(), Formation[i].GetOrientation(), TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 15000))
-                                        SacrificedTroll->AI()->AttackStart(target);
-                            }
-                            events.ScheduleEvent(EVENT_TELEPORT, urand(15000, 23000));
-                            break;
-                        default:
-                            break;
+                        DoCast(target, SPELL_HEX, true);
+                        if (GetThreat(target))
+                            ModifyThreatByPercent(target, -80);
                     }
-                }
+                    events.ScheduleEvent(EVENT_HEX, 12s, 20s);
+                    break;
+                case EVENT_DELUSIONS_OF_JINDO:
+                    // Casting the delusion curse with a shade so shade will attack the same target with the curse.
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
+                    {
+                        DoCast(target, SPELL_SHADE_OF_JINDO, true);
+                        DoCast(target, SPELL_DELUSIONS_OF_JINDO);
+                    }
+                    events.ScheduleEvent(EVENT_DELUSIONS_OF_JINDO, 4s, 12s);
+                    break;
+                case EVENT_TELEPORT:
+                    // Teleports a random player and spawns 9 Sacrificed Trolls to attack player
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
+                    {
+                        DoTeleportPlayer(target, TeleportLoc.GetPositionX(), TeleportLoc.GetPositionY(), TeleportLoc.GetPositionZ(), TeleportLoc.GetOrientation());
+                        if (GetThreat(me->GetVictim()))
+                            ModifyThreatByPercent(target, -100);
 
-                DoMeleeAttackIfReady();
+                        // Summon a formation of trolls
+                        for (uint8 i = 0; i < 10; ++i)
+                            if (TempSummon* sacrificedTroll = me->SummonCreature(NPC_SACRIFICED_TROLL, Formation[i], TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 15s))
+                                sacrificedTroll->AI()->AttackStart(target);
+                    }
+                    events.ScheduleEvent(EVENT_TELEPORT, 15s, 23s);
+                    break;
+                default:
+                    break;
             }
-        };
 
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_jindoAI(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+
+        DoMeleeAttackIfReady();
+    }
 };
 
 // Healing Ward
-class npc_healing_ward : public CreatureScript
+struct npc_healing_ward : public ScriptedAI
 {
-    public:
-        npc_healing_ward() : CreatureScript("npc_healing_ward") { }
+    npc_healing_ward(Creature* creature) : ScriptedAI(creature), _instance(creature->GetInstanceScript())
+    {
+        Initialize();
+        creature->SetReactState(REACT_PASSIVE);
+    }
 
-        struct npc_healing_wardAI : public ScriptedAI
+    void Initialize()
+    {
+        _healTimer = 2000;
+    }
+
+    void Reset() override
+    {
+        Initialize();
+    }
+
+    void AttackStart(Unit* /*victim*/) override { }
+
+    void UpdateAI(uint32 diff) override
+    {
+        // Heal_Timer
+        if (_healTimer <= diff)
         {
-            npc_healing_wardAI(Creature* creature) : ScriptedAI(creature)
-            {
-                Initialize();
-                instance = creature->GetInstanceScript();
-            }
-
-            void Initialize()
-            {
-                Heal_Timer = 2000;
-            }
-
-            uint32 Heal_Timer;
-            InstanceScript* instance;
-
-            void Reset() override
-            {
-                Initialize();
-            }
-
-            void EnterCombat(Unit* /*who*/) override { }
-
-            void UpdateAI(uint32 diff) override
-            {
-                // Heal_Timer
-                if (Heal_Timer <= diff)
-                {
-                    if (Unit* jindo = ObjectAccessor::GetUnit(*me, instance->GetGuidData(DATA_JINDO)))
-                        DoCast(jindo, SPELL_HEAL);
-                    Heal_Timer = 3000;
-                } else Heal_Timer -= diff;
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetInstanceAI<npc_healing_wardAI>(creature);
+            if (Creature* jindo = _instance->GetCreature(DATA_JINDO))
+                DoCast(jindo, SPELL_HEAL);
+            _healTimer = 3000;
         }
+        else
+            _healTimer -= diff;
+    }
+
+private:
+    uint32 _healTimer;
+    InstanceScript* _instance;
 };
 
-//Shade of Jindo
-class npc_shade_of_jindo : public CreatureScript
+// Shade of Jindo
+struct npc_shade_of_jindo : public ScriptedAI
 {
-    public:
-        npc_shade_of_jindo() : CreatureScript("npc_shade_of_jindo") { }
+    npc_shade_of_jindo(Creature* creature) : ScriptedAI(creature)
+    {
+        Initialize();
+    }
 
-        struct npc_shade_of_jindoAI : public ScriptedAI
+    void Initialize()
+    {
+        _shadowShockTimer = 1000;
+    }
+
+    void Reset() override
+    {
+        Initialize();
+        DoCast(me, SPELL_INVISIBLE, true);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        // ShadowShock_Timer
+        if (_shadowShockTimer <= diff)
         {
-            npc_shade_of_jindoAI(Creature* creature) : ScriptedAI(creature)
-            {
-                Initialize();
-            }
-
-            void Initialize()
-            {
-                ShadowShock_Timer = 1000;
-            }
-
-            uint32 ShadowShock_Timer;
-
-            void Reset() override
-            {
-                Initialize();
-                DoCast(me, SPELL_INVISIBLE, true);
-            }
-
-            void EnterCombat(Unit* /*who*/) override { }
-
-            void UpdateAI(uint32 diff) override
-            {
-                // ShadowShock_Timer
-                if (ShadowShock_Timer <= diff)
-                {
-                    DoCastVictim(SPELL_SHADOWSHOCK);
-                    ShadowShock_Timer = 2000;
-                } else ShadowShock_Timer -= diff;
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new npc_shade_of_jindoAI(creature);
+            DoCastVictim(SPELL_SHADOWSHOCK);
+            _shadowShockTimer = 2000;
         }
+        else
+            _shadowShockTimer -= diff;
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    uint32 _shadowShockTimer;
 };
 
 void AddSC_boss_jindo()
 {
-    new boss_jindo();
-    new npc_healing_ward();
-    new npc_shade_of_jindo();
+    RegisterZulGurubCreatureAI(boss_jindo);
+    RegisterZulGurubCreatureAI(npc_healing_ward);
+    RegisterZulGurubCreatureAI(npc_shade_of_jindo);
 }

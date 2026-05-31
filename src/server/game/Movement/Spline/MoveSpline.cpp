@@ -1,19 +1,18 @@
 /*
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "MoveSpline.h"
@@ -60,8 +59,8 @@ Location MoveSpline::ComputePosition() const
             c.orientation = std::atan2(hermite.y, hermite.x);
         }
 
-        if (splineflags.orientationInversed)
-            c.orientation = -c.orientation;
+        if (splineflags.backward)
+            c.orientation = c.orientation - float(M_PI);
     }
     return c;
 }
@@ -117,21 +116,18 @@ struct CommonInitializer
     }
 };
 
-void MoveSpline::init_spline(const MoveSplineInitArgs& args)
+void MoveSpline::init_spline(MoveSplineInitArgs const& args)
 {
-    const SplineBase::EvaluationMode modes[2] = {SplineBase::ModeLinear, SplineBase::ModeCatmullrom};
+    static SplineBase::EvaluationMode const modes[2] = { SplineBase::ModeLinear, SplineBase::ModeCatmullrom };
     if (args.flags.cyclic)
     {
         uint32 cyclic_point = 0;
-        // MoveSplineFlag::Enter_Cycle support dropped
-        //if (splineflags & SPLINEFLAG_ENTER_CYCLE)
-        //cyclic_point = 1;   // shouldn't be modified, came from client
-        spline.init_cyclic_spline(&args.path[0], args.path.size(), modes[args.flags.isSmooth()], cyclic_point);
+        if (splineflags.enter_cycle)
+            cyclic_point = 1;   // shouldn't be modified, came from client
+        spline.init_cyclic_spline(&args.path[0], args.path.size(), modes[args.flags.isSmooth()], cyclic_point, args.initialOrientation);
     }
     else
-    {
-        spline.init_spline(&args.path[0], args.path.size(), modes[args.flags.isSmooth()]);
-    }
+        spline.init_spline(&args.path[0], args.path.size(), modes[args.flags.isSmooth()], args.initialOrientation);
 
     // init spline timestamps
     if (splineflags.falling)
@@ -166,6 +162,8 @@ void MoveSpline::Initialize(MoveSplineInitArgs const& args)
     vertical_acceleration = 0.f;
     effect_start_time = 0;
 
+    velocity = args.velocity;
+
     // Check if its a stop spline
     if (args.flags.done)
     {
@@ -189,7 +187,7 @@ void MoveSpline::Initialize(MoveSplineInitArgs const& args)
 }
 
 MoveSpline::MoveSpline() : m_Id(0), time_passed(0),
-    vertical_acceleration(0.f), initialOrientation(0.f), effect_start_time(0), point_Idx(0), point_Idx_offset(0),
+    vertical_acceleration(0.f), initialOrientation(0.f), effect_start_time(0), point_Idx(0), point_Idx_offset(0), velocity(0.f),
     onTransport(false)
 {
     splineflags.done = true;
@@ -202,11 +200,14 @@ bool MoveSplineInitArgs::Validate(Unit* unit) const
 #define CHECK(exp) \
     if (!(exp))\
     {\
-        TC_LOG_ERROR("misc", "MoveSplineInitArgs::Validate: expression '%s' failed for GUID: %u Entry: %u", #exp, unit->GetTypeId() == TYPEID_PLAYER ? unit->GetGUIDLow() : unit->ToCreature()->GetDBTableGUIDLow(), unit->GetEntry());\
+        if (unit)\
+            TC_LOG_ERROR("misc.movesplineinitargs", "MoveSplineInitArgs::Validate: expression '{}' failed for {}", #exp, unit->GetDebugInfo());\
+        else\
+            TC_LOG_ERROR("misc.movesplineinitargs", "MoveSplineInitArgs::Validate: expression '{}' failed for cyclic spline continuation", #exp); \
         return false;\
     }
     CHECK(path.size() > 1);
-    CHECK(velocity > 0.1f);
+    CHECK(velocity >= 0.001f);
     CHECK(time_perc >= 0.f && time_perc <= 1.f);
     //CHECK(_checkPathBounds());
     return true;
@@ -217,17 +218,25 @@ bool MoveSplineInitArgs::Validate(Unit* unit) const
 // each vertex offset packed into 11 bytes
 bool MoveSplineInitArgs::_checkPathBounds() const
 {
+    constexpr float MIN_XY_OFFSET = -(1 << 11) / 4.0f;
+    constexpr float MIN_Z_OFFSET = -(1 << 10) / 4.0f;
+
+    // positive values have 1 less bit limit (if the highest bit was set, value would be sign extended into negative when decompressing)
+    constexpr float MAX_XY_OFFSET = (1 << 10) / 4.0f;
+    constexpr float MAX_Z_OFFSET = (1 << 9) / 4.0f;
+
+    auto isValidPackedXYOffset = [](float coord) -> bool { return coord > MIN_XY_OFFSET && coord < MAX_XY_OFFSET; };
+    auto isValidPackedZOffset = [](float coord) -> bool { return coord > MIN_Z_OFFSET && coord < MAX_Z_OFFSET; };
+
     if (!(flags & MoveSplineFlag::Mask_CatmullRom) && path.size() > 2)
     {
-        enum{
-            MAX_OFFSET = (1 << 11) / 2
-        };
-        Vector3 middle = (path.front()+path.back()) / 2;
-        Vector3 offset;
-        for (uint32 i = 1; i < path.size()-1; ++i)
+        Vector3 middle = (path.front() + path.back()) / 2;
+        for (uint32 i = 1; i < path.size() - 1; ++i)
         {
-            offset = path[i] - middle;
-            if (std::fabs(offset.x) >= MAX_OFFSET || std::fabs(offset.y) >= MAX_OFFSET || std::fabs(offset.z) >= MAX_OFFSET)
+            // when compression is enabled, each point coord is packed into 11 bits (10 for Z)
+            if (!isValidPackedXYOffset(middle.x - path[i].x)
+               || !isValidPackedXYOffset(middle.y - path[i].y)
+               || !isValidPackedZOffset(middle.z - path[i].z))
             {
                 TC_LOG_ERROR("misc", "MoveSplineInitArgs::_checkPathBounds check failed");
                 return false;
@@ -236,6 +245,17 @@ bool MoveSplineInitArgs::_checkPathBounds() const
     }
     return true;
 }
+
+MoveSplineInitArgs::MoveSplineInitArgs(size_t path_capacity /*= 16*/) : path_Idx_offset(0), velocity(0.f),
+parabolic_amplitude(0.f), time_perc(0.f), splineId(0), initialOrientation(0.f),
+walk(false), HasVelocity(false), TransformForTransport(true)
+{
+    path.reserve(path_capacity);
+}
+
+MoveSplineInitArgs::MoveSplineInitArgs(MoveSplineInitArgs && args) = default;
+
+MoveSplineInitArgs::~MoveSplineInitArgs() = default;
 
 /// ============================================================================================
 
@@ -268,6 +288,41 @@ MoveSpline::UpdateResult MoveSpline::_updateState(int32& ms_time_diff)
                 point_Idx = spline.first();
                 time_passed = time_passed % Duration();
                 result = Result_NextCycle;
+
+                // Remove first point from the path after one full cycle.
+                // That point was the position of the unit prior to entering the cycle and it shouldn't be repeated with continuous cycles.
+                if (splineflags.enter_cycle)
+                {
+                    splineflags.enter_cycle = false;
+
+                    MoveSplineInitArgs args{ (size_t)spline.getPointCount() };
+                    args.path.assign(spline.getPoints().begin() + spline.first() + 1, spline.getPoints().begin() + spline.last());
+                    args.facing = facing;
+                    args.flags = splineflags;
+                    args.path_Idx_offset = point_Idx_offset;
+                    // MoveSplineFlag::Parabolic | MoveSplineFlag::Animation not supported currently
+                        //args.parabolic_amplitude = ?;
+                        //args.time_perc = ?;
+                    args.splineId = m_Id;
+                    args.initialOrientation = initialOrientation;
+                    args.velocity = 1.0f; // Calculated below
+                    args.HasVelocity = true;
+                    args.TransformForTransport = onTransport;
+                    if (args.Validate(nullptr))
+                    {
+                        // New cycle should preserve previous cycle's duration for some weird reason, even though
+                        // the path is really different now. Blizzard is weird. Or this was just a simple oversight.
+                        // Since our splines precalculate length with velocity in mind, if we want to find the desired
+                        // velocity, we have to make a fake spline, calculate its duration and then compare it to the
+                        // desired duration, thus finding out how much the velocity has to be increased for them to match.
+                        MoveSpline tempSpline;
+                        tempSpline.Initialize(args);
+                        args.velocity = (float)tempSpline.Duration() / Duration();
+
+                        if (args.Validate(nullptr))
+                            init_spline(args);
+                    }
+                }
             }
             else
             {
@@ -288,12 +343,11 @@ std::string MoveSpline::ToString() const
     str << "spline Id: " << GetId() << std::endl;
     str << "flags: " << splineflags.ToString() << std::endl;
     if (splineflags.final_angle)
-        str << "facing  angle: " << facing.angle;
+        str << "facing  angle: " << facing.angle << std::endl;
     else if (splineflags.final_target)
-        str << "facing target: " << facing.target;
+        str << "facing target: " << facing.target.ToString() << std::endl;
     else if (splineflags.final_point)
-        str << "facing  point: " << facing.f.x << " " << facing.f.y << " " << facing.f.z;
-    str << std::endl;
+        str << "facing  point: " << facing.f.x << " " << facing.f.y << " " << facing.f.z << std::endl;
     str << "time passed: " << time_passed << std::endl;
     str << "total  time: " << Duration() << std::endl;
     str << "spline point Id: " << point_Idx << std::endl;

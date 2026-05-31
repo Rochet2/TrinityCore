@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,95 +16,111 @@
  */
 
 /*
-Name: Boss_Doctor_Theolen_Krastinov
-%Complete: 100
-Comment:
-Category: Scholomance
-*/
+ * Timers requires to be revisited
+ */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "scholomance.h"
+#include "ScriptedCreature.h"
+#include "SpellInfo.h"
 
-enum Say
+enum TheolenTexts
 {
-    EMOTE_FRENZY_KILL           = 0,
+    SAY_AGGRO                   = 0,
+    EMOTE_FRENZY                = 1
 };
 
-enum Spells
+enum TheolenSpells
 {
     SPELL_REND                  = 16509,
     SPELL_BACKHAND              = 18103,
     SPELL_FRENZY                = 8269
 };
 
-enum Events
+enum TheolenEvents
 {
     EVENT_REND                  = 1,
-    EVENT_BACKHAND              = 2,
-    EVENT_FRENZY                = 3
+    EVENT_BACKHAND,
+    EVENT_FRENZY
 };
 
-class boss_doctor_theolen_krastinov : public CreatureScript
+// 11261 - Doctor Theolen Krastinov
+struct boss_doctor_theolen_krastinov : public BossAI
 {
-    public: boss_doctor_theolen_krastinov() : CreatureScript("boss_doctor_theolen_krastinov") { }
+    boss_doctor_theolen_krastinov(Creature* creature) : BossAI(creature, DATA_DOCTOR_THEOLEN_KRASTINOV), _frenzied(false) { }
 
-        struct boss_theolenkrastinovAI : public BossAI
+    void Reset() override
+    {
+        _Reset();
+        _frenzied = false;
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+
+        Talk(SAY_AGGRO);
+
+        events.ScheduleEvent(EVENT_REND, 5s, 15s);
+        events.ScheduleEvent(EVENT_BACKHAND, 5s, 15s);
+    }
+
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (!_frenzied && me->HealthBelowPctDamaged(50, damage))
         {
-            boss_theolenkrastinovAI(Creature* creature) : BossAI(creature, DATA_DOCTORTHEOLENKRASTINOV) { }
+            _frenzied = true;
+            events.ScheduleEvent(EVENT_FRENZY, 0s);
+        }
+    }
 
-            void EnterCombat(Unit* /*who*/) override
+    void OnSpellCast(SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_FRENZY)
+            Talk(EMOTE_FRENZY);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
             {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_REND, 8000);
-                events.ScheduleEvent(EVENT_BACKHAND, 9000);
-                events.ScheduleEvent(EVENT_FRENZY, 1000);
+                case EVENT_REND:
+                    DoCastVictim(SPELL_REND);
+                    events.Repeat(15s, 20s);
+                    break;
+                case EVENT_BACKHAND:
+                    DoCastVictim(SPELL_BACKHAND);
+                    events.Repeat(10s, 20s);
+                    break;
+                case EVENT_FRENZY:
+                    DoCastSelf(SPELL_FRENZY);
+                    break;
+                default:
+                    break;
             }
 
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_REND:
-                            DoCastVictim(SPELL_REND, true);
-                            events.ScheduleEvent(EVENT_REND, 10000);
-                            break;
-                        case EVENT_BACKHAND:
-                            DoCastVictim(SPELL_BACKHAND, true);
-                            events.ScheduleEvent(EVENT_BACKHAND, 10000);
-                            break;
-                        case EVENT_FRENZY:
-                            DoCast(me, SPELL_FRENZY, true);
-                            Talk(EMOTE_FRENZY_KILL);
-                            events.ScheduleEvent(EVENT_FRENZY, 120000);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_theolenkrastinovAI(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
 
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    bool _frenzied;
 };
 
 void AddSC_boss_theolenkrastinov()
 {
-    new boss_doctor_theolen_krastinov();
+    RegisterScholomanceCreatureAI(boss_doctor_theolen_krastinov);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,145 +16,131 @@
  */
 
 #include "ScriptMgr.h"
+#include "InstanceScript.h"
+#include "SpellScript.h"
 #include "ScriptedCreature.h"
 #include "violet_hold.h"
 
-enum Spells
+enum CyanigosaTexts
 {
-    SPELL_ARCANE_VACUUM                         = 58694,
-    SPELL_BLIZZARD                              = 58693,
-    SPELL_MANA_DESTRUCTION                      = 59374,
-    SPELL_TAIL_SWEEP                            = 58690,
-    SPELL_UNCONTROLLABLE_ENERGY                 = 58688,
-    SPELL_TRANSFORM                             = 58668
+    SAY_AGGRO                      = 0,
+    SAY_SLAY                       = 1,
+    SAY_DEATH                      = 2,
+    SAY_SPAWN                      = 3,
+    SAY_DISRUPTION                 = 4,
+    SAY_BREATH_ATTACK              = 5,
+    SAY_SPECIAL_ATTACK             = 6
 };
 
-enum Yells
+enum CyanigosaSpells
 {
-    SAY_AGGRO                                   = 0,
-    SAY_SLAY                                    = 1,
-    SAY_DEATH                                   = 2,
-    SAY_SPAWN                                   = 3,
-    SAY_DISRUPTION                              = 4,
-    SAY_BREATH_ATTACK                           = 5,
-    SAY_SPECIAL_ATTACK                          = 6
+    SPELL_SUMMON_PLAYER            = 21150,
+    SPELL_ARCANE_VACUUM            = 58694,
+    SPELL_BLIZZARD                 = 58693,
+    SPELL_MANA_DESTRUCTION         = 59374,
+    SPELL_TAIL_SWEEP               = 58690,
+    SPELL_UNCONTROLLABLE_ENERGY    = 58688,
+    SPELL_TRANSFORM                = 58668
 };
 
-class boss_cyanigosa : public CreatureScript
+// 31134 - Cyanigosa
+struct boss_cyanigosa : public BossAI
 {
-public:
-    boss_cyanigosa() : CreatureScript("boss_cyanigosa") { }
+    boss_cyanigosa(Creature* creature) : BossAI(creature, DATA_CYANIGOSA) { }
 
-    struct boss_cyanigosaAI : public BossAI
+    void JustEngagedWith(Unit* who) override
     {
-        boss_cyanigosaAI(Creature* creature) : BossAI(creature, DATA_CYANIGOSA)
-        {
-            Initialize();
-        }
+        BossAI::JustEngagedWith(who);
+        Talk(SAY_AGGRO);
+    }
 
-        void Initialize()
-        {
-            uiArcaneVacuumTimer = 10000;
-            uiBlizzardTimer = 15000;
-            uiManaDestructionTimer = 30000;
-            uiTailSweepTimer = 20000;
-            uiUncontrollableEnergyTimer = 25000;
-        }
-
-        uint32 uiArcaneVacuumTimer;
-        uint32 uiBlizzardTimer;
-        uint32 uiManaDestructionTimer;
-        uint32 uiTailSweepTimer;
-        uint32 uiUncontrollableEnergyTimer;
-
-        void Reset() override
-        {
-            Initialize();
-            BossAI::Reset();
-        }
-
-        void EnterCombat(Unit* who) override
-        {
-            BossAI::EnterCombat(who);
-            Talk(SAY_AGGRO);
-        }
-
-        void MoveInLineOfSight(Unit* /*who*/) override { }
-
-        void UpdateAI(uint32 diff) override
-        {
-            if (instance->GetData(DATA_REMOVE_NPC) == 1)
-            {
-                me->DespawnOrUnsummon();
-                instance->SetData(DATA_REMOVE_NPC, 0);
-            }
-
-            if (!UpdateVictim())
-                return;
-
-            if (uiArcaneVacuumTimer <= diff)
-            {
-                DoCastAOE(SPELL_ARCANE_VACUUM);
-                uiArcaneVacuumTimer = 10000;
-            } else uiArcaneVacuumTimer -= diff;
-
-            if (uiBlizzardTimer <= diff)
-            {
-                if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
-                    DoCast(target, SPELL_BLIZZARD);
-                uiBlizzardTimer = 15000;
-            } else uiBlizzardTimer -= diff;
-
-            if (uiTailSweepTimer <= diff)
-            {
-                DoCastVictim(SPELL_TAIL_SWEEP);
-                uiTailSweepTimer = 20000;
-            } else uiTailSweepTimer -= diff;
-
-            if (uiUncontrollableEnergyTimer <= diff)
-            {
-                DoCastVictim(SPELL_UNCONTROLLABLE_ENERGY);
-                uiUncontrollableEnergyTimer = 25000;
-            } else uiUncontrollableEnergyTimer -= diff;
-
-            if (IsHeroic())
-            {
-                if (uiManaDestructionTimer <= diff)
-                {
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
-                        DoCast(target, SPELL_MANA_DESTRUCTION);
-                    uiManaDestructionTimer = 30000;
-                } else uiManaDestructionTimer -= diff;
-            }
-
-            DoMeleeAttackIfReady();
-        }
-
-        void JustDied(Unit* killer) override
-        {
-            BossAI::JustDied(killer);
-            Talk(SAY_DEATH);
-        }
-
-        void KilledUnit(Unit* victim) override
-        {
-            if (victim->GetTypeId() == TYPEID_PLAYER)
-                Talk(SAY_SLAY);
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
+    void KilledUnit(Unit* victim) override
     {
-        return GetInstanceAI<boss_cyanigosaAI>(creature);
+        if (victim->GetTypeId() == TYPEID_PLAYER)
+            Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        Talk(SAY_DEATH);
+        _JustDied();
+    }
+
+    void MoveInLineOfSight(Unit* /*who*/) override { }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        scheduler.Update(diff,
+            std::bind(&BossAI::DoMeleeAttackIfReady, this));
+    }
+
+    void ScheduleTasks() override
+    {
+        scheduler.Schedule(10s, [this](TaskContext task)
+        {
+            DoCastAOE(SPELL_ARCANE_VACUUM);
+            task.Repeat();
+        });
+
+        scheduler.Schedule(15s, [this](TaskContext task)
+        {
+            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 45.0f, true))
+                DoCast(target, SPELL_BLIZZARD);
+            task.Repeat();
+        });
+
+        scheduler.Schedule(20s, [this](TaskContext task)
+        {
+            DoCastVictim(SPELL_TAIL_SWEEP);
+            task.Repeat();
+        });
+
+        scheduler.Schedule(25s, [this](TaskContext task)
+        {
+            DoCastVictim(SPELL_UNCONTROLLABLE_ENERGY);
+            task.Repeat();
+        });
+
+        if (IsHeroic())
+        {
+            scheduler.Schedule(30s, [this](TaskContext task)
+            {
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 50.0f, true))
+                    DoCast(target, SPELL_MANA_DESTRUCTION);
+                task.Repeat();
+            });
+        }
+    }
+};
+
+// 58694 - Arcane Vacuum
+class spell_cyanigosa_arcane_vacuum : public SpellScript
+{
+    PrepareSpellScript(spell_cyanigosa_arcane_vacuum);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_SUMMON_PLAYER });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        GetCaster()->CastSpell(GetHitUnit(), SPELL_SUMMON_PLAYER, true);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_cyanigosa_arcane_vacuum::HandleScript, EFFECT_0, SPELL_EFFECT_DUMMY);
     }
 };
 
 class achievement_defenseless : public AchievementCriteriaScript
 {
     public:
-        achievement_defenseless() : AchievementCriteriaScript("achievement_defenseless")
-        {
-        }
+        achievement_defenseless() : AchievementCriteriaScript("achievement_defenseless") { }
 
         bool OnCheck(Player* /*player*/, Unit* target) override
         {
@@ -165,15 +151,13 @@ class achievement_defenseless : public AchievementCriteriaScript
             if (!instance)
                 return false;
 
-            if (!instance->GetData(DATA_DEFENSELESS))
-                return false;
-
-            return true;
+            return instance->GetData(DATA_DEFENSELESS) != 0;
         }
 };
 
 void AddSC_boss_cyanigosa()
 {
-    new boss_cyanigosa();
+    RegisterVioletHoldCreatureAI(boss_cyanigosa);
+    RegisterSpellScript(spell_cyanigosa_arcane_vacuum);
     new achievement_defenseless();
 }

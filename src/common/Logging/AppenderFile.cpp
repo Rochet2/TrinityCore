@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,48 +16,50 @@
  */
 
 #include "AppenderFile.h"
-#include "Common.h"
-#include "StringFormat.h"
 #include "Log.h"
+#include "LogMessage.h"
+#include "StringConvert.h"
+#include "Util.h"
+#include <algorithm>
 
-#if PLATFORM == PLATFORM_WINDOWS
-# include <Windows.h>
-#endif
-
-AppenderFile::AppenderFile(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, ExtraAppenderArgs extraArgs) :
+AppenderFile::AppenderFile(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, std::vector<std::string_view> const& args) :
     Appender(id, name, level, flags),
-    logfile(NULL),
+    logfile(nullptr),
     _logDir(sLog->GetLogsDir()),
+    _maxFileSize(0),
     _fileSize(0)
 {
-    if (extraArgs.empty())
-        throw InvalidAppenderArgsException(Trinity::StringFormat("Log::CreateAppenderFromConfig: Missing file name for appender %s\n", name.c_str()));
+    if (args.size() < 4)
+        throw InvalidAppenderArgsException(Trinity::StringFormat("Log::CreateAppenderFromConfig: Missing file name for appender {}", name));
 
-    _fileName = extraArgs[0];
+    _fileName.assign(args[3]);
 
-    char const* mode = "a";
-    if (extraArgs.size() > 1)
-        mode = extraArgs[1];
+    std::string mode = "a";
+    if (4 < args.size())
+        mode.assign(args[4]);
 
     if (flags & APPENDER_FLAGS_USE_TIMESTAMP)
     {
-        size_t dot_pos = _fileName.find_last_of(".");
+        size_t dot_pos = _fileName.find_last_of('.');
         if (dot_pos != std::string::npos)
             _fileName.insert(dot_pos, sLog->GetLogsTimestamp());
         else
             _fileName += sLog->GetLogsTimestamp();
     }
 
-    if (extraArgs.size() > 2)
-        _maxFileSize = atoi(extraArgs[2]);
-    else
-        _maxFileSize = 0;
+    if (5 < args.size())
+    {
+        if (Optional<uint32> size = Trinity::StringTo<uint32>(args[5]))
+            _maxFileSize = *size;
+        else
+            throw InvalidAppenderArgsException(Trinity::StringFormat("Log::CreateAppenderFromConfig: Invalid size '{}' for appender {}", args[5], name));
+    }
 
     _dynamicName = std::string::npos != _fileName.find("%s");
     _backup = (flags & APPENDER_FLAGS_MAKE_FILE_BACKUP) != 0;
 
     if (!_dynamicName)
-        logfile = OpenFile(_fileName, mode, !strcmp(mode, "w") && _backup);
+        logfile = OpenFile(_fileName, mode, (mode == "w") && _backup);
 }
 
 AppenderFile::~AppenderFile()
@@ -102,7 +104,7 @@ FILE* AppenderFile::OpenFile(std::string const& filename, std::string const& mod
         CloseFile();
         std::string newName(fullName);
         newName.push_back('.');
-        newName.append(LogMessage::getTimeStr(time(NULL)));
+        newName.append(LogMessage::getTimeStr(time(nullptr)));
         std::replace(newName.begin(), newName.end(), ':', '-');
         rename(fullName.c_str(), newName.c_str()); // no error handling... if we couldn't make a backup, just ignore
     }
@@ -113,7 +115,7 @@ FILE* AppenderFile::OpenFile(std::string const& filename, std::string const& mod
         return ret;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void AppenderFile::CloseFile()
@@ -121,6 +123,6 @@ void AppenderFile::CloseFile()
     if (logfile)
     {
         fclose(logfile);
-        logfile = NULL;
+        logfile = nullptr;
     }
 }

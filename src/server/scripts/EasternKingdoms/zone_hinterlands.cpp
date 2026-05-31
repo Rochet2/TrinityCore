@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,120 +18,19 @@
 /* ScriptData
 SDName: Hinterlands
 SD%Complete: 100
-SDComment: Quest support: 863, 2742
+SDComment: Quest support: 2742
 SDCategory: The Hinterlands
 EndScriptData */
 
 /* ContentData
-npc_oox09hl
 npc_rinji
 EndContentData */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "ScriptedEscortAI.h"
+#include "GameObject.h"
+#include "MotionMaster.h"
 #include "Player.h"
-
-/*######
-## npc_oox09hl
-######*/
-
-enum OOX
-{
-    SAY_OOX_START           = 0,
-    SAY_OOX_AGGRO           = 1,
-    SAY_OOX_AMBUSH          = 2,
-    SAY_OOX_AMBUSH_REPLY    = 3,
-    SAY_OOX_END             = 4,
-    QUEST_RESQUE_OOX_09     = 836,
-    NPC_MARAUDING_OWL       = 7808,
-    NPC_VILE_AMBUSHER       = 7809,
-    FACTION_ESCORTEE_A      = 774,
-    FACTION_ESCORTEE_H      = 775
-};
-
-class npc_oox09hl : public CreatureScript
-{
-public:
-    npc_oox09hl() : CreatureScript("npc_oox09hl") { }
-
-    struct npc_oox09hlAI : public npc_escortAI
-    {
-        npc_oox09hlAI(Creature* creature) : npc_escortAI(creature) { }
-
-        void Reset() override { }
-
-        void EnterCombat(Unit* who) override
-        {
-            if (who->GetEntry() == NPC_MARAUDING_OWL || who->GetEntry() == NPC_VILE_AMBUSHER)
-                return;
-
-            Talk(SAY_OOX_AGGRO);
-        }
-
-        void JustSummoned(Creature* summoned) override
-        {
-            summoned->GetMotionMaster()->MovePoint(0, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ());
-        }
-
-        void sQuestAccept(Player* player, Quest const* quest) override
-        {
-            if (quest->GetQuestId() == QUEST_RESQUE_OOX_09)
-            {
-                me->SetStandState(UNIT_STAND_STATE_STAND);
-                me->setFaction(player->GetTeam() == ALLIANCE ? FACTION_ESCORTEE_A : FACTION_ESCORTEE_H);
-                Talk(SAY_OOX_START, player);
-                npc_escortAI::Start(false, false, player->GetGUID(), quest);
-            }
-        }
-
-        void WaypointReached(uint32 waypointId) override
-        {
-            switch (waypointId)
-            {
-                case 26:
-                    Talk(SAY_OOX_AMBUSH);
-                    break;
-                case 43:
-                    Talk(SAY_OOX_AMBUSH);
-                    break;
-                case 64:
-                    Talk(SAY_OOX_END);
-                    if (Player* player = GetPlayerForEscort())
-                        player->GroupEventHappens(QUEST_RESQUE_OOX_09, me);
-                    break;
-            }
-        }
-
-        void WaypointStart(uint32 pointId) override
-        {
-            switch (pointId)
-            {
-                case 27:
-                    for (uint8 i = 0; i < 3; ++i)
-                    {
-                        const Position src = {147.927444f, -3851.513428f, 130.893f, 0};
-                        Position dst = me->GetRandomPoint(src, 7.0f);
-                        DoSummon(NPC_MARAUDING_OWL, dst, 25000, TEMPSUMMON_CORPSE_TIMED_DESPAWN);
-                    }
-                    break;
-                case 44:
-                    for (uint8 i = 0; i < 3; ++i)
-                    {
-                        const Position src = {-141.151581f, -4291.213867f, 120.130f, 0};
-                        Position dst = me->GetRandomPoint(src, 7.0f);
-                        me->SummonCreature(NPC_VILE_AMBUSHER, dst, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 25000);
-                    }
-                    break;
-            }
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_oox09hlAI(creature);
-    }
-};
+#include "ScriptedEscortAI.h"
 
 /*######
 ## npc_rinji
@@ -164,14 +62,16 @@ Position const AmbushMoveTo[] =
     { 70.886589f,  -2874.335449f, 116.675f, 0.0f }
 };
 
+static constexpr uint32 PATH_ESCORT_RINJI = 62242;
+
 class npc_rinji : public CreatureScript
 {
 public:
     npc_rinji() : CreatureScript("npc_rinji") { }
 
-    struct npc_rinjiAI : public npc_escortAI
+    struct npc_rinjiAI : public EscortAI
     {
-        npc_rinjiAI(Creature* creature) : npc_escortAI(creature)
+        npc_rinjiAI(Creature* creature) : EscortAI(creature)
         {
             Initialize();
             _IsByOutrunner = false;
@@ -189,15 +89,15 @@ public:
             Initialize();
         }
 
-        void JustRespawned() override
+        void JustAppeared() override
         {
             _IsByOutrunner = false;
             spawnId = 0;
 
-            npc_escortAI::JustRespawned();
+            EscortAI::JustAppeared();
         }
 
-        void EnterCombat(Unit* who) override
+        void JustEngagedWith(Unit* who) override
         {
             if (HasEscortState(STATE_ESCORT_ESCORTING))
             {
@@ -221,11 +121,11 @@ public:
             if (!_first)
                 spawnId = 1;
 
-            me->SummonCreature(NPC_RANGER, AmbushSpawn[spawnId], TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 60000);
+            me->SummonCreature(NPC_RANGER, AmbushSpawn[spawnId], TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 1min);
 
             for (int i = 0; i < 2; ++i)
             {
-                me->SummonCreature(NPC_OUTRUNNER, AmbushSpawn[spawnId], TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 60000);
+                me->SummonCreature(NPC_OUTRUNNER, AmbushSpawn[spawnId], TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 1min);
             }
         }
 
@@ -235,18 +135,19 @@ public:
             summoned->GetMotionMaster()->MovePoint(0, AmbushMoveTo[spawnId]);
         }
 
-        void sQuestAccept(Player* player, Quest const* quest) override
+        void OnQuestAccept(Player* player, Quest const* quest) override
         {
             if (quest->GetQuestId() == QUEST_RINJI_TRAPPED)
             {
                 if (GameObject* go = me->FindNearestGameObject(GO_RINJI_CAGE, INTERACTION_DISTANCE))
                     go->UseDoorOrButton();
 
-                npc_escortAI::Start(false, false, player->GetGUID(), quest);
+                LoadPath(PATH_ESCORT_RINJI);
+                Start(false, player->GetGUID(), quest);
             }
         }
 
-        void WaypointReached(uint32 waypointId) override
+        void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
         {
             Player* player = GetPlayerForEscort();
             if (!player)
@@ -266,13 +167,12 @@ public:
                 case 17:
                     Talk(SAY_RIN_COMPLETE, player);
                     player->GroupEventHappens(QUEST_RINJI_TRAPPED, me);
-                    SetRun();
                     postEventCount = 1;
                     break;
             }
         }
 
-        void UpdateEscortAI(const uint32 diff) override
+        void UpdateEscortAI(uint32 diff) override
         {
             //Check if we have a current target
             if (!UpdateVictim())
@@ -326,6 +226,5 @@ public:
 
 void AddSC_hinterlands()
 {
-    new npc_oox09hl();
     new npc_rinji();
 }

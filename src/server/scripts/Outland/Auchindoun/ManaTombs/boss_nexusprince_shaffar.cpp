@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,379 +15,293 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Boss_NexusPrince_Shaffar
-SD%Complete: 80
-SDComment: Need more tuning of spell timers, it should not be as linear fight as current. Also should possibly find a better way to deal with his three initial beacons to make sure all aggro.
-SDCategory: Auchindoun, Mana Tombs
-EndScriptData */
+/*
+ * Timers requires to be revisited
+ * Find a better way to deal with his three initial beacons to make sure all aggro
+ * His caster mode requires rechecks
+ * Move away after succesful Frost Nova cast (seems like doesn't always triggered)
+ */
 
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
+#include "SpellInfo.h"
 #include "mana_tombs.h"
+#include "MotionMaster.h"
 
-enum Yells
+enum ShaffarTexts
 {
     SAY_INTRO                       = 0,
     SAY_AGGRO                       = 1,
     SAY_SLAY                        = 2,
     SAY_SUMMON                      = 3,
-    SAY_DEAD                        = 4
+    SAY_DEATH                       = 4
 };
 
-enum Spells
+enum ShaffarSpells
 {
+    // Shaffar
     SPELL_BLINK                     = 34605,
-    SPELL_FROSTBOLT                 = 32364,
     SPELL_FIREBALL                  = 32363,
+    SPELL_FROSTBOLT                 = 32364,
     SPELL_FROSTNOVA                 = 32365,
 
-    SPELL_ETHEREAL_BEACON           = 32371,                // Summons NPC_BEACON
-    SPELL_ETHEREAL_BEACON_VISUAL    = 32368,
+    SPELL_ETHEREAL_BEACON           = 32371,
 
     // Ethereal Beacon
+    SPELL_ETHEREAL_BEACON_VISUAL    = 32368,
     SPELL_ARCANE_BOLT               = 15254,
-    SPELL_ETHEREAL_APPRENTICE       = 32372                 // Summon 18430
+    SPELL_ETHEREAL_APPRENTICE       = 32372
 };
 
-enum Creatures
+enum ShaffarEvents
+{
+    EVENT_BLINK                     = 1,
+    EVENT_BEACON,
+    EVENT_MAIN_SPELL,
+    EVENT_FROST_NOVA,
+
+    // Ethereal Beacon
+    EVENT_SUMMON_APPRENTICE,
+    EVENT_ARCANE_BOLT
+};
+
+enum ShaffarCreatures
 {
     NPC_BEACON                      = 18431,
     NPC_SHAFFAR                     = 18344
 };
 
-enum Misc
+// 18344 - Nexus-Prince Shaffar
+struct boss_nexusprince_shaffar : public BossAI
 {
-    NR_INITIAL_BEACONS              = 3
-};
+    boss_nexusprince_shaffar(Creature* creature) : BossAI(creature, DATA_NEXUSPRINCE_SHAFFAR), _hasTaunted(false) { }
 
-enum Events
-{
-    EVENT_BLINK                     = 1,
-    EVENT_BEACON,
-    EVENT_FIREBALL,
-    EVENT_FROSTBOLT,
-    EVENT_FROST_NOVA
-};
+    void Reset() override
+    {
+        _Reset();
 
-class boss_nexusprince_shaffar : public CreatureScript
-{
-    public:
-        boss_nexusprince_shaffar() : CreatureScript("boss_nexusprince_shaffar") { }
+        me->SummonCreature(NPC_BEACON, -191.116f, 3.82914f, 16.7834f, 3.62003f, TEMPSUMMON_MANUAL_DESPAWN);
+        me->SummonCreature(NPC_BEACON, -180.408f, 10.9629f, 16.7025f, 3.45070f, TEMPSUMMON_MANUAL_DESPAWN);
+        me->SummonCreature(NPC_BEACON, -185.980f, 14.4201f, 16.7234f, 1.31540f, TEMPSUMMON_MANUAL_DESPAWN);
+    }
 
-        struct boss_nexusprince_shaffarAI : public BossAI
+    void MoveInLineOfSight(Unit* who) override
+    {
+        if (!_hasTaunted && who->GetTypeId() == TYPEID_PLAYER && me->IsWithinDistInMap(who, 100.0f))
         {
-            boss_nexusprince_shaffarAI(Creature* creature) : BossAI(creature, DATA_NEXUSPRINCE_SHAFFAR)
-            {
-                _hasTaunted = false;
-            }
-
-            void Reset() override
-            {
-                _Reset();
-
-                float dist = 8.0f;
-                float posX, posY, posZ, angle;
-                me->GetHomePosition(posX, posY, posZ, angle);
-
-                me->SummonCreature(NPC_BEACON, posX - dist, posY - dist, posZ, angle, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 7200000);
-                me->SummonCreature(NPC_BEACON, posX - dist, posY + dist, posZ, angle, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 7200000);
-                me->SummonCreature(NPC_BEACON, posX + dist, posY, posZ, angle, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 7200000);
-            }
-
-            void MoveInLineOfSight(Unit* who) override
-            {
-                if (!_hasTaunted && who->GetTypeId() == TYPEID_PLAYER && me->IsWithinDistInMap(who, 100.0f))
-                {
-                    Talk(SAY_INTRO);
-                    _hasTaunted = true;
-                }
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                Talk(SAY_AGGRO);
-                _EnterCombat();
-
-                events.ScheduleEvent(EVENT_BEACON, 10000);
-                events.ScheduleEvent(EVENT_FIREBALL, 8000);
-                events.ScheduleEvent(EVENT_FROSTBOLT, 4000);
-                events.ScheduleEvent(EVENT_FROST_NOVA, 15000);
-            }
-
-            void JustSummoned(Creature* summoned) override
-            {
-                if (summoned->GetEntry() == NPC_BEACON)
-                {
-                    summoned->CastSpell(summoned, SPELL_ETHEREAL_BEACON_VISUAL, false);
-
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                        summoned->AI()->AttackStart(target);
-                }
-
-                summons.Summon(summoned);
-            }
-
-            void KilledUnit(Unit* victim) override
-            {
-                if (victim->GetTypeId() == TYPEID_PLAYER)
-                    Talk(SAY_SLAY);
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                Talk(SAY_DEAD);
-                _JustDied();
-            }
-
-            void ExecuteEvent(uint32 eventId) override
-            {
-                switch (eventId)
-                {
-                    case EVENT_BLINK:
-                        if (me->IsNonMeleeSpellCast(false))
-                            me->InterruptNonMeleeSpells(true);
-
-                        // expire movement, will prevent from running right back to victim after cast
-                        // (but should MoveChase be used again at a certain time or should he not move?)
-                        if (me->GetMotionMaster()->GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE)
-                            me->GetMotionMaster()->MovementExpired();
-
-                        DoCast(me, SPELL_BLINK);
-                        break;
-                    case EVENT_BEACON:
-                        if (!urand(0, 3))
-                            Talk(SAY_SUMMON);
-
-                        DoCast(me, SPELL_ETHEREAL_BEACON, true);
-                        events.ScheduleEvent(EVENT_BEACON, 10000);
-                        break;
-                    case EVENT_FIREBALL:
-                        DoCastVictim(SPELL_FROSTBOLT);
-                        events.ScheduleEvent(EVENT_FIREBALL, urand(4500, 6000));
-                        break;
-                    case EVENT_FROSTBOLT:
-                        DoCastVictim(SPELL_FROSTBOLT);
-                        events.ScheduleEvent(EVENT_FROSTBOLT, urand(4500, 6000));
-                        break;
-                    case EVENT_FROST_NOVA:
-                        DoCast(me, SPELL_FROSTNOVA);
-                        events.ScheduleEvent(EVENT_FROST_NOVA, urand(17500, 25000));
-                        events.ScheduleEvent(EVENT_BLINK, 1500);
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-        private:
-            bool _hasTaunted;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetManaTombsAI<boss_nexusprince_shaffarAI>(creature);
+            Talk(SAY_INTRO);
+            _hasTaunted = true;
         }
-};
+    }
 
-enum EtherealBeacon
-{
-    EVENT_APPRENTICE = 1,
-    EVENT_ARCANE_BOLT
-};
+    void JustEngagedWith(Unit* who) override
+    {
+        Talk(SAY_AGGRO);
+        BossAI::JustEngagedWith(who);
 
-class npc_ethereal_beacon : public CreatureScript
-{
-    public:
-        npc_ethereal_beacon() : CreatureScript("npc_ethereal_beacon") { }
+        events.ScheduleEvent(EVENT_BLINK, 20s, 30s);
+        events.ScheduleEvent(EVENT_BEACON, 10s, 30s);
+        events.ScheduleEvent(EVENT_MAIN_SPELL, 0s, 6s);
+        events.ScheduleEvent(EVENT_FROST_NOVA, 15s, 35s);
+    }
 
-        struct npc_ethereal_beaconAI : public ScriptedAI
+    void JustSummoned(Creature* summoned) override
+    {
+        if (summoned->GetEntry() == NPC_BEACON)
         {
-            npc_ethereal_beaconAI(Creature* creature) : ScriptedAI(creature) { }
+            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                summoned->AI()->AttackStart(target);
 
-            void Reset() override
-            {
-                _events.Reset();
-            }
-
-            void EnterCombat(Unit* who) override
-            {
-                if (Creature* shaffar = me->FindNearestCreature(NPC_SHAFFAR, 100.0f))
-                    if (!shaffar->IsInCombat())
-                        shaffar->AI()->AttackStart(who);
-
-                _events.ScheduleEvent(EVENT_APPRENTICE, DUNGEON_MODE(20000, 10000));
-                _events.ScheduleEvent(EVENT_ARCANE_BOLT, 1000);
-            }
-
-            void JustSummoned(Creature* summoned) override
-            {
-                summoned->AI()->AttackStart(me->GetVictim());
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                _events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = _events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_APPRENTICE:
-                            DoCast(me, SPELL_ETHEREAL_APPRENTICE, true);
-                            me->DespawnOrUnsummon();
-                            break;
-                        case EVENT_ARCANE_BOLT:
-                            DoCastVictim(SPELL_ARCANE_BOLT);
-                            _events.ScheduleEvent(EVENT_ARCANE_BOLT, urand(2000, 4500));
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            }
-
-        private:
-            EventMap _events;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new npc_ethereal_beaconAI(creature);
+            if (!me->IsInCombat())
+                summoned->GetMotionMaster()->MoveRandom(5.0f);
         }
+
+        summons.Summon(summoned);
+    }
+
+    void OnSpellCast(SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_ETHEREAL_BEACON)
+            if (roll_chance_i(50))
+                Talk(SAY_SUMMON);
+    }
+
+    void KilledUnit(Unit* victim) override
+    {
+        if (victim->GetTypeId() == TYPEID_PLAYER)
+            Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        Talk(SAY_DEATH);
+        _JustDied();
+    }
+
+    void ExecuteEvent(uint32 eventId) override
+    {
+        switch (eventId)
+        {
+            case EVENT_BLINK:
+                DoCastSelf(SPELL_BLINK);
+                events.Repeat(40s, 60s);
+                events.RescheduleEvent(EVENT_MAIN_SPELL, 0s);
+                break;
+            case EVENT_BEACON:
+                DoCastSelf(SPELL_ETHEREAL_BEACON);
+                events.Repeat(20s);
+                break;
+            case EVENT_MAIN_SPELL:
+                DoCastVictim(RAND(SPELL_FIREBALL, SPELL_FROSTBOLT));
+
+                if (me->IsWithinMeleeRange(me->GetVictim()))
+                    events.Repeat(1s, 6s);
+                else
+                    events.Repeat(1s);
+                break;
+            case EVENT_FROST_NOVA:
+                DoCastSelf(SPELL_FROSTNOVA);
+                events.Repeat(15s, 25s);
+                break;
+            default:
+                break;
+        }
+    }
+
+private:
+    bool _hasTaunted;
+};
+
+// 18431 - Ethereal Beacon
+struct npc_ethereal_beacon : public ScriptedAI
+{
+    npc_ethereal_beacon(Creature* creature) : ScriptedAI(creature) { }
+
+    void JustAppeared() override
+    {
+        DoCastSelf(SPELL_ETHEREAL_BEACON_VISUAL);
+    }
+
+    void Reset() override
+    {
+        _events.Reset();
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        if (Creature* shaffar = me->FindNearestCreature(NPC_SHAFFAR, 100.0f))
+            if (!shaffar->IsInCombat())
+                shaffar->AI()->AttackStart(who);
+
+        _events.ScheduleEvent(EVENT_SUMMON_APPRENTICE, DUNGEON_MODE(20s, 10s));
+        _events.ScheduleEvent(EVENT_ARCANE_BOLT, 3s, 10s);
+    }
+
+    void JustSummoned(Creature* summoned) override
+    {
+        summoned->AI()->AttackStart(me->GetVictim());
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        _events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = _events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case EVENT_SUMMON_APPRENTICE:
+                    DoCastSelf(SPELL_ETHEREAL_APPRENTICE);
+                    me->AttackStop();
+                    me->SetReactState(REACT_PASSIVE);
+                    me->SetImmuneToPC(true);
+                    me->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
+                    me->DespawnOrUnsummon(2s);
+                    break;
+                case EVENT_ARCANE_BOLT:
+                    DoCastVictim(SPELL_ARCANE_BOLT);
+                    _events.Repeat(3s, 10s);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+private:
+    EventMap _events;
 };
 
 enum EtherealApprentice
 {
+    SPELL_SIMPLE_TELEPORT                       = 12980,
     SPELL_ETHEREAL_APPRENTICE_FIREBOLT          = 32369,
     SPELL_ETHEREAL_APPRENTICE_FROSTBOLT         = 32370,
     EVENT_ETHEREAL_APPRENTICE_FIREBOLT          = 1,
     EVENT_ETHEREAL_APPRENTICE_FROSTBOLT
 };
 
-class npc_ethereal_apprentice : public CreatureScript
+// 18430 - Ethereal Apprentice
+struct npc_ethereal_apprentice : public ScriptedAI
 {
-    public:
-        npc_ethereal_apprentice() : CreatureScript("npc_ethereal_apprentice") { }
+    npc_ethereal_apprentice(Creature* creature) : ScriptedAI(creature) { }
 
-        struct npc_ethereal_apprenticeAI : public ScriptedAI
-        {
-            npc_ethereal_apprenticeAI(Creature* creature) : ScriptedAI(creature) { }
-
-            void Reset() override
-            {
-                _events.Reset();
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                _events.ScheduleEvent(EVENT_ETHEREAL_APPRENTICE_FIREBOLT, 3000);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                _events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = _events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_ETHEREAL_APPRENTICE_FIREBOLT:
-                            DoCastVictim(SPELL_ETHEREAL_APPRENTICE_FIREBOLT, true);
-                            _events.ScheduleEvent(EVENT_ETHEREAL_APPRENTICE_FROSTBOLT, 3000);
-                            break;
-                        case EVENT_ETHEREAL_APPRENTICE_FROSTBOLT:
-                            DoCastVictim(SPELL_ETHEREAL_APPRENTICE_FROSTBOLT, true);
-                            _events.ScheduleEvent(EVENT_ETHEREAL_APPRENTICE_FIREBOLT, 3000);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            }
-
-        private:
-            EventMap _events;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new npc_ethereal_apprenticeAI(creature);
-        }
-};
-
-enum Yor
-{
-    SPELL_DOUBLE_BREATH          = 38361,
-    EVENT_DOUBLE_BREATH          = 1
-};
-
-class npc_yor : public CreatureScript
-{
-public:
-    npc_yor() : CreatureScript("npc_yor") { }
-
-    struct npc_yorAI : public ScriptedAI
+    void JustAppeared() override
     {
-        npc_yorAI(Creature* creature) : ScriptedAI(creature) { }
-
-        void Reset() override { }
-
-        void EnterCombat(Unit* /*who*/) override
-        {
-            _events.ScheduleEvent(EVENT_DOUBLE_BREATH, urand(6000,9000));
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            if (!UpdateVictim())
-                return;
-
-            _events.Update(diff);
-
-            while (uint32 eventId = _events.ExecuteEvent())
-            {
-                switch (eventId)
-                {
-                    case EVENT_DOUBLE_BREATH:
-                        if (me->IsWithinDist(me->GetVictim(), ATTACK_DISTANCE))
-                            DoCastVictim(SPELL_DOUBLE_BREATH);
-                        _events.ScheduleEvent(EVENT_DOUBLE_BREATH, urand(6000,9000));
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            DoMeleeAttackIfReady();
-        }
-
-        private:
-            EventMap _events;
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_yorAI(creature);
+        DoCastSelf(SPELL_SIMPLE_TELEPORT);
     }
+
+    void Reset() override
+    {
+        _events.Reset();
+    }
+
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        _events.ScheduleEvent(RAND(EVENT_ETHEREAL_APPRENTICE_FIREBOLT, EVENT_ETHEREAL_APPRENTICE_FROSTBOLT), 0s);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        _events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = _events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case EVENT_ETHEREAL_APPRENTICE_FIREBOLT:
+                    DoCastVictim(SPELL_ETHEREAL_APPRENTICE_FIREBOLT);
+                    _events.ScheduleEvent(EVENT_ETHEREAL_APPRENTICE_FROSTBOLT, 3s);
+                    break;
+                case EVENT_ETHEREAL_APPRENTICE_FROSTBOLT:
+                    DoCastVictim(SPELL_ETHEREAL_APPRENTICE_FROSTBOLT);
+                    _events.ScheduleEvent(EVENT_ETHEREAL_APPRENTICE_FIREBOLT, 3s);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+private:
+    EventMap _events;
 };
 
 void AddSC_boss_nexusprince_shaffar()
 {
-    new boss_nexusprince_shaffar();
-    new npc_ethereal_beacon();
-    new npc_ethereal_apprentice();
-    new npc_yor();
+    RegisterManaTombsCreatureAI(boss_nexusprince_shaffar);
+    RegisterManaTombsCreatureAI(npc_ethereal_beacon);
+    RegisterManaTombsCreatureAI(npc_ethereal_apprentice);
 }

@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,181 +15,91 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Magisters_Terrace
-SD%Complete: 100
-SDComment: Quest support: 11490(post-event)
-SDCategory: Magisters Terrace
-EndScriptData */
-
-/* ContentData
-npc_kalecgos
-EndContentData */
+/*
+ * Kalec for some reason lifts off after landing
+ * Kalec seems to be spawned after cinematic is finished, not after specific time
+ */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "ScriptedGossip.h"
+#include "magisters_terrace.h"
+#include "MotionMaster.h"
 #include "Player.h"
-#include "SpellInfo.h"
+#include "ScriptedCreature.h"
 
-/*######
-## npc_kalecgos
-######*/
-
-enum Spells
+enum KalecgosMisc
 {
-    SPELL_TRANSFORM_TO_KAEL     = 44670,
-    SPELL_ORB_KILL_CREDIT       = 46307
+    SAY_KALECGOS_SPAWN          = 0,
+
+    SPELL_CAMERA_SHAKE          = 44762,
+    SPELL_TRANSFORM_VISUAL      = 24085,
+    SPELL_ORB_KILL_CREDIT       = 46307,
+
+    PATH_KALECGOS_FLIGHT        = 1987520,
+    POINT_ID_PREPARE_LANDING    = 6,
+
+    EVENT_KALECGOS_LANDING      = 1,
+    EVENT_KALECGOS_TRANSFORM,
+    EVENT_KALECGOS_SUMMON
 };
 
-enum Creatures
+Position const KalecgosHumanSpawnPos = { 197.86285f, -272.74414f, -8.651634f, 0.0f };
+
+// 24844 - Kalecgos
+struct npc_kalecgos : public ScriptedAI
 {
-    NPC_KAEL                    = 24848 //human form entry
-};
+    npc_kalecgos(Creature* creature) : ScriptedAI(creature) { }
 
-enum Misc
-{
-    POINT_ID_LAND               = 1
-};
-
-const float afKaelLandPoint[] = {225.045f, -276.236f, -5.434f};
-
-#define GOSSIP_ITEM_KAEL_1      "Who are you?"
-#define GOSSIP_ITEM_KAEL_2      "What can we do to assist you?"
-#define GOSSIP_ITEM_KAEL_3      "What brings you to the Sunwell?"
-#define GOSSIP_ITEM_KAEL_4      "You're not alone here?"
-#define GOSSIP_ITEM_KAEL_5      "What would Kil'jaeden want with a mortal woman?"
-
-// This is friendly keal that appear after used Orb.
-// If we assume DB handle summon, summon appear somewhere outside the platform where Orb is
-class npc_kalecgos : public CreatureScript
-{
-public:
-    npc_kalecgos() : CreatureScript("npc_kalecgos") { }
-
-    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
+    void JustAppeared() override
     {
-        player->PlayerTalkClass->ClearMenus();
-        switch (action)
-        {
-            case GOSSIP_ACTION_INFO_DEF:
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-                player->SEND_GOSSIP_MENU(12500, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+1:
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_3, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-                player->SEND_GOSSIP_MENU(12502, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+2:
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_4, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
-                player->SEND_GOSSIP_MENU(12606, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+3:
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_5, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 4);
-                player->SEND_GOSSIP_MENU(12607, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+4:
-                player->SEND_GOSSIP_MENU(12608, creature->GetGUID());
-                break;
-        }
-
-        return true;
+        me->GetMotionMaster()->MovePath(PATH_KALECGOS_FLIGHT, false);
+        Talk(SAY_KALECGOS_SPAWN);
     }
 
-    bool OnGossipHello(Player* player, Creature* creature) override
+    void MovementInform(uint32 type, uint32 pointId) override
     {
-        if (creature->IsQuestGiver())
-            player->PrepareQuestMenu(creature->GetGUID());
+        if (type != WAYPOINT_MOTION_TYPE)
+            return;
 
-        player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_ITEM_KAEL_1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
-        player->SEND_GOSSIP_MENU(12498, creature->GetGUID());
-
-        return true;
+        if (pointId == POINT_ID_PREPARE_LANDING)
+        {
+            me->HandleEmoteCommand(EMOTE_ONESHOT_LAND);
+            me->SetDisableGravity(false);
+            _events.ScheduleEvent(EVENT_KALECGOS_LANDING, 1s);
+        }
     }
 
-    CreatureAI* GetAI(Creature* creature) const override
+    void UpdateAI(uint32 diff) override
     {
-        return new npc_kalecgosAI(creature);
+        _events.Update(diff);
+
+        switch (_events.ExecuteEvent())
+        {
+            case EVENT_KALECGOS_LANDING:
+                DoCastSelf(SPELL_CAMERA_SHAKE);
+                me->SetFacingTo(0.0698132f);
+                me->SetObjectScale(0.6f);
+                _events.ScheduleEvent(EVENT_KALECGOS_TRANSFORM, 1s);
+                break;
+            case EVENT_KALECGOS_TRANSFORM:
+                DoCastSelf(SPELL_TRANSFORM_VISUAL);
+                // This doesn't appear in sniff and credit is rewarded when cinematic is finished
+                DoCastSelf(SPELL_ORB_KILL_CREDIT);
+                _events.ScheduleEvent(EVENT_KALECGOS_SUMMON, 1s);
+                break;
+            case EVENT_KALECGOS_SUMMON:
+                me->SummonCreature(NPC_HUMAN_KALECGOS, KalecgosHumanSpawnPos, TEMPSUMMON_MANUAL_DESPAWN);
+                me->DespawnOrUnsummon(1500ms);
+                break;
+            default:
+                break;
+        }
     }
 
-    struct npc_kalecgosAI : public ScriptedAI
-    {
-        npc_kalecgosAI(Creature* creature) : ScriptedAI(creature)
-        {
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            m_uiTransformTimer = 0;
-        }
-
-        uint32 m_uiTransformTimer;
-
-        void Reset() override
-        {
-            Initialize();
-
-            // we must assume he appear as dragon somewhere outside the platform of orb, and then move directly to here
-            if (me->GetEntry() != NPC_KAEL)
-                me->GetMotionMaster()->MovePoint(POINT_ID_LAND, afKaelLandPoint[0], afKaelLandPoint[1], afKaelLandPoint[2]);
-        }
-
-        void MovementInform(uint32 uiType, uint32 uiPointId) override
-        {
-            if (uiType != POINT_MOTION_TYPE)
-                return;
-
-            if (uiPointId == POINT_ID_LAND)
-                m_uiTransformTimer = MINUTE*IN_MILLISECONDS;
-        }
-
-        // some targeting issues with the spell, so use this workaround as temporary solution
-        void DoWorkaroundForQuestCredit()
-        {
-            Map* map = me->GetMap();
-
-            if (!map || map->IsHeroic())
-                return;
-
-            Map::PlayerList const &lList = map->GetPlayers();
-
-            if (lList.isEmpty())
-                return;
-
-            SpellInfo const* spell = sSpellMgr->GetSpellInfo(SPELL_ORB_KILL_CREDIT);
-
-            for (Map::PlayerList::const_iterator i = lList.begin(); i != lList.end(); ++i)
-            {
-                if (Player* player = i->GetSource())
-                {
-                    if (spell && spell->Effects[0].MiscValue)
-                        player->KilledMonsterCredit(spell->Effects[0].MiscValue);
-                }
-            }
-        }
-
-        void UpdateAI(uint32 uiDiff) override
-        {
-            if (m_uiTransformTimer)
-            {
-                if (m_uiTransformTimer <= uiDiff)
-                {
-                    DoCast(me, SPELL_ORB_KILL_CREDIT, false);
-                    DoWorkaroundForQuestCredit();
-
-                    // Transform and update entry, now ready for quest/read gossip
-                    DoCast(me, SPELL_TRANSFORM_TO_KAEL, false);
-                    me->UpdateEntry(NPC_KAEL);
-
-                    m_uiTransformTimer = 0;
-                } else m_uiTransformTimer -= uiDiff;
-            }
-        }
-    };
+private:
+    EventMap _events;
 };
 
 void AddSC_magisters_terrace()
 {
-    new npc_kalecgos();
+    RegisterMagistersTerraceCreatureAI(npc_kalecgos);
 }

@@ -1,4 +1,4 @@
-# Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -8,67 +8,60 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-if( USE_COREPCH )
-  include_directories(${CMAKE_CURRENT_BINARY_DIR})
-endif()
-
-file(GLOB_RECURSE sources_Database Database/*.cpp Database/*.h)
-file(GLOB_RECURSE sources_Logging Logging/*.cpp Logging/*.h)
-file(GLOB_RECURSE sources_Updater Updater/*.cpp Updater/*.h)
-
-file(GLOB sources_localdir *.cpp *.h)
-
-#
-# Build shared sourcelist
-#
-
-if (USE_COREPCH)
-  set(database_STAT_PCH_HDR PrecompiledHeaders/databasePCH.h)
-  set(database_STAT_PCH_SRC PrecompiledHeaders/databasePCH.cpp)
-endif()
-
-set(database_STAT_SRCS
-  ${database_STAT_SRCS}
-  ${sources_Database}
-  ${sources_Logging}
-  ${sources_Updater}
-)
-
-include_directories(
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/dep/recastnavigation/Detour
-  ${CMAKE_SOURCE_DIR}/dep/SFMT
-  ${CMAKE_SOURCE_DIR}/dep/cppformat
-  ${CMAKE_SOURCE_DIR}/dep/utf8cpp
-  ${CMAKE_SOURCE_DIR}/dep/process
-  ${CMAKE_SOURCE_DIR}/src/server
+CollectSourceFiles(
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/Database
-  ${CMAKE_CURRENT_SOURCE_DIR}/Logging
-  ${CMAKE_CURRENT_SOURCE_DIR}/Updater
-  ${CMAKE_SOURCE_DIR}/src/common/
-  ${CMAKE_SOURCE_DIR}/src/common/Collision
-  ${CMAKE_SOURCE_DIR}/src/common/Collision/Management
-  ${CMAKE_SOURCE_DIR}/src/common/Collision/Models
-  ${CMAKE_SOURCE_DIR}/src/common/Debugging
-  ${CMAKE_SOURCE_DIR}/src/common/Threading
-  ${CMAKE_SOURCE_DIR}/src/common/Utilities
-  ${CMAKE_SOURCE_DIR}/src/common/Configuration
-  ${CMAKE_SOURCE_DIR}/src/common/Logging
-  ${CMAKE_SOURCE_DIR}/src/server/shared
-  ${MYSQL_INCLUDE_DIR}
-  ${OPENSSL_INCLUDE_DIR} # seems needed for Windows build
-  ${VALGRIND_INCLUDE_DIR}
-)
+  PRIVATE_SOURCES
+  # Exclude
+  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
+
+if(USE_COREPCH)
+  set(PRIVATE_PCH_HEADER PrecompiledHeaders/databasePCH.h)
+endif()
 
 GroupSources(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_library(database STATIC
-  ${database_STAT_SRCS}
-  ${database_STAT_PCH_SRC}
+add_library(database
+  ${PRIVATE_SOURCES}
 )
 
+CollectIncludeDirectories(
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  PUBLIC_INCLUDES
+  # Exclude
+  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
+
+target_include_directories(database
+  PUBLIC
+    ${PUBLIC_INCLUDES}
+  PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR})
+
+target_link_libraries(database
+  PRIVATE
+    trinity-core-interface
+    mysql
+  PUBLIC
+    common)
+
+set_target_properties(database
+  PROPERTIES
+    COMPILE_WARNING_AS_ERROR ${WITH_WARNINGS_AS_ERRORS}
+    DEFINE_SYMBOL TRINITY_API_EXPORT_DATABASE
+    FOLDER "server")
+
+if(BUILD_SHARED_LIBS)
+  if(UNIX)
+    install(TARGETS database
+      LIBRARY
+        DESTINATION lib)
+  elseif(WIN32)
+    install(TARGETS database
+      RUNTIME
+        DESTINATION "${CMAKE_INSTALL_PREFIX}")
+  endif()
+endif()
+
 # Generate precompiled header
-if (USE_COREPCH)
-  add_cxx_pch(database ${database_STAT_PCH_HDR} ${database_STAT_PCH_SRC})
-endif ()
+if(USE_COREPCH)
+  add_cxx_pch(database ${PRIVATE_PCH_HEADER})
+endif()

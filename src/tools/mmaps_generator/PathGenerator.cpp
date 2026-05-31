@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,11 +15,33 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "PathCommon.h"
+#include "Banner.h"
+#include "DBCFileLoader.h"
+#include "Locales.h"
 #include "MapBuilder.h"
+#include "PathCommon.h"
 #include "Timer.h"
+#include "Util.h"
+#include <boost/filesystem.hpp>
+#include <unordered_map>
+
+constexpr char Readme[] =
+{
+#include "Info/readme.txt"
+};
 
 using namespace MMAP;
+
+namespace
+{
+    std::unordered_map<uint32, uint8> _liquidTypes;
+}
+
+uint32 GetLiquidFlags(uint32 liquidId)
+{
+    auto itr = _liquidTypes.find(liquidId);
+    return itr != _liquidTypes.end() ? (1 << itr->second) : 0;
+}
 
 bool checkDirectories(bool debugOutput)
 {
@@ -41,10 +62,7 @@ bool checkDirectories(bool debugOutput)
 
     dirFiles.clear();
     if (getDirContents(dirFiles, "mmaps") == LISTFILE_DIRECTORY_NOT_FOUND)
-    {
-        printf("'mmaps' directory does not exist\n");
-        return false;
-    }
+        return boost::filesystem::create_directory("mmaps");
 
     dirFiles.clear();
     if (debugOutput)
@@ -59,11 +77,19 @@ bool checkDirectories(bool debugOutput)
     return true;
 }
 
+int finish(char const* message, int returnValue)
+{
+    printf("%s", message);
+    getchar(); // Wait for user input
+    return returnValue;
+}
+
 bool handleArgs(int argc, char** argv,
                int &mapnum,
                int &tileX,
                int &tileY,
-               float &maxAngle,
+               Optional<float>& maxAngle,
+               Optional<float>& maxAngleNotSteep,
                bool &skipLiquid,
                bool &skipContinents,
                bool &skipJunkMaps,
@@ -73,9 +99,10 @@ bool handleArgs(int argc, char** argv,
                bool &bigBaseUnit,
                char* &offMeshInputPath,
                char* &file,
-               int& threads)
+               unsigned int& threads)
 {
-    char* param = NULL;
+    char* param = nullptr;
+    [[maybe_unused]] bool allowDebug = false;
     for (int i = 1; i < argc; ++i)
     {
         if (strcmp(argv[i], "--maxAngle") == 0)
@@ -85,18 +112,29 @@ bool handleArgs(int argc, char** argv,
                 return false;
 
             float maxangle = atof(param);
-            if (maxangle <= 90.f && maxangle >= 45.f)
+            if (maxangle <= 90.f && maxangle >= 0.f)
                 maxAngle = maxangle;
             else
                 printf("invalid option for '--maxAngle', using default\n");
+        }
+        else if (strcmp(argv[i], "--maxAngleNotSteep") == 0)
+        {
+            param = argv[++i];
+            if (!param)
+                return false;
+
+            float maxangle = atof(param);
+            if (maxangle <= 90.f && maxangle >= 0.f)
+                maxAngleNotSteep = maxangle;
+            else
+                printf("invalid option for '--maxAngleNotSteep', using default\n");
         }
         else if (strcmp(argv[i], "--threads") == 0)
         {
             param = argv[++i];
             if (!param)
                 return false;
-            threads = atoi(param);
-            printf("Using %i threads to extract mmaps\n", threads);
+            threads = static_cast<unsigned int>(std::max(0, atoi(param)));
         }
         else if (strcmp(argv[i], "--file") == 0)
         {
@@ -112,7 +150,7 @@ bool handleArgs(int argc, char** argv,
                 return false;
 
             char* stileX = strtok(param, ",");
-            char* stileY = strtok(NULL, ",");
+            char* stileY = strtok(nullptr, ",");
             int tilex = atoi(stileX);
             int tiley = atoi(stileY);
 
@@ -217,6 +255,16 @@ bool handleArgs(int argc, char** argv,
 
             offMeshInputPath = param;
         }
+        else if (strcmp(argv[i], "--allowDebug") == 0)
+        {
+            allowDebug = true;
+        }
+        else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-?"))
+        {
+            printf("%s\n", Readme);
+            silent = true;
+            return false;
+        }
         else
         {
             int map = atoi(argv[i]);
@@ -230,21 +278,47 @@ bool handleArgs(int argc, char** argv,
         }
     }
 
+#ifndef NDEBUG
+    if (!allowDebug)
+    {
+        finish("Build mmaps_generator in RelWithDebInfo or Release mode or it will take hours to complete!!!\nUse '--allowDebug' argument if you really want to run this tool in Debug.\n", -2);
+        silent = true;
+        return false;
+    }
+#endif
+
     return true;
 }
 
-int finish(const char* message, int returnValue)
+std::unordered_map<uint32, uint8> LoadLiquid()
 {
-    printf("%s", message);
-    getchar(); // Wait for user input
-    return returnValue;
+    DBCFileLoader liquidDbc;
+    std::unordered_map<uint32, uint8> liquidData;
+    // format string doesnt matter as long as it has correct length (only used for mapping to structures in worldserver)
+    if (liquidDbc.Load((boost::filesystem::path("dbc") / "LiquidType.dbc").string().c_str(), "nxxixixxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"))
+    {
+        for (uint32 x = 0; x < liquidDbc.GetNumRows(); ++x)
+        {
+            DBCFileLoader::Record record = liquidDbc.getRecord(x);
+            liquidData[record.getUInt(0)] = record.getUInt(3);
+        }
+    }
+
+    return liquidData;
 }
 
 int main(int argc, char** argv)
 {
-    int threads = 3, mapnum = -1;
-    float maxAngle = 70.0f;
+    Trinity::VerifyOsVersion();
+
+    Trinity::Locale::Init();
+
+    Trinity::Banner::Show("MMAP generator", [](char const* text) { printf("%s\n", text); }, nullptr);
+
+    unsigned int threads = std::thread::hardware_concurrency();
+    int mapnum = -1;
     int tileX = -1, tileY = -1;
+    Optional<float> maxAngle, maxAngleNotSteep;
     bool skipLiquid = false,
          skipContinents = false,
          skipJunkMaps = true,
@@ -252,11 +326,11 @@ int main(int argc, char** argv)
          debugOutput = false,
          silent = false,
          bigBaseUnit = false;
-    char* offMeshInputPath = NULL;
-    char* file = NULL;
+    char* offMeshInputPath = nullptr;
+    char* file = nullptr;
 
     bool validParam = handleArgs(argc, argv, mapnum,
-                                 tileX, tileY, maxAngle,
+                                 tileX, tileY, maxAngle, maxAngleNotSteep,
                                  skipLiquid, skipContinents, skipJunkMaps, skipBattlegrounds,
                                  debugOutput, silent, bigBaseUnit, offMeshInputPath, file, threads);
 
@@ -278,8 +352,12 @@ int main(int argc, char** argv)
     if (!checkDirectories(debugOutput))
         return silent ? -3 : finish("Press ENTER to close...", -3);
 
-    MapBuilder builder(maxAngle, skipLiquid, skipContinents, skipJunkMaps,
-                       skipBattlegrounds, debugOutput, bigBaseUnit, offMeshInputPath);
+    _liquidTypes = LoadLiquid();
+    if (_liquidTypes.empty())
+        return silent ? -5 : finish("Failed to load LiquidType.dbc", -5);
+
+    MapBuilder builder(maxAngle, maxAngleNotSteep, skipLiquid, skipContinents, skipJunkMaps,
+                       skipBattlegrounds, debugOutput, bigBaseUnit, mapnum, offMeshInputPath, threads);
 
     uint32 start = getMSTime();
     if (file)
@@ -287,11 +365,17 @@ int main(int argc, char** argv)
     else if (tileX > -1 && tileY > -1 && mapnum >= 0)
         builder.buildSingleTile(mapnum, tileX, tileY);
     else if (mapnum >= 0)
-        builder.buildMap(uint32(mapnum));
+        builder.buildMaps(uint32(mapnum));
     else
-        builder.buildAllMaps(threads);
+        builder.buildMaps({});
 
     if (!silent)
-        printf("Finished. MMAPS were built in %u ms!\n", GetMSTimeDiffToNow(start));
+        printf("Finished. MMAPS were built in %s\n", secsToTimeString(GetMSTimeDiffToNow(start) / 1000).c_str());
     return 0;
 }
+
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
+#include "WheatyExceptionReport.h"
+// must be at end of file because of init_seg pragma
+INIT_CRASH_HANDLER();
+#endif

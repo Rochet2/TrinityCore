@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,81 +15,16 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Bloodmyst_Isle
-SD%Complete: 80
-SDComment: Quest support: 9670
-SDCategory: Bloodmyst Isle
-EndScriptData */
-
-/* ContentData
-npc_webbed_creature
-EndContentData */
-
-#include "Player.h"
-#include "Group.h"
-#include "GridNotifiersImpl.h"
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "ScriptedEscortAI.h"
-#include "PassiveAI.h"
 #include "CellImpl.h"
-
-/*######
-## npc_webbed_creature
-######*/
-
-//possible creatures to be spawned
-uint32 const possibleSpawns[32] = {17322, 17661, 17496, 17522, 17340, 17352, 17333, 17524, 17654, 17348, 17339, 17345, 17359, 17353, 17336, 17550, 17330, 17701, 17321, 17680, 17325, 17320, 17683, 17342, 17715, 17334, 17341, 17338, 17337, 17346, 17344, 17327};
-
-enum WebbedCreature
-{
-    NPC_EXPEDITION_RESEARCHER                     = 17681
-};
-
-class npc_webbed_creature : public CreatureScript
-{
-public:
-    npc_webbed_creature() : CreatureScript("npc_webbed_creature") { }
-
-    struct npc_webbed_creatureAI : public NullCreatureAI
-    {
-        npc_webbed_creatureAI(Creature* creature) : NullCreatureAI(creature) { }
-
-        void Reset() override { }
-
-        void EnterCombat(Unit* /*who*/) override { }
-
-        void AttackStart(Unit* /*who*/) override { }
-
-        void MoveInLineOfSight(Unit* /*who*/) override { }
-
-        void JustDied(Unit* killer) override
-        {
-            uint32 spawnCreatureID = 0;
-
-            switch (urand(0, 2))
-            {
-                case 0:
-                    if (Player* player = killer->ToPlayer())
-                        player->KilledMonsterCredit(NPC_EXPEDITION_RESEARCHER);
-                    break;
-                case 1:
-                case 2:
-                    spawnCreatureID = possibleSpawns[urand(0, 30)];
-                    break;
-            }
-
-            if (spawnCreatureID)
-                me->SummonCreature(spawnCreatureID, 0.0f, 0.0f, 0.0f, me->GetOrientation(), TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 60000);
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_webbed_creatureAI(creature);
-    }
-};
+#include "Containers.h"
+#include "GridNotifiersImpl.h"
+#include "Group.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
+#include "ScriptedEscortAI.h"
+#include "SpellScript.h"
 
 /*######
 ## Quest 9759: Ending Their World
@@ -240,11 +174,6 @@ class npc_sironas : public CreatureScript
 public:
     npc_sironas() : CreatureScript("npc_sironas") { }
 
-    CreatureAI* GetAI(Creature* creature) const
-    {
-        return new npc_sironasAI(creature);
-    }
-
     struct npc_sironasAI : public ScriptedAI
     {
         npc_sironasAI(Creature* creature) : ScriptedAI(creature) { }
@@ -255,24 +184,28 @@ public:
             me->SetDisplayId(me->GetCreatureTemplate()->Modelid2);
         }
 
-        void EnterCombat(Unit* /*who*/) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
-            _events.ScheduleEvent(EVENT_UPPERCUT,      15 * IN_MILLISECONDS);
-            _events.ScheduleEvent(EVENT_IMMOLATE,      10 * IN_MILLISECONDS);
-            _events.ScheduleEvent(EVENT_CURSE_OF_BLOOD, 5 * IN_MILLISECONDS);
+            _events.ScheduleEvent(EVENT_UPPERCUT, 15s);
+            _events.ScheduleEvent(EVENT_IMMOLATE, 10s);
+            _events.ScheduleEvent(EVENT_CURSE_OF_BLOOD, 5s);
         }
 
         void JustDied(Unit* killer) override
         {
             me->SetObjectScale(1.0f);
             _events.Reset();
+
+            if (!killer)
+                return;
+
             if (Creature* legoso = me->FindNearestCreature(NPC_LEGOSO, SIZE_OF_GRIDS))
             {
                 Group* group = me->GetLootRecipientGroup();
 
                 if (killer->GetGUID() == legoso->GetGUID() ||
                     (group && group->IsMember(killer->GetGUID())) ||
-                    killer->GetGUIDLow() == legoso->AI()->GetData(DATA_EVENT_STARTER_GUID))
+                    killer->GetGUID().GetCounter() == legoso->AI()->GetData(DATA_EVENT_STARTER_GUID))
                     legoso->AI()->DoAction(ACTION_LEGOSO_SIRONAS_KILLED);
             }
         }
@@ -290,15 +223,15 @@ public:
                 {
                     case EVENT_UPPERCUT:
                         DoCastVictim(SPELL_UPPERCUT);
-                        _events.ScheduleEvent(EVENT_UPPERCUT, urand(10, 12) * IN_MILLISECONDS);
+                        _events.ScheduleEvent(EVENT_UPPERCUT, 10s, 12s);
                         break;
                     case EVENT_IMMOLATE:
                         DoCastVictim(SPELL_IMMOLATE);
-                        _events.ScheduleEvent(EVENT_IMMOLATE, urand(15, 20) * IN_MILLISECONDS);
+                        _events.ScheduleEvent(EVENT_IMMOLATE, 15s, 20s);
                         break;
                     case EVENT_CURSE_OF_BLOOD:
                         DoCastVictim(SPELL_CURSE_OF_BLOOD);
-                        _events.ScheduleEvent(EVENT_CURSE_OF_BLOOD, urand(20, 25) * IN_MILLISECONDS);
+                        _events.ScheduleEvent(EVENT_CURSE_OF_BLOOD, 20s, 25s);
                         break;
                     default:
                         break;
@@ -331,8 +264,11 @@ public:
                     std::list<Creature*> creatureList;
                     GetCreatureListWithEntryInGrid(creatureList, me, NPC_BLOODMYST_TESLA_COIL, 500.0f);
                     if (!creatureList.empty())
+                    {
                         for (std::list<Creature*>::iterator itr = creatureList.begin(); itr != creatureList.end(); ++itr)
                             (*itr)->InterruptNonMeleeSpells(true, SPELL_BLOODMYST_TESLA);
+                    }
+                    break;
                 }
                 default:
                     break;
@@ -343,35 +279,38 @@ public:
         GuidList _beamGuidList;
         EventMap _events;
     };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_sironasAI(creature);
+    }
 };
 
 /*######
 ## npc_demolitionist_legoso
 ######*/
 
+static constexpr uint32 PATH_ESCORT_LEGOSO = 143858;
+
 class npc_demolitionist_legoso : public CreatureScript
 {
 public:
     npc_demolitionist_legoso() : CreatureScript("npc_demolitionist_legoso") { }
 
-    CreatureAI* GetAI(Creature* creature) const
+    struct npc_demolitionist_legosoAI : public EscortAI
     {
-        return new npc_demolitionist_legosoAI(creature);
-    }
-
-    struct npc_demolitionist_legosoAI : public npc_escortAI
-    {
-        npc_demolitionist_legosoAI(Creature* creature) : npc_escortAI(creature)
+        npc_demolitionist_legosoAI(Creature* creature) : EscortAI(creature)
         {
             Initialize();
         }
 
-        void sQuestAccept(Player* player, Quest const* quest) override
+        void OnQuestAccept(Player* player, Quest const* quest) override
         {
             if (quest->GetQuestId() == QUEST_ENDING_THEIR_WORLD)
             {
-                SetData(DATA_EVENT_STARTER_GUID, player->GetGUIDLow());
-                Start(true, true, player->GetGUID(), quest);
+                SetData(DATA_EVENT_STARTER_GUID, player->GetGUID().GetCounter());
+                LoadPath(PATH_ESCORT_LEGOSO);
+                Start(true, player->GetGUID(), quest);
             }
         }
 
@@ -411,10 +350,10 @@ public:
             me->SetCanDualWield(true);
 
             _events.Reset();
-            _events.ScheduleEvent(EVENT_FROST_SHOCK, 1 * IN_MILLISECONDS);
-            _events.ScheduleEvent(EVENT_HEALING_SURGE, 5 * IN_MILLISECONDS);
-            _events.ScheduleEvent(EVENT_SEARING_TOTEM, 15 * IN_MILLISECONDS);
-            _events.ScheduleEvent(EVENT_STRENGTH_OF_EARTH_TOTEM, 20 * IN_MILLISECONDS);
+            _events.ScheduleEvent(EVENT_FROST_SHOCK, 1s);
+            _events.ScheduleEvent(EVENT_HEALING_SURGE, 5s);
+            _events.ScheduleEvent(EVENT_SEARING_TOTEM, 15s);
+            _events.ScheduleEvent(EVENT_STRENGTH_OF_EARTH_TOTEM, 20s);
         }
 
         void UpdateAI(uint32 diff) override
@@ -429,22 +368,22 @@ public:
                     {
                         case EVENT_FROST_SHOCK:
                             DoCastVictim(SPELL_FROST_SHOCK);
-                            _events.DelayEvents(1 * IN_MILLISECONDS);
-                            _events.ScheduleEvent(EVENT_FROST_SHOCK, urand(10, 15) * IN_MILLISECONDS);
+                            _events.DelayEvents(1s);
+                            _events.ScheduleEvent(EVENT_FROST_SHOCK, 10s, 15s);
                             break;
                         case EVENT_SEARING_TOTEM:
                             DoCast(me, SPELL_SEARING_TOTEM);
-                            _events.DelayEvents(1 * IN_MILLISECONDS);
-                            _events.ScheduleEvent(EVENT_SEARING_TOTEM, urand(110, 130) * IN_MILLISECONDS);
+                            _events.DelayEvents(1s);
+                            _events.ScheduleEvent(EVENT_SEARING_TOTEM, 110s, 130s);
                             break;
                         case EVENT_STRENGTH_OF_EARTH_TOTEM:
                             DoCast(me, SPELL_STRENGTH_OF_EARTH_TOTEM);
-                            _events.DelayEvents(1 * IN_MILLISECONDS);
-                            _events.ScheduleEvent(EVENT_STRENGTH_OF_EARTH_TOTEM, urand(110, 130) * IN_MILLISECONDS);
+                            _events.DelayEvents(1s);
+                            _events.ScheduleEvent(EVENT_STRENGTH_OF_EARTH_TOTEM, 110s, 130s);
                             break;
                         case EVENT_HEALING_SURGE:
                         {
-                            Unit* target = NULL;
+                            Unit* target = nullptr;
                             if (me->GetHealthPct() < 85)
                                 target = me;
                             else if (Player* player = GetPlayerForEscort())
@@ -453,10 +392,10 @@ public:
                             if (target)
                             {
                                 DoCast(target, SPELL_HEALING_SURGE);
-                                _events.ScheduleEvent(EVENT_HEALING_SURGE, 10 * IN_MILLISECONDS);
+                                _events.ScheduleEvent(EVENT_HEALING_SURGE, 10s);
                             }
                             else
-                                _events.ScheduleEvent(EVENT_HEALING_SURGE, 2 * IN_MILLISECONDS);
+                                _events.ScheduleEvent(EVENT_HEALING_SURGE, 2s);
                             break;
                         }
                         default:
@@ -470,7 +409,7 @@ public:
             if (HasEscortState(STATE_ESCORT_NONE))
                 return;
 
-            npc_escortAI::UpdateAI(diff);
+            EscortAI::UpdateAI(diff);
 
             if (_phase)
             {
@@ -501,26 +440,27 @@ public:
                             break;
                         case PHASE_PLANT_FIRST_STAND: // plant first explosives stage 1 stand
                             me->SetStandState(UNIT_STAND_STATE_STAND);
-                            _moveTimer = 0.5* IN_MILLISECONDS;
+                            _moveTimer = 0.5* AsUnderlyingType(IN_MILLISECONDS);
                             _phase = PHASE_PLANT_FIRST_WORK;
                             break;
                         case PHASE_PLANT_FIRST_WORK: // plant first explosives stage 2 work
-                            Talk(SAY_LEGOSO_4);
-                            _moveTimer = 17.5 * IN_MILLISECONDS;
+                            if (Player* player = GetPlayerForEscort())
+                                Talk(SAY_LEGOSO_4, player);
+                            _moveTimer = 17.5 * AsUnderlyingType(IN_MILLISECONDS);
                             _phase = PHASE_PLANT_FIRST_FINISH;
                             break;
                         case PHASE_PLANT_FIRST_FINISH: // plant first explosives finish
                             _explosivesGuids.clear();
                             for (uint8 i = 0; i != MAX_EXPLOSIVES; ++i)
                             {
-                                if (GameObject* explosive = me->SummonGameObject(GO_DRAENEI_EXPLOSIVES_1, ExplosivesPos[0][i].m_positionX, ExplosivesPos[0][i].m_positionY, ExplosivesPos[0][i].m_positionZ, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0))
+                                if (GameObject* explosive = me->SummonGameObject(GO_DRAENEI_EXPLOSIVES_1, ExplosivesPos[0][i], QuaternionData(), 0s))
                                     _explosivesGuids.push_back(explosive->GetGUID());
                             }
                             me->HandleEmoteCommand(EMOTE_ONESHOT_NONE); // reset anim state
                             // force runoff movement so he will not screw up next waypoint
                             me->GetMotionMaster()->MovePoint(WP_EXPLOSIVES_FIRST_RUNOFF, -1955.6f, -10669.8f, 110.65f, false);
                             Talk(SAY_LEGOSO_5);
-                            _moveTimer = 1.5 * IN_MILLISECONDS;
+                            _moveTimer = 1.5 * AsUnderlyingType(IN_MILLISECONDS);
                             _phase = PHASE_CONTINUE;
                             break;
                         case PHASE_PLANT_FIRST_TIMER_1: // first explosives detonate timer 1
@@ -541,7 +481,7 @@ public:
                         case PHASE_PLANT_FIRST_DETONATE: // first explosives detonate finish
                             for (GuidList::iterator itr = _explosivesGuids.begin(); itr != _explosivesGuids.end(); ++itr)
                             {
-                                if (GameObject* explosive = sObjectAccessor->GetGameObject(*me, *itr))
+                                if (GameObject* explosive = ObjectAccessor::GetGameObject(*me, *itr))
                                     me->RemoveGameObject(explosive, true);
                             }
                             _explosivesGuids.clear();
@@ -570,7 +510,8 @@ public:
                             _phase = PHASE_FEEL_SIRONAS_2;
                             break;
                         case PHASE_FEEL_SIRONAS_2: // legoso exclamation before sironas 1.2
-                            Talk(SAY_LEGOSO_11);
+                            if (Player* player = GetPlayerForEscort())
+                                Talk(SAY_LEGOSO_11, player);
                             _moveTimer = 4 * IN_MILLISECONDS;
                             _phase = PHASE_CONTINUE;
                             break;
@@ -609,10 +550,11 @@ public:
                             _explosivesGuids.clear();
                             for (uint8 i = 0; i != MAX_EXPLOSIVES; ++i)
                             {
-                                if (GameObject* explosive = me->SummonGameObject(GO_DRAENEI_EXPLOSIVES_2, ExplosivesPos[1][i].m_positionX, ExplosivesPos[1][i].m_positionY, ExplosivesPos[1][i].m_positionZ, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0))
+                                if (GameObject* explosive = me->SummonGameObject(GO_DRAENEI_EXPLOSIVES_2, ExplosivesPos[1][i], QuaternionData(), 0s))
                                     _explosivesGuids.push_back(explosive->GetGUID());
                             }
-                            Talk(SAY_LEGOSO_15);
+                            if (Player* player = GetPlayerForEscort())
+                                Talk(SAY_LEGOSO_15, player);
                             _moveTimer = 1 * IN_MILLISECONDS;
                             _phase = PHASE_PLANT_SECOND_WAIT;
                             break;
@@ -638,13 +580,13 @@ public:
                         case PHASE_PLANT_SECOND_DETONATE: // second explosives detonate finish
                             for (GuidList::iterator itr = _explosivesGuids.begin(); itr != _explosivesGuids.end(); ++itr)
                             {
-                                if (GameObject* explosive = sObjectAccessor->GetGameObject(*me, *itr))
+                                if (GameObject* explosive = ObjectAccessor::GetGameObject(*me, *itr))
                                     me->RemoveGameObject(explosive, true);
                             }
                             _explosivesGuids.clear();
                             if (Creature* sironas = me->FindNearestCreature(NPC_SIRONAS, SIZE_OF_GRIDS))
                             {
-                                sironas->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PC | UNIT_FLAG_IMMUNE_TO_NPC);
+                                sironas->SetImmuneToAll(false);
                                 me->SetFacingToObject(sironas);
                             }
                             _moveTimer = 1 * IN_MILLISECONDS;
@@ -676,7 +618,7 @@ public:
                                 if (!target)
                                     target = me;
 
-                                target->AddThreat(sironas, 0.001f);
+                                AddThreat(sironas, 0.001f, target);
                                 sironas->Attack(target, true);
                                 sironas->GetMotionMaster()->MoveChase(target);
                             }
@@ -714,7 +656,7 @@ public:
             }
         }
 
-        void WaypointReached(uint32 waypointId) override
+        void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
         {
             Player* player = GetPlayerForEscort();
             if (!player)
@@ -725,8 +667,8 @@ public:
                 case WP_START:
                     SetEscortPaused(true);
                     me->SetFacingToObject(player);
-                    Talk(SAY_LEGOSO_1);
-                    _moveTimer = 2.5 * IN_MILLISECONDS;
+                    Talk(SAY_LEGOSO_1, player);
+                    _moveTimer = 2.5 * AsUnderlyingType(IN_MILLISECONDS);
                     _phase = PHASE_CONTINUE;
                     break;
                 case WP_EXPLOSIVES_FIRST_POINT:
@@ -746,7 +688,7 @@ public:
                     break;
                 case WP_DEBUG_1:
                     SetEscortPaused(true);
-                    _moveTimer = 0.5 * IN_MILLISECONDS;
+                    _moveTimer = 0.5 * AsUnderlyingType(IN_MILLISECONDS);
                     _phase = PHASE_WP_26;
                     break;
                 case WP_SIRONAS_HILL:
@@ -754,10 +696,10 @@ public:
                     SetEscortPaused(true);
 
                     //Find Sironas and make it respawn if needed
-                    Creature* sironas = NULL;
+                    Creature* sironas = nullptr;
                     Trinity::AllCreaturesOfEntryInRange check(me, NPC_SIRONAS, SIZE_OF_GRIDS);
                     Trinity::CreatureSearcher<Trinity::AllCreaturesOfEntryInRange> searcher(me, sironas, check);
-                    me->VisitNearbyObject(SIZE_OF_GRIDS, searcher);
+                    Cell::VisitAllObjects(me, searcher, SIZE_OF_GRIDS);
 
                     if (sironas)
                     {
@@ -773,12 +715,12 @@ public:
                 }
                 case WP_EXPLOSIVES_SECOND_BATTLEROAR:
                     SetEscortPaused(true);
-                    _moveTimer = 0.2 * IN_MILLISECONDS;
+                    _moveTimer = 0.2 * AsUnderlyingType(IN_MILLISECONDS);
                     _phase = PHASE_MEET_SIRONAS_ROAR;
                     break;
                 case WP_EXPLOSIVES_SECOND_PLANT:
                     SetEscortPaused(true);
-                    _moveTimer = 0.5 * IN_MILLISECONDS;
+                    _moveTimer = 0.5 * AsUnderlyingType(IN_MILLISECONDS);
                     _phase = PHASE_PLANT_SECOND_KNEEL;
                     break;
                 case WP_EXPLOSIVES_SECOND_DETONATE:
@@ -808,15 +750,96 @@ public:
     private:
         int8 _phase;
         uint32 _moveTimer;
-        uint32 _eventStarterGuidLow;
+        ObjectGuid::LowType _eventStarterGuidLow;
         GuidList _explosivesGuids;
         EventMap _events;
     };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_demolitionist_legosoAI(creature);
+    }
+};
+
+/*######
+## Quest 9670: They're Alive! Maybe...
+######*/
+
+enum FreeWebbedBloodmyst
+{
+    SPELL_FREE_WEBBED_1      = 30954,
+    SPELL_FREE_WEBBED_2      = 30955,
+    SPELL_FREE_WEBBED_3      = 30956,
+    SPELL_FREE_WEBBED_4      = 30957,
+    SPELL_FREE_WEBBED_5      = 30958,
+    SPELL_FREE_WEBBED_6      = 30959,
+    SPELL_FREE_WEBBED_7      = 30960,
+    SPELL_FREE_WEBBED_8      = 30961,
+    SPELL_FREE_WEBBED_9      = 30962,
+    SPELL_FREE_WEBBED_10     = 30963,
+    SPELL_FREE_WEBBED_11     = 31010
+};
+
+uint32 const CocoonSummonSpells[10] =
+{
+    SPELL_FREE_WEBBED_1, SPELL_FREE_WEBBED_2, SPELL_FREE_WEBBED_3, SPELL_FREE_WEBBED_4, SPELL_FREE_WEBBED_5,
+    SPELL_FREE_WEBBED_6, SPELL_FREE_WEBBED_7, SPELL_FREE_WEBBED_8, SPELL_FREE_WEBBED_9, SPELL_FREE_WEBBED_10
+};
+
+// 30950 - Free Webbed Creature
+class spell_free_webbed : public SpellScript
+{
+    PrepareSpellScript(spell_free_webbed);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(CocoonSummonSpells);
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        GetCaster()->CastSpell(GetCaster(), Trinity::Containers::SelectRandomContainerElement(CocoonSummonSpells), true);
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_free_webbed::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 31009 - Free Webbed Creature
+class spell_free_webbed_on_quest : public SpellScript
+{
+    PrepareSpellScript(spell_free_webbed_on_quest);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(CocoonSummonSpells) && ValidateSpellInfo({ SPELL_FREE_WEBBED_11 });
+    }
+
+    // This one is a bit different from the one used in Terokkar. There is additional spell 31011 which apply periodic aura to trigger
+    // summon spell 31010 after 1.5 sec. However in retail Expedition Researcher is summoned instantly, we'll use 31010 directly
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        Unit* target = GetHitUnit();
+
+        if (roll_chance_i(66))
+            caster->CastSpell(caster, Trinity::Containers::SelectRandomContainerElement(CocoonSummonSpells), true);
+        else
+            target->CastSpell(caster, SPELL_FREE_WEBBED_11, true);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_free_webbed_on_quest::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
 };
 
 void AddSC_bloodmyst_isle()
 {
-    new npc_webbed_creature();
     new npc_sironas();
     new npc_demolitionist_legoso();
+    RegisterSpellScript(spell_free_webbed);
+    RegisterSpellScript(spell_free_webbed_on_quest);
 }

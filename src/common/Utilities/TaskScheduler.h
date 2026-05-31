@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,18 +18,16 @@
 #ifndef _TASK_SCHEDULER_H_
 #define _TASK_SCHEDULER_H_
 
+#include "Duration.h"
+#include "Optional.h"
+#include "Random.h"
 #include <algorithm>
-#include <chrono>
+#include <functional>
 #include <vector>
 #include <queue>
 #include <memory>
 #include <utility>
 #include <set>
-
-#include <boost/optional.hpp>
-
-#include "Util.h"
-#include "Duration.h"
 
 class TaskContext;
 
@@ -46,7 +44,7 @@ class TaskContext;
 /// with the same duration or a new one.
 /// It also provides access to the repeat counter which is useful for task that repeat itself often
 /// but behave different every time (spoken event dialogs for example).
-class TaskScheduler
+class TC_COMMON_API TaskScheduler
 {
     friend class TaskContext;
 
@@ -73,19 +71,19 @@ class TaskScheduler
 
         timepoint_t _end;
         duration_t _duration;
-        boost::optional<group_t> _group;
+        Optional<group_t> _group;
         repeated_t _repeated;
         task_handler_t _task;
 
     public:
         // All Argument construct
-        Task(timepoint_t const& end, duration_t const& duration, boost::optional<group_t> const& group,
+        Task(timepoint_t const& end, duration_t const& duration, Optional<group_t> const& group,
             repeated_t const repeated, task_handler_t const& task)
                 : _end(end), _duration(duration), _group(group), _repeated(repeated), _task(task) { }
 
         // Minimal Argument construct
         Task(timepoint_t const& end, duration_t const& duration, task_handler_t const& task)
-            : _end(end), _duration(duration), _group(boost::none), _repeated(0), _task(task) { }
+            : _end(end), _duration(duration), _group(std::nullopt), _repeated(0), _task(task) { }
 
         // Copy construct
         Task(Task const&) = delete;
@@ -97,18 +95,13 @@ class TaskScheduler
         Task& operator= (Task&& right) = delete;
 
         // Order tasks by its end
-        inline bool operator< (Task const& other) const
+        std::weak_ordering operator<=> (Task const& other) const
         {
-            return _end < other._end;
-        }
-
-        inline bool operator> (Task const& other) const
-        {
-            return _end > other._end;
+            return std::compare_weak_order_fallback(_end, other._end);
         }
 
         // Compare tasks with its end
-        inline bool operator== (Task const& other)
+        bool operator== (Task const& other) const
         {
             return _end == other._end;
         }
@@ -125,13 +118,13 @@ class TaskScheduler
     /// Container which provides Task order, insert and reschedule operations.
     struct Compare
     {
-        bool operator() (TaskContainer const& left, TaskContainer const& right)
+        bool operator() (TaskContainer const& left, TaskContainer const& right) const
         {
             return (*left.get()) < (*right.get());
-        };
+        }
     };
 
-    class TaskQueue
+    class TC_COMMON_API TaskQueue
     {
         std::multiset<TaskContainer, Compare> container;
 
@@ -250,7 +243,7 @@ public:
     TaskScheduler& Schedule(std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max, task_handler_t const& task)
     {
-        return Schedule(RandomDurationBetween(min, max), task);
+        return Schedule(randtime(min, max), task);
     }
 
     /// Schedule an event with a fixed rate.
@@ -260,7 +253,7 @@ public:
         std::chrono::duration<_RepRight, _PeriodRight> const& max, group_t const group,
         task_handler_t const& task)
     {
-        return Schedule(RandomDurationBetween(min, max), group, task);
+        return Schedule(randtime(min, max), group, task);
     }
 
     /// Cancels all tasks.
@@ -292,7 +285,7 @@ public:
     TaskScheduler& DelayAll(std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max)
     {
-        return DelayAll(RandomDurationBetween(min, max));
+        return DelayAll(randtime(min, max));
     }
 
     /// Delays all tasks of a group with the given duration.
@@ -318,7 +311,7 @@ public:
         std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max)
     {
-        return DelayGroup(group, RandomDurationBetween(min, max));
+        return DelayGroup(group, randtime(min, max));
     }
 
     /// Reschedule all tasks with a given duration.
@@ -339,7 +332,7 @@ public:
     TaskScheduler& RescheduleAll(std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max)
     {
-        return RescheduleAll(RandomDurationBetween(min, max));
+        return RescheduleAll(randtime(min, max));
     }
 
     /// Reschedule all tasks of a group with the given duration.
@@ -366,7 +359,7 @@ public:
         std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max)
     {
-        return RescheduleGroup(group, RandomDurationBetween(min, max));
+        return RescheduleGroup(group, randtime(min, max));
     }
 
 private:
@@ -391,24 +384,11 @@ private:
         return InsertTask(TaskContainer(new Task(end + time, time, group, DEFAULT_REPEATED, task)));
     }
 
-    // Returns a random duration between min and max
-    template<class _RepLeft, class _PeriodLeft, class _RepRight, class _PeriodRight>
-    static std::chrono::milliseconds
-    RandomDurationBetween(std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
-            std::chrono::duration<_RepRight, _PeriodRight> const& max)
-    {
-        auto const milli_min = std::chrono::duration_cast<std::chrono::milliseconds>(min);
-        auto const milli_max = std::chrono::duration_cast<std::chrono::milliseconds>(max);
-
-        // TC specific: use SFMT URandom
-        return std::chrono::milliseconds(urand(milli_min.count(), milli_max.count()));
-    }
-
     /// Dispatch remaining tasks
     void Dispatch(success_t const& callback);
 };
 
-class TaskContext
+class TC_COMMON_API TaskContext
 {
     friend class TaskScheduler;
 
@@ -507,7 +487,7 @@ public:
     TaskContext& Repeat(std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max)
     {
-        return Repeat(TaskScheduler::RandomDurationBetween(min, max));
+        return Repeat(randtime(min, max));
     }
 
     /// Schedule a callable function that is executed at the next update tick from within the context.
@@ -552,7 +532,7 @@ public:
     TaskContext& Schedule(std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max, TaskScheduler::task_handler_t const& task)
     {
-        return Schedule(TaskScheduler::RandomDurationBetween(min, max), task);
+        return Schedule(randtime(min, max), task);
     }
 
     /// Schedule an event with a randomized rate between min and max rate from within the context.
@@ -564,7 +544,7 @@ public:
         std::chrono::duration<_RepRight, _PeriodRight> const& max, TaskScheduler::group_t const group,
         TaskScheduler::task_handler_t const& task)
     {
-        return Schedule(TaskScheduler::RandomDurationBetween(min, max), group, task);
+        return Schedule(randtime(min, max), group, task);
     }
 
     /// Cancels all tasks from within the context.
@@ -589,7 +569,7 @@ public:
     TaskContext& DelayAll(std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max)
     {
-        return DelayAll(TaskScheduler::RandomDurationBetween(min, max));
+        return DelayAll(randtime(min, max));
     }
 
     /// Delays all tasks of a group with the given duration from within the context.
@@ -605,7 +585,7 @@ public:
         std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max)
     {
-        return DelayGroup(group, TaskScheduler::RandomDurationBetween(min, max));
+        return DelayGroup(group, randtime(min, max));
     }
 
     /// Reschedule all tasks with the given duration.
@@ -620,7 +600,7 @@ public:
     TaskContext& RescheduleAll(std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max)
     {
-        return RescheduleAll(TaskScheduler::RandomDurationBetween(min, max));
+        return RescheduleAll(randtime(min, max));
     }
 
     /// Reschedule all tasks of a group with the given duration.
@@ -636,7 +616,7 @@ public:
         std::chrono::duration<_RepLeft, _PeriodLeft> const& min,
         std::chrono::duration<_RepRight, _PeriodRight> const& max)
     {
-        return RescheduleGroup(group, TaskScheduler::RandomDurationBetween(min, max));
+        return RescheduleGroup(group, randtime(min, max));
     }
 
 private:

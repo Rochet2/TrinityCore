@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,20 +15,16 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * Timers requires to be revisited
+ */
+
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "karazhan.h"
+#include "ScriptedCreature.h"
+#include "SpellInfo.h"
 
-enum Spells
-{
-    SPELL_REPENTANCE    = 29511,
-    SPELL_HOLYFIRE      = 29522,
-    SPELL_HOLYWRATH     = 32445,
-    SPELL_HOLYGROUND    = 29512,
-    SPELL_BERSERK       = 26662
-};
-
-enum Yells
+enum MaidenOfVirtueTexts
 {
     SAY_AGGRO           = 0,
     SAY_SLAY            = 1,
@@ -36,105 +32,102 @@ enum Yells
     SAY_DEATH           = 3
 };
 
-enum Events
+enum MaidenOfVirtueSpells
 {
-    EVENT_REPENTANCE    = 1,
-    EVENT_HOLYFIRE      = 2,
-    EVENT_HOLYWRATH     = 3,
-    EVENT_HOLYGROUND    = 4,
-    EVENT_ENRAGE        = 5
+    SPELL_HOLYGROUND    = 29523,
+    SPELL_REPENTANCE    = 29511,
+    SPELL_HOLYFIRE      = 29522,
+    SPELL_HOLYWRATH     = 32445,
+    SPELL_BERSERK       = 26662
 };
 
-class boss_maiden_of_virtue : public CreatureScript
+enum MaidenOfVirtueEvents
 {
-public:
-    boss_maiden_of_virtue() : CreatureScript("boss_maiden_of_virtue") { }
+    EVENT_REPENTANCE    = 1,
+    EVENT_HOLYFIRE,
+    EVENT_HOLYWRATH,
+    EVENT_BERSERK
+};
 
-    CreatureAI* GetAI(Creature* creature) const override
+// 16457 - Maiden of Virtue
+struct boss_maiden_of_virtue : public BossAI
+{
+    boss_maiden_of_virtue(Creature* creature) : BossAI(creature, DATA_MAIDEN_OF_VIRTUE) { }
+
+    void JustEngagedWith(Unit* who) override
     {
-        return new boss_maiden_of_virtueAI(creature);
+        BossAI::JustEngagedWith(who);
+        Talk(SAY_AGGRO);
+
+        DoCastSelf(SPELL_HOLYGROUND, true);
+        events.ScheduleEvent(EVENT_REPENTANCE, 33s, 45s);
+        events.ScheduleEvent(EVENT_HOLYFIRE, 8s);
+        events.ScheduleEvent(EVENT_HOLYWRATH, 15s, 25s);
+        events.ScheduleEvent(EVENT_BERSERK, 10min);
     }
 
-    struct boss_maiden_of_virtueAI : public BossAI
+    void OnSpellCast(SpellInfo const* spell) override
     {
-        boss_maiden_of_virtueAI(Creature* creature) : BossAI(creature, TYPE_MAIDEN) { }
+        if (spell->Id == SPELL_REPENTANCE)
+            Talk(SAY_REPENTANCE);
+    }
 
-        void Reset() override
+    void KilledUnit(Unit* /*victim*/) override
+    {
+        if (roll_chance_i(50))
+            Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        Talk(SAY_DEATH);
+        _JustDied();
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            _Reset();
-        }
-
-        void KilledUnit(Unit* /*Victim*/) override
-        {
-            if (urand(0, 1) == 0)
-                Talk(SAY_SLAY);
-        }
-
-        void JustDied(Unit* /*killer*/) override
-        {
-            Talk(SAY_DEATH);
-            _JustDied();
-        }
-
-        void EnterCombat(Unit* /*who*/) override
-        {
-            _EnterCombat();
-            Talk(SAY_AGGRO);
-
-            events.ScheduleEvent(EVENT_REPENTANCE, urand(33, 45) * IN_MILLISECONDS);
-            events.ScheduleEvent(EVENT_HOLYFIRE, 12 * IN_MILLISECONDS);
-            events.ScheduleEvent(EVENT_HOLYWRATH, urand(15, 25) * IN_MILLISECONDS);
-            events.ScheduleEvent(EVENT_HOLYGROUND, 3 * IN_MILLISECONDS);
-            events.ScheduleEvent(EVENT_ENRAGE, 600 * IN_MILLISECONDS);
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            if (!UpdateVictim())
-                return;
-
-            events.Update(diff);
+            switch (eventId)
+            {
+                case EVENT_REPENTANCE:
+                    DoCastVictim(SPELL_REPENTANCE);
+                    events.Repeat(35s);
+                    break;
+                case EVENT_HOLYFIRE:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 50, true))
+                        DoCast(target, SPELL_HOLYFIRE);
+                    events.Repeat(8s, 19s);
+                    break;
+                case EVENT_HOLYWRATH:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 80, true))
+                        DoCast(target, SPELL_HOLYWRATH);
+                    events.Repeat(15s, 25s);
+                    break;
+                case EVENT_BERSERK:
+                    DoCastSelf(SPELL_BERSERK);
+                    break;
+                default:
+                    break;
+            }
 
             if (me->HasUnitState(UNIT_STATE_CASTING))
                 return;
-
-            while (uint32 eventId = events.ExecuteEvent())
-            {
-                switch (eventId)
-                {
-                    case EVENT_REPENTANCE:
-                        DoCastVictim(SPELL_REPENTANCE);
-                        Talk(SAY_REPENTANCE);
-                        events.ScheduleEvent(EVENT_REPENTANCE, urand(33, 45) * IN_MILLISECONDS);
-                        break;
-                    case EVENT_HOLYFIRE:
-                        if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 50, true))
-                            DoCast(target, SPELL_HOLYFIRE);
-                        events.ScheduleEvent(EVENT_HOLYFIRE, 12 * IN_MILLISECONDS);
-                        break;
-                    case EVENT_HOLYWRATH:
-                        if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 80, true))
-                            DoCast(target, SPELL_HOLYWRATH);
-                        events.ScheduleEvent(EVENT_HOLYWRATH, urand(15, 25) * IN_MILLISECONDS);
-                        break;
-                    case EVENT_HOLYGROUND:
-                        DoCast(me, SPELL_HOLYGROUND, true);
-                        events.ScheduleEvent(EVENT_HOLYGROUND, 3 * IN_MILLISECONDS);
-                        break;
-                    case EVENT_ENRAGE:
-                        DoCast(me, SPELL_BERSERK, true);
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            DoMeleeAttackIfReady();
         }
-    };
+
+        DoMeleeAttackIfReady();
+    }
 };
 
 void AddSC_boss_maiden_of_virtue()
 {
-    new boss_maiden_of_virtue();
+    RegisterKarazhanCreatureAI(boss_maiden_of_virtue);
 }

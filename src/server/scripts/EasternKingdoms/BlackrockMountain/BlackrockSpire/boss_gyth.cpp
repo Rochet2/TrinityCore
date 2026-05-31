@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,8 +16,11 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "blackrock_spire.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ScriptedCreature.h"
 
 enum Spells
 {
@@ -33,7 +36,7 @@ enum Misc
 {
     NEFARIUS_PATH_2                 = 1379671,
     NEFARIUS_PATH_3                 = 1379672,
-    GYTH_PATH_1                     = 1379681,
+    GYTH_PATH_1                     = 11037448,
 };
 
 enum Events
@@ -46,135 +49,130 @@ enum Events
     EVENT_SUMMONED_2                = 6
 };
 
-class boss_gyth : public CreatureScript
+struct boss_gyth : public BossAI
 {
-public:
-    boss_gyth() : CreatureScript("boss_gyth") { }
-
-    struct boss_gythAI : public BossAI
+    boss_gyth(Creature* creature) : BossAI(creature, DATA_GYTH)
     {
-        boss_gythAI(Creature* creature) : BossAI(creature, DATA_GYTH)
-        {
-            Initialize();
-        }
+        Initialize();
+    }
 
-        void Initialize()
-        {
-            SummonedRend = false;
-        }
+    void Initialize()
+    {
+        SummonedRend = false;
+    }
 
-        bool SummonedRend;
+    bool SummonedRend;
 
-        void Reset() override
-        {
-            Initialize();
-            if (instance->GetBossState(DATA_GYTH) == IN_PROGRESS)
-            {
-                instance->SetBossState(DATA_GYTH, DONE);
-                me->DespawnOrUnsummon();
-            }
-        }
-
-        void EnterCombat(Unit* /*who*/) override
-        {
-            _EnterCombat();
-
-            events.ScheduleEvent(EVENT_CORROSIVE_ACID, urand(8000, 16000));
-            events.ScheduleEvent(EVENT_FREEZE, urand(8000, 16000));
-            events.ScheduleEvent(EVENT_FLAME_BREATH, urand(8000, 16000));
-            events.ScheduleEvent(EVENT_KNOCK_AWAY, urand(12000, 18000));
-        }
-
-        void JustDied(Unit* /*killer*/) override
+    void Reset() override
+    {
+        Initialize();
+        if (instance->GetBossState(DATA_GYTH) == IN_PROGRESS)
         {
             instance->SetBossState(DATA_GYTH, DONE);
+            me->DespawnOrUnsummon();
+        }
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+
+        events.ScheduleEvent(EVENT_CORROSIVE_ACID, 8s, 16s);
+        events.ScheduleEvent(EVENT_FREEZE, 8s, 16s);
+        events.ScheduleEvent(EVENT_FLAME_BREATH, 8s, 16s);
+        events.ScheduleEvent(EVENT_KNOCK_AWAY, 12s, 18s);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        instance->SetBossState(DATA_GYTH, DONE);
+    }
+
+    void SetData(uint32 /*type*/, uint32 data) override
+    {
+        switch (data)
+        {
+            case 1:
+                events.ScheduleEvent(EVENT_SUMMONED_1, 1s);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+
+        if (!SummonedRend && HealthBelowPct(5))
+        {
+            DoCast(me, SPELL_SUMMON_REND);
+            me->RemoveAura(SPELL_REND_MOUNTS);
+            SummonedRend = true;
         }
 
-        void SetData(uint32 /*type*/, uint32 data) override
+        if (!UpdateVictim())
         {
-            switch (data)
-            {
-                case 1:
-                    events.ScheduleEvent(EVENT_SUMMONED_1, 1000);
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-
-            if (!SummonedRend && HealthBelowPct(5))
-            {
-                DoCast(me, SPELL_SUMMON_REND);
-                me->RemoveAura(SPELL_REND_MOUNTS);
-                SummonedRend = true;
-            }
-
-            if (!UpdateVictim())
-            {
-                events.Update(diff);
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_SUMMONED_1:
-                            me->AddAura(SPELL_REND_MOUNTS, me);
-                            if (GameObject* portcullis = me->FindNearestGameObject(GO_DR_PORTCULLIS, 40.0f))
-                                portcullis->UseDoorOrButton();
-                            if (Creature* victor = me->FindNearestCreature(NPC_LORD_VICTOR_NEFARIUS, 75.0f, true))
-                                victor->AI()->SetData(1, 1);
-                            events.ScheduleEvent(EVENT_SUMMONED_2, 2000);
-                            break;
-                        case EVENT_SUMMONED_2:
-                            me->GetMotionMaster()->MovePath(GYTH_PATH_1, false);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-                return;
-            }
-
             events.Update(diff);
 
             while (uint32 eventId = events.ExecuteEvent())
             {
                 switch (eventId)
                 {
-                    case EVENT_CORROSIVE_ACID:
-                        DoCast(me, SPELL_CORROSIVE_ACID);
-                        events.ScheduleEvent(EVENT_CORROSIVE_ACID, urand(10000, 16000));
+                    case EVENT_SUMMONED_1:
+                        me->AddAura(SPELL_REND_MOUNTS, me);
+                        if (GameObject* portcullis = me->FindNearestGameObject(GO_DR_PORTCULLIS, 40.0f))
+                            portcullis->UseDoorOrButton();
+                        if (Creature* victor = me->FindNearestCreature(NPC_LORD_VICTOR_NEFARIUS, 75.0f, true))
+                            victor->AI()->SetData(1, 1);
+                        events.ScheduleEvent(EVENT_SUMMONED_2, 2s);
                         break;
-                    case EVENT_FREEZE:
-                        DoCast(me, SPELL_FREEZE);
-                        events.ScheduleEvent(EVENT_FREEZE, urand(10000, 16000));
-                        break;
-                    case EVENT_FLAME_BREATH:
-                        DoCast(me, SPELL_FLAMEBREATH);
-                        events.ScheduleEvent(EVENT_FLAME_BREATH, urand(10000, 16000));
-                        break;
-                    case EVENT_KNOCK_AWAY:
-                        DoCastVictim(SPELL_KNOCK_AWAY);
-                        events.ScheduleEvent(EVENT_KNOCK_AWAY, urand(14000, 20000));
+                    case EVENT_SUMMONED_2:
+                        me->GetMotionMaster()->MovePath(GYTH_PATH_1, false);
                         break;
                     default:
                         break;
                 }
             }
-            DoMeleeAttackIfReady();
+            return;
         }
-    };
 
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetInstanceAI<boss_gythAI>(creature);
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case EVENT_CORROSIVE_ACID:
+                    DoCast(me, SPELL_CORROSIVE_ACID);
+                    events.ScheduleEvent(EVENT_CORROSIVE_ACID, 10s, 16s);
+                    break;
+                case EVENT_FREEZE:
+                    DoCast(me, SPELL_FREEZE);
+                    events.ScheduleEvent(EVENT_FREEZE, 10s, 16s);
+                    break;
+                case EVENT_FLAME_BREATH:
+                    DoCast(me, SPELL_FLAMEBREATH);
+                    events.ScheduleEvent(EVENT_FLAME_BREATH, 10s, 16s);
+                    break;
+                case EVENT_KNOCK_AWAY:
+                    DoCastVictim(SPELL_KNOCK_AWAY);
+                    events.ScheduleEvent(EVENT_KNOCK_AWAY, 14s, 20s);
+                    break;
+                default:
+                    break;
+            }
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
+        }
+        DoMeleeAttackIfReady();
     }
 };
 
 void AddSC_boss_gyth()
 {
-    new boss_gyth();
+    RegisterBlackrockSpireCreatureAI(boss_gyth);
 }

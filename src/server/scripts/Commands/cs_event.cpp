@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,36 +22,38 @@ Comment: All event related commands
 Category: commandscripts
 EndScriptData */
 
+#include "ScriptMgr.h"
 #include "Chat.h"
 #include "GameEventMgr.h"
+#include "GameTime.h"
 #include "Language.h"
 #include "Player.h"
-#include "ScriptMgr.h"
+#include "RBAC.h"
+
+using namespace Trinity::ChatCommands;
 
 class event_commandscript : public CommandScript
 {
 public:
     event_commandscript() : CommandScript("event_commandscript") { }
 
-    ChatCommand* GetCommands() const override
+    ChatCommandTable GetCommands() const override
     {
-        static ChatCommand eventCommandTable[] =
+        static ChatCommandTable eventCommandTable =
         {
-            { "activelist", rbac::RBAC_PERM_COMMAND_EVENT_ACTIVELIST, true, &HandleEventActiveListCommand, "", NULL },
-            { "start",      rbac::RBAC_PERM_COMMAND_EVENT_START,      true, &HandleEventStartCommand,      "", NULL },
-            { "stop",       rbac::RBAC_PERM_COMMAND_EVENT_STOP,       true, &HandleEventStopCommand,       "", NULL },
-            { "",           rbac::RBAC_PERM_COMMAND_EVENT,            true, &HandleEventInfoCommand,       "", NULL },
-            { NULL,         0,                                 false, NULL,                          "", NULL }
+            { "activelist", HandleEventActiveListCommand, rbac::RBAC_PERM_COMMAND_EVENT_ACTIVELIST, Console::Yes },
+            { "start",      HandleEventStartCommand,      rbac::RBAC_PERM_COMMAND_EVENT_START,      Console::Yes },
+            { "stop",       HandleEventStopCommand,       rbac::RBAC_PERM_COMMAND_EVENT_STOP,       Console::Yes },
+            { "info",       HandleEventInfoCommand,       rbac::RBAC_PERM_COMMAND_EVENT_INFO,       Console::Yes },
         };
-        static ChatCommand commandTable[] =
+        static ChatCommandTable commandTable =
         {
-            { "event", rbac::RBAC_PERM_COMMAND_EVENT, false, NULL, "", eventCommandTable },
-            { NULL,    0,                       false, NULL, "", NULL }
+            { "event", eventCommandTable },
         };
         return commandTable;
     }
 
-    static bool HandleEventActiveListCommand(ChatHandler* handler, char const* /*args*/)
+    static bool HandleEventActiveListCommand(ChatHandler* handler)
     {
         uint32 counter = 0;
 
@@ -60,9 +62,8 @@ public:
 
         char const* active = handler->GetTrinityString(LANG_ACTIVE);
 
-        for (GameEventMgr::ActiveEvents::const_iterator itr = activeEvents.begin(); itr != activeEvents.end(); ++itr)
+        for (uint16 eventId : activeEvents)
         {
-            uint32 eventId = *itr;
             GameEventData const& eventData = events[eventId];
 
             if (handler->GetSession())
@@ -80,28 +81,18 @@ public:
         return true;
     }
 
-    static bool HandleEventInfoCommand(ChatHandler* handler, char const* args)
+    static bool HandleEventInfoCommand(ChatHandler* handler, Variant<Hyperlink<gameevent>, uint16> eventId)
     {
-        if (!*args)
-            return false;
-
-        // id or [name] Shift-click form |color|Hgameevent:id|h[name]|h|r
-        char* id =  handler->extractKeyFromLink((char*)args, "Hgameevent");
-        if (!id)
-            return false;
-
-        uint32 eventId = atoi(id);
-
         GameEventMgr::GameEventDataMap const& events = sGameEventMgr->GetEventMap();
 
-        if (eventId >= events.size())
+        if (*eventId >= events.size())
         {
             handler->SendSysMessage(LANG_EVENT_NOT_EXIST);
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        GameEventData const& eventData = events[eventId];
+        GameEventData const& eventData = events[*eventId];
         if (!eventData.isValid())
         {
             handler->SendSysMessage(LANG_EVENT_NOT_EXIST);
@@ -117,40 +108,30 @@ public:
         std::string endTimeStr = TimeToTimestampStr(eventData.end);
 
         uint32 delay = sGameEventMgr->NextCheck(eventId);
-        time_t nextTime = time(NULL) + delay;
-        std::string nextStr = nextTime >= eventData.start && nextTime < eventData.end ? TimeToTimestampStr(time(NULL) + delay) : "-";
+        time_t nextTime = GameTime::GetGameTime() + delay;
+        std::string nextStr = nextTime >= eventData.start && nextTime < eventData.end ? TimeToTimestampStr(GameTime::GetGameTime() + delay) : "-";
 
         std::string occurenceStr = secsToTimeString(eventData.occurence * MINUTE);
         std::string lengthStr = secsToTimeString(eventData.length * MINUTE);
 
-        handler->PSendSysMessage(LANG_EVENT_INFO, eventId, eventData.description.c_str(), activeStr,
+        handler->PSendSysMessage(LANG_EVENT_INFO, *eventId, eventData.description.c_str(), activeStr,
             startTimeStr.c_str(), endTimeStr.c_str(), occurenceStr.c_str(), lengthStr.c_str(),
             nextStr.c_str());
         return true;
     }
 
-    static bool HandleEventStartCommand(ChatHandler* handler, char const* args)
+    static bool HandleEventStartCommand(ChatHandler* handler, Variant<Hyperlink<gameevent>, uint16> eventId)
     {
-        if (!*args)
-            return false;
-
-        // id or [name] Shift-click form |color|Hgameevent:id|h[name]|h|r
-        char* id =  handler->extractKeyFromLink((char*)args, "Hgameevent");
-        if (!id)
-            return false;
-
-        int32 eventId = atoi(id);
-
         GameEventMgr::GameEventDataMap const& events = sGameEventMgr->GetEventMap();
 
-        if (eventId < 1 || uint32(eventId) >= events.size())
+        if (*eventId < 1 || *eventId >= events.size())
         {
             handler->SendSysMessage(LANG_EVENT_NOT_EXIST);
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        GameEventData const& eventData = events[eventId];
+        GameEventData const& eventData = events[*eventId];
         if (!eventData.isValid())
         {
             handler->SendSysMessage(LANG_EVENT_NOT_EXIST);
@@ -161,7 +142,7 @@ public:
         GameEventMgr::ActiveEvents const& activeEvents = sGameEventMgr->GetActiveEventList();
         if (activeEvents.find(eventId) != activeEvents.end())
         {
-            handler->PSendSysMessage(LANG_EVENT_ALREADY_ACTIVE, eventId);
+            handler->PSendSysMessage(LANG_EVENT_ALREADY_ACTIVE, *eventId);
             handler->SetSentErrorMessage(true);
             return false;
         }
@@ -170,28 +151,18 @@ public:
         return true;
     }
 
-    static bool HandleEventStopCommand(ChatHandler* handler, char const* args)
+    static bool HandleEventStopCommand(ChatHandler* handler, Variant<Hyperlink<gameevent>, uint16> eventId)
     {
-        if (!*args)
-            return false;
-
-        // id or [name] Shift-click form |color|Hgameevent:id|h[name]|h|r
-        char* id =  handler->extractKeyFromLink((char*)args, "Hgameevent");
-        if (!id)
-            return false;
-
-        int32 eventId = atoi(id);
-
         GameEventMgr::GameEventDataMap const& events = sGameEventMgr->GetEventMap();
 
-        if (eventId < 1 || uint32(eventId) >= events.size())
+        if (*eventId < 1 || *eventId >= events.size())
         {
             handler->SendSysMessage(LANG_EVENT_NOT_EXIST);
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        GameEventData const& eventData = events[eventId];
+        GameEventData const& eventData = events[*eventId];
         if (!eventData.isValid())
         {
             handler->SendSysMessage(LANG_EVENT_NOT_EXIST);
@@ -203,7 +174,7 @@ public:
 
         if (activeEvents.find(eventId) == activeEvents.end())
         {
-            handler->PSendSysMessage(LANG_EVENT_NOT_ACTIVE, eventId);
+            handler->PSendSysMessage(LANG_EVENT_NOT_ACTIVE, *eventId);
             handler->SetSentErrorMessage(true);
             return false;
         }

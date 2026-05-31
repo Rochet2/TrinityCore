@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,12 +16,24 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "SpellScript.h"
-#include "SpellAuraEffects.h"
 #include "drak_tharon_keep.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
+#include "ScriptedCreature.h"
+#include "SpellAuraEffects.h"
+#include "SpellScript.h"
 
-enum Spells
+enum TrollgoreTexts
+{
+    SAY_AGGRO                           = 0,
+    SAY_SLAY                            = 1,
+    SAY_CONSUME                         = 2,
+    SAY_EXPLODE                         = 3,
+    SAY_DEATH                           = 4
+};
+
+enum TrollgoreSpells
 {
     SPELL_INFECTED_WOUND                = 49637,
     SPELL_CRUSH                         = 49639,
@@ -40,296 +52,223 @@ enum Spells
 
 #define SPELL_CONSUME_BUFF_HELPER DUNGEON_MODE<uint32>(SPELL_CONSUME_BUFF, SPELL_CONSUME_BUFF_H)
 
-enum Yells
+enum TrollgoreEvents
 {
-    SAY_AGGRO                           = 0,
-    SAY_KILL                            = 1,
-    SAY_CONSUME                         = 2,
-    SAY_EXPLODE                         = 3,
-    SAY_DEATH                           = 4
-};
-
-enum Misc
-{
-    DATA_CONSUMPTION_JUNCTION           = 1,
-    POINT_LANDING                       = 1
-};
-
-enum Events
-{
-    EVENT_CONSUME = 1,
+    EVENT_CONSUME                       = 1,
     EVENT_CRUSH,
     EVENT_INFECTED_WOUND,
     EVENT_CORPSE_EXPLODE,
     EVENT_SPAWN
 };
 
-Position const Landing = { -263.0534f, -660.8658f, 26.50903f, 0.0f };
-
-class boss_trollgore : public CreatureScript
+enum TrollgoreMisc
 {
-    public:
-        boss_trollgore() : CreatureScript("boss_trollgore") { }
-
-        struct boss_trollgoreAI : public BossAI
-        {
-            boss_trollgoreAI(Creature* creature) : BossAI(creature, DATA_TROLLGORE)
-            {
-                Initialize();
-            }
-
-            void Initialize()
-            {
-                _consumptionJunction = true;
-            }
-
-            void Reset() override
-            {
-                _Reset();
-                Initialize();
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                _EnterCombat();
-                Talk(SAY_AGGRO);
-
-                events.ScheduleEvent(EVENT_CONSUME, 15000);
-                events.ScheduleEvent(EVENT_CRUSH, urand(1000, 5000));
-                events.ScheduleEvent(EVENT_INFECTED_WOUND, urand(10000, 60000));
-                events.ScheduleEvent(EVENT_CORPSE_EXPLODE, 3000);
-                events.ScheduleEvent(EVENT_SPAWN, urand(30000, 40000));
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_CONSUME:
-                            Talk(SAY_CONSUME);
-                            DoCastAOE(SPELL_CONSUME);
-                            events.ScheduleEvent(EVENT_CONSUME, 15000);
-                            break;
-                        case EVENT_CRUSH:
-                            DoCastVictim(SPELL_CRUSH);
-                            events.ScheduleEvent(EVENT_CRUSH, urand(10000, 15000));
-                            break;
-                        case EVENT_INFECTED_WOUND:
-                            DoCastVictim(SPELL_INFECTED_WOUND);
-                            events.ScheduleEvent(EVENT_INFECTED_WOUND, urand(25000, 35000));
-                            break;
-                        case EVENT_CORPSE_EXPLODE:
-                            Talk(SAY_EXPLODE);
-                            DoCastAOE(SPELL_CORPSE_EXPLODE);
-                            events.ScheduleEvent(EVENT_CORPSE_EXPLODE, urand(15000, 19000));
-                            break;
-                        case EVENT_SPAWN:
-                            for (uint8 i = 0; i < 3; ++i)
-                                if (Creature* trigger = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_TROLLGORE_INVADER_SUMMONER_1 + i)))
-                                    trigger->CastSpell(trigger, RAND(SPELL_SUMMON_INVADER_A, SPELL_SUMMON_INVADER_B, SPELL_SUMMON_INVADER_C), true, NULL, NULL, me->GetGUID());
-
-                            events.ScheduleEvent(EVENT_SPAWN, urand(30000, 40000));
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                if (_consumptionJunction)
-                {
-                    Aura* ConsumeAura = me->GetAura(SPELL_CONSUME_BUFF_HELPER);
-                    if (ConsumeAura && ConsumeAura->GetStackAmount() > 9)
-                        _consumptionJunction = false;
-                }
-
-                DoMeleeAttackIfReady();
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                _JustDied();
-                Talk(SAY_DEATH);
-            }
-
-            uint32 GetData(uint32 type) const override
-            {
-                if (type == DATA_CONSUMPTION_JUNCTION)
-                    return _consumptionJunction ? 1 : 0;
-
-                return 0;
-            }
-
-            void KilledUnit(Unit* victim) override
-            {
-                if (victim->GetTypeId() != TYPEID_PLAYER)
-                    return;
-
-                Talk(SAY_KILL);
-            }
-
-            void JustSummoned(Creature* summon) override
-            {
-                summon->GetMotionMaster()->MovePoint(POINT_LANDING, Landing);
-                summons.Summon(summon);
-            }
-
-            private:
-                bool _consumptionJunction;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetDrakTharonKeepAI<boss_trollgoreAI>(creature);
-        }
+    DATA_CONSUMPTION_JUNCTION           = 1,
+    POINT_LANDING                       = 1
 };
 
-class npc_drakkari_invader : public CreatureScript
+Position const Landing = { -263.0534f, -660.8658f, 26.50903f, 0.0f };
+
+// 26630 - Trollgore
+struct boss_trollgore : public BossAI
 {
-    public:
-        npc_drakkari_invader() : CreatureScript("npc_drakkari_invader") { }
+    boss_trollgore(Creature* creature) : BossAI(creature, DATA_TROLLGORE), _consumptionJunction(true) { }
 
-        struct npc_drakkari_invaderAI : public ScriptedAI
+    void Reset() override
+    {
+        _Reset();
+        _consumptionJunction = true;
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        Talk(SAY_AGGRO);
+
+        events.ScheduleEvent(EVENT_CONSUME, 15s);
+        events.ScheduleEvent(EVENT_CRUSH, 1s, 5s);
+        events.ScheduleEvent(EVENT_INFECTED_WOUND, 10s, 60s);
+        events.ScheduleEvent(EVENT_CORPSE_EXPLODE, 3s);
+        events.ScheduleEvent(EVENT_SPAWN, 30s, 40s);
+    }
+
+    uint32 GetData(uint32 type) const override
+    {
+        if (type == DATA_CONSUMPTION_JUNCTION)
+            return _consumptionJunction ? 1 : 0;
+
+        return 0;
+    }
+
+    void JustSummoned(Creature* summon) override
+    {
+        summon->GetMotionMaster()->MovePoint(POINT_LANDING, Landing);
+        summons.Summon(summon);
+    }
+
+    void KilledUnit(Unit* victim) override
+    {
+        if (victim->GetTypeId() != TYPEID_PLAYER)
+            return;
+
+        Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        _JustDied();
+        Talk(SAY_DEATH);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            npc_drakkari_invaderAI(Creature* creature) : ScriptedAI(creature) { }
-
-            void MovementInform(uint32 type, uint32 pointId) override
+            switch (eventId)
             {
-                if (type == POINT_MOTION_TYPE && pointId == POINT_LANDING)
-                {
-                    me->Dismount();
-                    me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PC | UNIT_FLAG_IMMUNE_TO_NPC);
-                    DoCastAOE(SPELL_INVADER_TAUNT);
-                }
-            }
-        };
+                case EVENT_CONSUME:
+                    Talk(SAY_CONSUME);
+                    DoCastAOE(SPELL_CONSUME);
+                    events.Repeat(15s);
+                    break;
+                case EVENT_CRUSH:
+                    DoCastVictim(SPELL_CRUSH);
+                    events.Repeat(10s, 15s);
+                    break;
+                case EVENT_INFECTED_WOUND:
+                    DoCastVictim(SPELL_INFECTED_WOUND);
+                    events.Repeat(25s, 35s);
+                    break;
+                case EVENT_CORPSE_EXPLODE:
+                    Talk(SAY_EXPLODE);
+                    DoCastAOE(SPELL_CORPSE_EXPLODE);
+                    events.Repeat(15s, 19s);
+                    break;
+                case EVENT_SPAWN:
+                    for (uint8 i = 0; i < 3; ++i)
+                        if (Creature* trigger = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_TROLLGORE_INVADER_SUMMONER_1 + i)))
+                            trigger->CastSpell(trigger, RAND(SPELL_SUMMON_INVADER_A, SPELL_SUMMON_INVADER_B, SPELL_SUMMON_INVADER_C), me->GetGUID());
 
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetDrakTharonKeepAI<npc_drakkari_invaderAI>(creature);
+                    events.Repeat(30s, 40s);
+                    break;
+                default:
+                    break;
+            }
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+
+        if (_consumptionJunction)
+        {
+            Aura* ConsumeAura = me->GetAura(SPELL_CONSUME_BUFF_HELPER);
+            if (ConsumeAura && ConsumeAura->GetStackAmount() > 9)
+                _consumptionJunction = false;
+        }
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    bool _consumptionJunction;
+};
+
+// 27709, 27753, 27754 - Drakkari Invader
+struct npc_drakkari_invader : public ScriptedAI
+{
+    npc_drakkari_invader(Creature* creature) : ScriptedAI(creature) { }
+
+    void MovementInform(uint32 type, uint32 pointId) override
+    {
+        if (type == POINT_MOTION_TYPE && pointId == POINT_LANDING)
+        {
+            me->Dismount();
+            me->SetImmuneToAll(false);
+            DoCastAOE(SPELL_INVADER_TAUNT);
+        }
+    }
 };
 
 // 49380, 59803 - Consume
-class spell_trollgore_consume : public SpellScriptLoader
+class spell_trollgore_consume : public SpellScript
 {
-    public:
-        spell_trollgore_consume() : SpellScriptLoader("spell_trollgore_consume") { }
+    PrepareSpellScript(spell_trollgore_consume);
 
-        class spell_trollgore_consume_SpellScript : public SpellScript
-        {
-            PrepareSpellScript(spell_trollgore_consume_SpellScript);
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_CONSUME_BUFF });
+    }
 
-            bool Validate(SpellInfo const* /*spellInfo*/) override
-            {
-                if (!sSpellMgr->GetSpellInfo(SPELL_CONSUME_BUFF))
-                    return false;
-                return true;
-            }
+    void HandleConsume(SpellEffIndex /*effIndex*/)
+    {
+        if (Unit* target = GetHitUnit())
+            target->CastSpell(GetCaster(), SPELL_CONSUME_BUFF, true);
+    }
 
-            void HandleConsume(SpellEffIndex /*effIndex*/)
-            {
-                if (Unit* target = GetHitUnit())
-                    target->CastSpell(GetCaster(), SPELL_CONSUME_BUFF, true);
-            }
-
-            void Register() override
-            {
-                OnEffectHitTarget += SpellEffectFn(spell_trollgore_consume_SpellScript::HandleConsume, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
-            }
-        };
-
-        SpellScript* GetSpellScript() const override
-        {
-            return new spell_trollgore_consume_SpellScript();
-        }
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_trollgore_consume::HandleConsume, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
 };
 
 // 49555, 59807 - Corpse Explode
-class spell_trollgore_corpse_explode : public SpellScriptLoader
+class spell_trollgore_corpse_explode : public AuraScript
 {
-    public:
-        spell_trollgore_corpse_explode() : SpellScriptLoader("spell_trollgore_corpse_explode") { }
+    PrepareAuraScript(spell_trollgore_corpse_explode);
 
-        class spell_trollgore_corpse_explode_AuraScript : public AuraScript
-        {
-            PrepareAuraScript(spell_trollgore_corpse_explode_AuraScript);
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_CORPSE_EXPLODE_DAMAGE });
+    }
 
-            bool Validate(SpellInfo const* /*spellInfo*/) override
-            {
-                if (!sSpellMgr->GetSpellInfo(SPELL_CORPSE_EXPLODE_DAMAGE))
-                    return false;
-                return true;
-            }
+    void PeriodicTick(AuraEffect const* aurEff)
+    {
+        if (aurEff->GetTickNumber() == 2)
+            if (Unit* caster = GetCaster())
+                caster->CastSpell(GetTarget(), SPELL_CORPSE_EXPLODE_DAMAGE, aurEff);
+    }
 
-            void PeriodicTick(AuraEffect const* aurEff)
-            {
-                if (aurEff->GetTickNumber() == 2)
-                    if (Unit* caster = GetCaster())
-                        caster->CastSpell(GetTarget(), SPELL_CORPSE_EXPLODE_DAMAGE, true, NULL, aurEff);
-            }
+    void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (Creature* target = GetTarget()->ToCreature())
+            target->DespawnOrUnsummon();
+    }
 
-            void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
-            {
-                if (Creature* target = GetTarget()->ToCreature())
-                    target->DespawnOrUnsummon();
-            }
-
-            void Register() override
-            {
-                OnEffectPeriodic += AuraEffectPeriodicFn(spell_trollgore_corpse_explode_AuraScript::PeriodicTick, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
-                AfterEffectRemove += AuraEffectRemoveFn(spell_trollgore_corpse_explode_AuraScript::HandleRemove, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY, AURA_EFFECT_HANDLE_REAL);
-            }
-        };
-
-        AuraScript* GetAuraScript() const override
-        {
-            return new spell_trollgore_corpse_explode_AuraScript();
-        }
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_trollgore_corpse_explode::PeriodicTick, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_trollgore_corpse_explode::HandleRemove, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
 };
 
 // 49405 - Invader Taunt Trigger
-class spell_trollgore_invader_taunt : public SpellScriptLoader
+class spell_trollgore_invader_taunt : public SpellScript
 {
-    public:
-        spell_trollgore_invader_taunt() : SpellScriptLoader("spell_trollgore_invader_taunt") { }
+    PrepareSpellScript(spell_trollgore_invader_taunt);
 
-        class spell_trollgore_invader_taunt_SpellScript : public SpellScript
-        {
-            PrepareSpellScript(spell_trollgore_invader_taunt_SpellScript);
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({ static_cast<uint32>(spellInfo->GetEffect(EFFECT_0).CalcValue()) });
+    }
 
-            bool Validate(SpellInfo const* spellInfo) override
-            {
-                if (!sSpellMgr->GetSpellInfo(spellInfo->Effects[EFFECT_0].CalcValue()))
-                    return false;
-                return true;
-            }
+    void HandleTaunt(SpellEffIndex /*effIndex*/)
+    {
+        if (Unit* target = GetHitUnit())
+            target->CastSpell(GetCaster(), uint32(GetEffectValue()), true);
+    }
 
-            void HandleTaunt(SpellEffIndex /*effIndex*/)
-            {
-                if (Unit* target = GetHitUnit())
-                    target->CastSpell(GetCaster(), uint32(GetEffectValue()), true);
-            }
-
-            void Register() override
-            {
-                OnEffectHitTarget += SpellEffectFn(spell_trollgore_invader_taunt_SpellScript::HandleTaunt, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
-            }
-        };
-
-        SpellScript* GetSpellScript() const override
-        {
-            return new spell_trollgore_invader_taunt_SpellScript();
-        }
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_trollgore_invader_taunt::HandleTaunt, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
 };
 
 class achievement_consumption_junction : public AchievementCriteriaScript
@@ -354,10 +293,10 @@ class achievement_consumption_junction : public AchievementCriteriaScript
 
 void AddSC_boss_trollgore()
 {
-    new boss_trollgore();
-    new npc_drakkari_invader();
-    new spell_trollgore_consume();
-    new spell_trollgore_corpse_explode();
-    new spell_trollgore_invader_taunt();
+    RegisterDrakTharonKeepCreatureAI(boss_trollgore);
+    RegisterDrakTharonKeepCreatureAI(npc_drakkari_invader);
+    RegisterSpellScript(spell_trollgore_consume);
+    RegisterSpellScript(spell_trollgore_corpse_explode);
+    RegisterSpellScript(spell_trollgore_invader_taunt);
     new achievement_consumption_junction();
 }

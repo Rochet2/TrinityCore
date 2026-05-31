@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,29 +16,92 @@
  */
 
 #include "ObjectGuid.h"
+#include "ByteBuffer.h"
+#include "Errors.h"
+#include "Log.h"
+#include "Util.h"
 #include "World.h"
-#include "ObjectMgr.h"
-#include <sstream>
-#include <iomanip>
+#include <charconv>
 
 ObjectGuid const ObjectGuid::Empty = ObjectGuid();
 
-char const* ObjectGuid::GetTypeName(HighGuid high)
+namespace
+{
+struct ObjectGuidInfo
+{
+    struct FormatPadding { std::ptrdiff_t Value; constexpr operator std::ptrdiff_t() const { return Value; } };
+
+    template <std::ptrdiff_t Width>
+    static constexpr inline FormatPadding padding{ .Value = Width };
+    static constexpr inline FormatPadding no_padding{ .Value = 0 };
+
+    struct FormatBase { int32 Value; constexpr operator int32() const { return Value; } };
+
+    static constexpr inline FormatBase dec{ 10 };
+    static constexpr inline FormatBase hex{ 16 };
+
+    static fmt::appender AppendTypeName(fmt::format_context& ctx, std::string_view type)
+    {
+        return std::copy(type.begin(), type.end(), ctx.out());
+    }
+
+    template <FormatPadding Width, FormatBase Base>
+    static fmt::appender AppendComponent(fmt::format_context& ctx, uint64 component)
+    {
+        std::array<char, 20> buf;
+        auto [end, err] = std::to_chars(buf.data(), buf.data() + buf.size(), component, Base);
+
+        ASSERT(err == std::errc(), "Failed to convert guid part to string");
+
+        if constexpr (Width != 0)
+        {
+            if (std::distance(buf.data(), end) < Width)
+                std::fill_n(ctx.out(), Width - std::distance(buf.data(), end), '0');
+        }
+
+        if constexpr (Base > 10)
+            return std::transform(buf.data(), end, ctx.out(), charToUpper);
+        else
+            return std::copy(buf.data(), end, ctx.out());
+    }
+};
+}
+
+template <typename FormatContext>
+auto fmt::formatter<ObjectGuid>::format(ObjectGuid const& guid, FormatContext& ctx) const -> decltype(ctx.out())
+{
+    ctx.advance_to(ObjectGuidInfo::AppendTypeName(ctx, "GUID Full: 0x"));
+    ctx.advance_to(ObjectGuidInfo::AppendComponent<ObjectGuidInfo::padding<16>, ObjectGuidInfo::hex>(ctx, guid.GetRawValue()));
+    ctx.advance_to(ObjectGuidInfo::AppendTypeName(ctx, " Type: "));
+    ctx.advance_to(ObjectGuidInfo::AppendTypeName(ctx, guid.GetTypeName()));
+    if (uint32 entry = guid.GetEntry())
+    {
+        ctx.advance_to(ObjectGuidInfo::AppendTypeName(ctx, guid.IsPet() ? " Pet number: " : " Entry: "));
+        ctx.advance_to(ObjectGuidInfo::AppendComponent<ObjectGuidInfo::no_padding, ObjectGuidInfo::dec>(ctx, entry));
+    }
+    ctx.advance_to(ObjectGuidInfo::AppendTypeName(ctx, " Low: "));
+    ctx.advance_to(ObjectGuidInfo::AppendComponent<ObjectGuidInfo::no_padding, ObjectGuidInfo::dec>(ctx, guid.GetCounter()));
+    return ctx.out();
+}
+
+template TC_GAME_API fmt::appender fmt::formatter<ObjectGuid>::format<fmt::format_context>(ObjectGuid const&, format_context&) const;
+
+std::string_view ObjectGuid::GetTypeName(HighGuid high)
 {
     switch (high)
     {
-        case HIGHGUID_ITEM:         return "Item";
-        case HIGHGUID_PLAYER:       return "Player";
-        case HIGHGUID_GAMEOBJECT:   return "Gameobject";
-        case HIGHGUID_TRANSPORT:    return "Transport";
-        case HIGHGUID_UNIT:         return "Creature";
-        case HIGHGUID_PET:          return "Pet";
-        case HIGHGUID_VEHICLE:      return "Vehicle";
-        case HIGHGUID_DYNAMICOBJECT: return "DynObject";
-        case HIGHGUID_CORPSE:       return "Corpse";
-        case HIGHGUID_MO_TRANSPORT: return "MoTransport";
-        case HIGHGUID_INSTANCE:     return "InstanceID";
-        case HIGHGUID_GROUP:        return "Group";
+        case HighGuid::Item:         return "Item";
+        case HighGuid::Player:       return "Player";
+        case HighGuid::GameObject:   return "Gameobject";
+        case HighGuid::Transport:    return "Transport";
+        case HighGuid::Unit:         return "Creature";
+        case HighGuid::Pet:          return "Pet";
+        case HighGuid::Vehicle:      return "Vehicle";
+        case HighGuid::DynamicObject: return "DynObject";
+        case HighGuid::Corpse:       return "Corpse";
+        case HighGuid::Mo_Transport: return "MoTransport";
+        case HighGuid::Instance:     return "InstanceID";
+        case HighGuid::Group:        return "Group";
         default:
             return "<unknown>";
     }
@@ -47,25 +109,28 @@ char const* ObjectGuid::GetTypeName(HighGuid high)
 
 std::string ObjectGuid::ToString() const
 {
-    std::ostringstream str;
-    str << "GUID Full: 0x" << std::hex << std::setw(16) << std::setfill('0') << _guid << std::dec;
-    str << " Type: " << GetTypeName();
-    if (HasEntry())
-        str << (IsPet() ? " Pet number: " : " Entry: ") << GetEntry() << " ";
-
-    str << " Low: " << GetCounter();
-    return str.str();
+    return Trinity::StringFormat("{}", *this);
 }
 
-template<HighGuid high>
-uint32 ObjectGuidGenerator<high>::Generate()
+std::string ObjectGuid::ToHexString() const
 {
-    if (_nextGuid >= ObjectGuid::GetMaxCounter(high) - 1)
+    return Trinity::StringFormat("0x{:016X}", _guid);
+}
+
+void PackedGuid::Set(ObjectGuid const& guid)
+{
+    _packedSize = 1;
+    uint64 raw = guid.GetRawValue();
+    for (uint8 i = 0; i < 8; ++i)
     {
-        TC_LOG_ERROR("", "%s guid overflow!! Can't continue, shutting down server. ", ObjectGuid::GetTypeName(high));
-        World::StopNow(ERROR_EXIT_CODE);
+        uint8 byte = (raw >> (i * 8)) & 0xFF;
+        _packedGuid[_packedSize] = byte;
+        if (byte)
+        {
+            _packedGuid[0] |= uint8(1 << i);
+            ++_packedSize;
+        }
     }
-    return _nextGuid++;
 }
 
 ByteBuffer& operator<<(ByteBuffer& buf, ObjectGuid const& guid)
@@ -76,30 +141,49 @@ ByteBuffer& operator<<(ByteBuffer& buf, ObjectGuid const& guid)
 
 ByteBuffer& operator>>(ByteBuffer& buf, ObjectGuid& guid)
 {
-    guid.Set(buf.read<uint64>());
+    guid.SetRawValue(buf.read<uint64>());
     return buf;
 }
 
 ByteBuffer& operator<<(ByteBuffer& buf, PackedGuid const& guid)
 {
-    buf.append(guid._packedGuid);
+    buf.append(guid._packedGuid.data(), guid._packedSize);
+    return buf;
+}
+
+ByteBuffer& operator<<(ByteBuffer& buf, PackedGuidWriter const& guid)
+{
+    buf.appendPackGUID(guid.Guid.GetRawValue());
     return buf;
 }
 
 ByteBuffer& operator>>(ByteBuffer& buf, PackedGuidReader const& guid)
 {
-    buf.readPackGUID(*reinterpret_cast<uint64*>(guid.GuidPtr));
+    buf.readPackGUID(reinterpret_cast<uint64&>(guid.Guid));
     return buf;
 }
 
-template uint32 ObjectGuidGenerator<HIGHGUID_ITEM>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_PLAYER>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_GAMEOBJECT>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_TRANSPORT>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_UNIT>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_PET>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_VEHICLE>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_DYNAMICOBJECT>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_CORPSE>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_INSTANCE>::Generate();
-template uint32 ObjectGuidGenerator<HIGHGUID_GROUP>::Generate();
+ObjectGuid::LowType ObjectGuidGenerator::Generate()
+{
+    if (_nextGuid >= ObjectGuid::GetMaxCounter(_high) - 1)
+        HandleCounterOverflow();
+
+    if (_high == HighGuid::Unit || _high == HighGuid::Vehicle || _high == HighGuid::GameObject || _high == HighGuid::Transport)
+        CheckGuidTrigger();
+
+    return _nextGuid++;
+}
+
+void ObjectGuidGenerator::HandleCounterOverflow()
+{
+    TC_LOG_ERROR("misc", "{} guid overflow!! Can't continue, shutting down server. ", ObjectGuid::GetTypeName(_high));
+    World::StopNow(ERROR_EXIT_CODE);
+}
+
+void ObjectGuidGenerator::CheckGuidTrigger()
+{
+    if (!sWorld->IsGuidAlert() && _nextGuid > sWorld->getIntConfig(CONFIG_RESPAWN_GUIDALERTLEVEL))
+        sWorld->TriggerGuidAlert();
+    else if (!sWorld->IsGuidWarning() && _nextGuid > sWorld->getIntConfig(CONFIG_RESPAWN_GUIDWARNLEVEL))
+        sWorld->TriggerGuidWarning();
+}

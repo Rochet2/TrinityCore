@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,16 +25,6 @@
 #define WDT_MAP_SIZE 64
 
 #pragma pack(push, 1)
-
-class wdt_MWMO{
-    union{
-        uint32 fcc;
-        char   fcc_txt[4];
-    };
-public:
-    uint32 size;
-    bool prepareLoadedData();
-};
 
 class wdt_MPHD{
     union{
@@ -82,7 +71,6 @@ public:
 
     wdt_MPHD *mphd;
     wdt_MAIN *main;
-    wdt_MWMO *wmo;
 };
 
 #pragma pack(pop)

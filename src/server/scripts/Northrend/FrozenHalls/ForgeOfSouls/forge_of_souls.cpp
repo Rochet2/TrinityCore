@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,10 +16,12 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "ScriptedGossip.h"
 #include "forge_of_souls.h"
 #include "Player.h"
+#include "ScriptedCreature.h"
+#include "ScriptedGossip.h"
+#include "SpellAuras.h"
+#include "SpellScript.h"
 
 enum Events
 {
@@ -36,33 +38,31 @@ enum Events
     EVENT_INTRO_8,
 };
 
-/****************************************SYLVANAS************************************/
-#define GOSSIP_SYLVANAS_ITEM    "What would you have of me, Banshee Queen?"
-#define GOSSIP_JAINA_ITEM       "What would you have of me, my lady?"
-
 enum Yells
 {
-    SAY_JAINA_INTRO_1                           = 0,
-    SAY_JAINA_INTRO_2                           = 1,
-    SAY_JAINA_INTRO_3                           = 2,
-    SAY_JAINA_INTRO_4                           = 3,
-    SAY_JAINA_INTRO_5                           = 4,
-    SAY_JAINA_INTRO_6                           = 5,
-    SAY_JAINA_INTRO_7                           = 6,
-    SAY_JAINA_INTRO_8                           = 7,
+    SAY_JAINA_INTRO_1    = 0,
+    SAY_JAINA_INTRO_2    = 1,
+    SAY_JAINA_INTRO_3    = 2,
+    SAY_JAINA_INTRO_4    = 3,
+    SAY_JAINA_INTRO_5    = 4,
+    SAY_JAINA_INTRO_6    = 5,
+    SAY_JAINA_INTRO_7    = 6,
+    SAY_JAINA_INTRO_8    = 7,
 
-    SAY_SYLVANAS_INTRO_1                        = 0,
-    SAY_SYLVANAS_INTRO_2                        = 1,
-    SAY_SYLVANAS_INTRO_3                        = 2,
-    SAY_SYLVANAS_INTRO_4                        = 3,
-    SAY_SYLVANAS_INTRO_5                        = 4,
-    SAY_SYLVANAS_INTRO_6                        = 5,
+    SAY_SYLVANAS_INTRO_1 = 0,
+    SAY_SYLVANAS_INTRO_2 = 1,
+    SAY_SYLVANAS_INTRO_3 = 2,
+    SAY_SYLVANAS_INTRO_4 = 3,
+    SAY_SYLVANAS_INTRO_5 = 4,
+    SAY_SYLVANAS_INTRO_6 = 5,
 };
 
 enum Misc
 {
-    GOSSIP_SPEECHINTRO                           = 13525,
     ACTION_INTRO,
+    MENU_ID_JAINA        = 10943,
+    MENU_ID_SYLVANAS     = 10971,
+    GOSSIP_OPTION_ID     = 0
 };
 
 enum Phase
@@ -71,277 +71,224 @@ enum Phase
     PHASE_INTRO,
 };
 
-class npc_sylvanas_fos : public CreatureScript
+enum ForgeSpells
 {
-public:
-    npc_sylvanas_fos() : CreatureScript("npc_sylvanas_fos") { }
+    SPELL_LETHARGY = 69133
+};
 
-    struct npc_sylvanas_fosAI : public ScriptedAI
+struct npc_sylvanas_fos : public ScriptedAI
+{
+    npc_sylvanas_fos(Creature* creature) : ScriptedAI(creature)
     {
-        npc_sylvanas_fosAI(Creature* creature) : ScriptedAI(creature)
+        Initialize();
+        instance = me->GetInstanceScript();
+        me->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+    }
+
+    void Initialize()
+    {
+        phase = PHASE_NORMAL;
+    }
+
+    InstanceScript* instance;
+
+    EventMap events;
+    Phase phase;
+
+    void Reset() override
+    {
+        events.Reset();
+        Initialize();
+    }
+
+    bool OnGossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
+    {
+        if (menuId == MENU_ID_SYLVANAS && gossipListId == GOSSIP_OPTION_ID)
         {
-            Initialize();
-            instance = me->GetInstanceScript();
-            me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-        }
-
-        void Initialize()
-        {
-            phase = PHASE_NORMAL;
-        }
-
-        InstanceScript* instance;
-
-        EventMap events;
-        Phase phase;
-
-        void Reset() override
-        {
+            CloseGossipMenuFor(player);
+            phase = PHASE_INTRO;
+            me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
             events.Reset();
-            Initialize();
+            events.ScheduleEvent(EVENT_INTRO_1, 1s);
         }
+        return false;
+    }
 
-        void DoAction(int32 actionId) override
+    void UpdateAI(uint32 diff) override
+    {
+        if (phase == PHASE_INTRO)
         {
-            switch (actionId)
-            {
-                case ACTION_INTRO:
-                {
-                    phase = PHASE_INTRO;
-                    me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-                    events.Reset();
-                    events.ScheduleEvent(EVENT_INTRO_1, 1000);
-                }
-            }
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            if (phase == PHASE_INTRO)
-            {
-                events.Update(diff);
-                switch (events.ExecuteEvent())
-                {
-                    case EVENT_INTRO_1:
-                        Talk(SAY_SYLVANAS_INTRO_1);
-                        events.ScheduleEvent(EVENT_INTRO_2, 11500);
-                        break;
-
-                    case EVENT_INTRO_2:
-                        Talk(SAY_SYLVANAS_INTRO_2);
-                        events.ScheduleEvent(EVENT_INTRO_3, 10500);
-                        break;
-
-                    case EVENT_INTRO_3:
-                        Talk(SAY_SYLVANAS_INTRO_3);
-                        events.ScheduleEvent(EVENT_INTRO_4, 9500);
-                        break;
-
-                    case EVENT_INTRO_4:
-                        Talk(SAY_SYLVANAS_INTRO_4);
-                        events.ScheduleEvent(EVENT_INTRO_5, 10500);
-                        break;
-
-                    case EVENT_INTRO_5:
-                        Talk(SAY_SYLVANAS_INTRO_5);
-                        events.ScheduleEvent(EVENT_INTRO_6, 9500);
-                        break;
-
-                    case EVENT_INTRO_6:
-                        Talk(SAY_SYLVANAS_INTRO_6);
-                        // End of Intro
-                        phase = PHASE_NORMAL;
-                        break;
-                }
-            }
-
-            //Return since we have no target
-            if (!UpdateVictim())
-                return;
-
             events.Update(diff);
-            DoMeleeAttackIfReady();
+            switch (events.ExecuteEvent())
+            {
+                case EVENT_INTRO_1:
+                    Talk(SAY_SYLVANAS_INTRO_1);
+                    events.ScheduleEvent(EVENT_INTRO_2, 11500ms);
+                    break;
+
+                case EVENT_INTRO_2:
+                    Talk(SAY_SYLVANAS_INTRO_2);
+                    events.ScheduleEvent(EVENT_INTRO_3, 10500ms);
+                    break;
+
+                case EVENT_INTRO_3:
+                    Talk(SAY_SYLVANAS_INTRO_3);
+                    events.ScheduleEvent(EVENT_INTRO_4, 9500ms);
+                    break;
+
+                case EVENT_INTRO_4:
+                    Talk(SAY_SYLVANAS_INTRO_4);
+                    events.ScheduleEvent(EVENT_INTRO_5, 10500ms);
+                    break;
+
+                case EVENT_INTRO_5:
+                    Talk(SAY_SYLVANAS_INTRO_5);
+                    events.ScheduleEvent(EVENT_INTRO_6, 9500ms);
+                    break;
+
+                case EVENT_INTRO_6:
+                    Talk(SAY_SYLVANAS_INTRO_6);
+                    // End of Intro
+                    phase = PHASE_NORMAL;
+                    break;
+            }
         }
-    };
 
-    bool OnGossipHello(Player* player, Creature* creature) override
-    {
-        if (creature->IsQuestGiver())
-            player->PrepareQuestMenu(creature->GetGUID());
+        //Return since we have no target
+        if (!UpdateVictim())
+            return;
 
-        if (creature->GetEntry() == NPC_JAINA_PART1)
-            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_JAINA_ITEM, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
-        else
-            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_SYLVANAS_ITEM, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
-
-        player->SEND_GOSSIP_MENU(DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
-        return true;
-    }
-
-    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
-    {
-        player->PlayerTalkClass->ClearMenus();
-        switch (action)
-        {
-            case GOSSIP_ACTION_INFO_DEF+1:
-                player->CLOSE_GOSSIP_MENU();
-
-                if (creature->AI())
-                    creature->AI()->DoAction(ACTION_INTRO);
-                break;
-        }
-
-        return true;
-    }
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetInstanceAI<npc_sylvanas_fosAI>(creature);
+        events.Update(diff);
+        DoMeleeAttackIfReady();
     }
 };
 
-class npc_jaina_fos : public CreatureScript
+struct npc_jaina_fos: public ScriptedAI
 {
-public:
-    npc_jaina_fos() : CreatureScript("npc_jaina_fos") { }
-
-    struct npc_jaina_fosAI: public ScriptedAI
+    npc_jaina_fos(Creature* creature) : ScriptedAI(creature)
     {
-        npc_jaina_fosAI(Creature* creature) : ScriptedAI(creature)
+        Initialize();
+        instance = me->GetInstanceScript();
+        me->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+    }
+
+    void Initialize()
+    {
+        phase = PHASE_NORMAL;
+    }
+
+    InstanceScript* instance;
+
+    EventMap events;
+    Phase phase;
+
+    void Reset() override
+    {
+        events.Reset();
+        Initialize();
+    }
+
+    bool OnGossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
+    {
+        if (menuId == MENU_ID_JAINA && gossipListId == GOSSIP_OPTION_ID)
         {
-            Initialize();
-            instance = me->GetInstanceScript();
-            me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-        }
-
-        void Initialize()
-        {
-            phase = PHASE_NORMAL;
-        }
-
-        InstanceScript* instance;
-
-        EventMap events;
-        Phase phase;
-
-        void Reset() override
-        {
+            CloseGossipMenuFor(player);
+            phase = PHASE_INTRO;
+            me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
             events.Reset();
-            Initialize();
+            events.ScheduleEvent(EVENT_INTRO_1, 1s);
         }
+        return false;
+    }
 
-        void DoAction(int32 actionId) override
+    void UpdateAI(uint32 diff) override
+    {
+        if (phase == PHASE_INTRO)
         {
-            switch (actionId)
-            {
-                case ACTION_INTRO:
-                {
-                    phase = PHASE_INTRO;
-                    me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-                    events.Reset();
-                    events.ScheduleEvent(EVENT_INTRO_1, 1000);
-                }
-            }
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            if (phase == PHASE_INTRO)
-            {
-                events.Update(diff);
-                switch (events.ExecuteEvent())
-                {
-                    case EVENT_INTRO_1:
-                        Talk(SAY_JAINA_INTRO_1);
-                        events.ScheduleEvent(EVENT_INTRO_2, 8000);
-                        break;
-
-                    case EVENT_INTRO_2:
-                        Talk(SAY_JAINA_INTRO_2);
-                        events.ScheduleEvent(EVENT_INTRO_3, 8500);
-                        break;
-
-                    case EVENT_INTRO_3:
-                        Talk(SAY_JAINA_INTRO_3);
-                        events.ScheduleEvent(EVENT_INTRO_4, 8000);
-                        break;
-
-                    case EVENT_INTRO_4:
-                        Talk(SAY_JAINA_INTRO_4);
-                        events.ScheduleEvent(EVENT_INTRO_5, 10000);
-                        break;
-
-                    case EVENT_INTRO_5:
-                        Talk(SAY_JAINA_INTRO_5);
-                        events.ScheduleEvent(EVENT_INTRO_6, 8000);
-                        break;
-
-                    case EVENT_INTRO_6:
-                        Talk(SAY_JAINA_INTRO_6);
-                        events.ScheduleEvent(EVENT_INTRO_7, 12000);
-                        break;
-
-                    case EVENT_INTRO_7:
-                        Talk(SAY_JAINA_INTRO_7);
-                        events.ScheduleEvent(EVENT_INTRO_8, 8000);
-                        break;
-
-                    case EVENT_INTRO_8:
-                        Talk(SAY_JAINA_INTRO_8);
-                        // End of Intro
-                        phase = PHASE_NORMAL;
-                        break;
-                }
-            }
-
-            //Return since we have no target
-            if (!UpdateVictim())
-                return;
-
             events.Update(diff);
+            switch (events.ExecuteEvent())
+            {
+                case EVENT_INTRO_1:
+                    Talk(SAY_JAINA_INTRO_1);
+                    events.ScheduleEvent(EVENT_INTRO_2, 8s);
+                    break;
 
-            DoMeleeAttackIfReady();
+                case EVENT_INTRO_2:
+                    Talk(SAY_JAINA_INTRO_2);
+                    events.ScheduleEvent(EVENT_INTRO_3, 8500ms);
+                    break;
+
+                case EVENT_INTRO_3:
+                    Talk(SAY_JAINA_INTRO_3);
+                    events.ScheduleEvent(EVENT_INTRO_4, 8s);
+                    break;
+
+                case EVENT_INTRO_4:
+                    Talk(SAY_JAINA_INTRO_4);
+                    events.ScheduleEvent(EVENT_INTRO_5, 10s);
+                    break;
+
+                case EVENT_INTRO_5:
+                    Talk(SAY_JAINA_INTRO_5);
+                    events.ScheduleEvent(EVENT_INTRO_6, 8s);
+                    break;
+
+                case EVENT_INTRO_6:
+                    Talk(SAY_JAINA_INTRO_6);
+                    events.ScheduleEvent(EVENT_INTRO_7, 12s);
+                    break;
+
+                case EVENT_INTRO_7:
+                    Talk(SAY_JAINA_INTRO_7);
+                    events.ScheduleEvent(EVENT_INTRO_8, 8s);
+                    break;
+
+                case EVENT_INTRO_8:
+                    Talk(SAY_JAINA_INTRO_8);
+                    // End of Intro
+                    phase = PHASE_NORMAL;
+                    break;
+            }
         }
-    };
 
-    bool OnGossipHello(Player* player, Creature* creature) override
+        //Return since we have no target
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        DoMeleeAttackIfReady();
+    }
+};
+
+// 69131 - Soul Sickness
+class spell_forge_of_souls_soul_sickness : public AuraScript
+{
+    PrepareAuraScript(spell_forge_of_souls_soul_sickness);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        if (creature->IsQuestGiver())
-            player->PrepareQuestMenu(creature->GetGUID());
-
-        if (creature->GetEntry() == NPC_JAINA_PART1)
-            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_JAINA_ITEM, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
-        else
-            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_SYLVANAS_ITEM, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
-
-        player->SEND_GOSSIP_MENU(DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
-        return true;
+        return ValidateSpellInfo({ SPELL_LETHARGY });
     }
 
-    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
+    void HandleStun(AuraEffect const* aurEff, AuraEffectHandleModes /*mode*/)
     {
-        player->PlayerTalkClass->ClearMenus();
-        switch (action)
+        if (GetTargetApplication()->GetRemoveMode() == AURA_REMOVE_BY_EXPIRE)
         {
-            case GOSSIP_ACTION_INFO_DEF+1:
-                player->CLOSE_GOSSIP_MENU();
-
-                if (creature->AI())
-                    creature->AI()->DoAction(ACTION_INTRO);
-                break;
+            Unit* target = GetTarget();
+            target->CastSpell(target, SPELL_LETHARGY, aurEff);
         }
-
-        return true;
     }
 
-    CreatureAI* GetAI(Creature* creature) const override
+    void Register() override
     {
-        return GetInstanceAI<npc_jaina_fosAI>(creature);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_forge_of_souls_soul_sickness::HandleStun, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
     }
 };
 
 void AddSC_forge_of_souls()
 {
-    new npc_sylvanas_fos();
-    new npc_jaina_fos();
+    RegisterForgeOfSoulsCreatureAI(npc_sylvanas_fos);
+    RegisterForgeOfSoulsCreatureAI(npc_jaina_fos);
+    RegisterSpellScript(spell_forge_of_souls_soul_sickness);
 }

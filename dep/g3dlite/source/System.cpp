@@ -45,6 +45,7 @@
 #   include <sys/timeb.h>
 #   include "G3D/RegistryUtil.h"
 #include <Ole2.h>
+#include <intrin.h>
 
 #elif defined(G3D_LINUX) 
 
@@ -78,8 +79,9 @@
 #endif
 
 // SIMM include
+#if !defined(_M_ARM) && !defined(_M_ARM64) && !defined(_M_HYBRID_X86_ARM64) && !defined(_M_ARM64EC) && !defined(__aarch64__)
 #include <xmmintrin.h>
-
+#endif
 
 namespace G3D {
     
@@ -207,6 +209,10 @@ void System::init() {
 
 		case PROCESSOR_ARCHITECTURE_ARM:
 			arch = "ARM";
+			break;
+
+		case PROCESSOR_ARCHITECTURE_ARM64:
+			arch = "ARM64";
 			break;
 
         default:
@@ -1688,12 +1694,26 @@ std::string System::currentTimeString() {
 
 // Windows 64-bit
 void System::cpuid(CPUIDFunction func, uint32& eax, uint32& ebx, uint32& ecx, uint32& edx) {
+#if !defined(_M_ARM) && !defined(_M_ARM64) && !defined(_M_HYBRID_X86_ARM64) && !defined(_M_ARM64EC)
 	int regs[4] = {eax, ebx, ecx, edx};
 	__cpuid(regs, func);
+#else
+	int regs[4] = { 0, 0, 0, 0 };
+#endif
 	eax = regs[0];
 	ebx = regs[1];
 	ecx = regs[2];
 	edx = regs[3];
+}
+
+#elif defined(__aarch64__) || defined(G3D_OSX) && ! defined(G3D_OSX_INTEL)
+
+// non-x86 CPU; no CPUID
+void System::cpuid(CPUIDFunction func, uint32& eax, uint32& ebx, uint32& ecx, uint32& edx) {
+    eax = 0;
+    ebx = 0;
+    ecx = 0;
+    edx = 0;
 }
 
 #else

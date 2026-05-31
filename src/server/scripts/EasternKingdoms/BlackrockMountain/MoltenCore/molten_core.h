@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,9 +18,14 @@
 #ifndef DEF_MOLTEN_CORE_H
 #define DEF_MOLTEN_CORE_H
 
+#include "CreatureAIImpl.h"
+
+#define MCScriptName "instance_molten_core"
 #define DataHeader "MC"
 
-enum Encounters
+uint32 constexpr EncounterCount = 10;
+
+enum MCEncounters
 {
     BOSS_LUCIFRON                   = 0,
     BOSS_MAGMADAR                   = 1,
@@ -32,20 +36,21 @@ enum Encounters
     BOSS_SULFURON_HARBINGER         = 6,
     BOSS_GOLEMAGG_THE_INCINERATOR   = 7,
     BOSS_MAJORDOMO_EXECUTUS         = 8,
-    BOSS_RAGNAROS                   = 9,
-    MAX_ENCOUNTER,
+    BOSS_RAGNAROS                   = 9
 };
 
-enum Actions
+enum MCDataTypes
 {
-    ACTION_START_RAGNAROS       = 0,
-    ACTION_START_RAGNAROS_ALT   = 1,
+    DATA_RUNE_OF_KORO,
+    DATA_RUNE_OF_ZETH,
+    DATA_RUNE_OF_MAZJ,
+    DATA_RUNE_OF_THERI,
+    DATA_RUNE_OF_BLAZ,
+    DATA_RUNE_OF_KRESS,
+    DATA_RUNE_OF_MOHN
 };
 
-Position const RagnarosTelePos   = {829.159f, -815.773f, -228.972f, 5.30500f};
-Position const RagnarosSummonPos = {838.510f, -829.840f, -232.000f, 2.00000f};
-
-enum Creatures
+enum MCCreatures
 {
     NPC_LUCIFRON                    = 12118,
     NPC_MAGMADAR                    = 11982,
@@ -57,18 +62,45 @@ enum Creatures
     NPC_GOLEMAGG_THE_INCINERATOR    = 11988,
     NPC_MAJORDOMO_EXECUTUS          = 12018,
     NPC_RAGNAROS                    = 11502,
+
     NPC_FLAMEWAKER_HEALER           = 11663,
-    NPC_FLAMEWAKER_ELITE            = 11664,
+    NPC_FLAMEWAKER_ELITE            = 11664
 };
 
-enum GameObjects
+enum MCGameObjects
 {
-    GO_CACHE_OF_THE_FIRELORD        = 179703,
+    GO_RUNE_OF_KORO                 = 176951,
+    GO_RUNE_OF_ZETH                 = 176952,
+    GO_RUNE_OF_MAZJ                 = 176953,
+    GO_RUNE_OF_THERI                = 176954,
+    GO_RUNE_OF_BLAZ                 = 176955,
+    GO_RUNE_OF_KRESS                = 176956,
+    GO_RUNE_OF_MOHN                 = 176957
 };
 
-enum Data
+enum MCSpawnGroups
 {
-    DATA_RAGNAROS_ADDS  = 0,
+    SPAWN_GROUP_CACHE               = 335,
+    SPAWN_GROUP_MAJORDOMO           = 336,
+    SPAWN_GROUP_FLAMEWAKERS         = 337,
+    SPAWN_GROUP_RAGNAROS            = 338,
+    SPAWN_GROUP_MAJORDOMO_ALT       = 339,
+    SPAWN_GROUP_LAVA_STEAM          = 340,
+    SPAWN_GROUP_LAVA_SPLASH         = 341
 };
+
+enum MCActions
+{
+    ACTION_FLAMEWAKER_DIES          = 0
+};
+
+template <class AI, class T>
+inline AI* GetMoltenCoreAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, MCScriptName);
+}
+
+#define RegisterMoltenCoreCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetMoltenCoreAI)
+#define RegisterMoltenCoreGameObjectAI(ai_name) RegisterGameObjectAIWithFactory(ai_name, GetMoltenCoreAI)
 
 #endif

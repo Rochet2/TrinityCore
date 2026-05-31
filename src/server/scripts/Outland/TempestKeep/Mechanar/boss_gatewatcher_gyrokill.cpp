@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,113 +15,105 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: boss_gatewatcher_gyrokill
-SD%Complete: 99%
-SDComment:
-SDCategory: Tempest Keep, The Mechanar
-EndScriptData */
-
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "SpellInfo.h"
 #include "mechanar.h"
+#include "ScriptedCreature.h"
 
-enum Say
+enum GyroKillTexts
 {
     SAY_AGGRO                       = 0,
     SAY_SLAY                        = 1,
-    SAY_SAW_BLADEs                  = 2,
-    SAY_DEATH                       = 3
+    SAY_SAW_BLADES                  = 2,
+    SAY_DEATH                       = 3,
+    EMOTE_DEATH                     = 4
 };
 
-enum Spells
+enum GyroKillSpells
 {
     SPELL_STREAM_OF_MACHINE_FLUID   = 35311,
     SPELL_SAW_BLADE                 = 35318,
-    H_SPELL_SAW_BLADE               = 39192,
-    SPELL_SHADOW_POWER              = 35322,
-    H_SPELL_SHADOW_POWER            = 39193
+    SPELL_SHADOW_POWER              = 35322
 };
 
-enum Events
+enum GyroKillEvents
 {
     EVENT_STREAM_OF_MACHINE_FLUID   = 1,
-    EVENT_SAW_BLADE                 = 2,
-    EVENT_SHADOW_POWER              = 3
+    EVENT_SAW_BLADE,
+    EVENT_SHADOW_POWER
 };
 
-class boss_gatewatcher_gyrokill : public CreatureScript
+// 19218 - Gatewatcher Gyro-Kill
+struct boss_gatewatcher_gyrokill : public BossAI
 {
-    public:
-        boss_gatewatcher_gyrokill() : CreatureScript("boss_gatewatcher_gyrokill") { }
+    boss_gatewatcher_gyrokill(Creature* creature) : BossAI(creature, DATA_GATEWATCHER_GYROKILL) { }
 
-        struct boss_gatewatcher_gyrokillAI : public BossAI
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        events.ScheduleEvent(EVENT_STREAM_OF_MACHINE_FLUID, 15s, 25s);
+        events.ScheduleEvent(EVENT_SAW_BLADE, 20s);
+        events.ScheduleEvent(EVENT_SHADOW_POWER, 25s);
+        Talk(SAY_AGGRO);
+    }
+
+    void OnSpellCast(SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_SAW_BLADE)
+            Talk(SAY_SAW_BLADES);
+    }
+
+    void KilledUnit(Unit* /*victim*/) override
+    {
+        Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        _JustDied();
+        Talk(SAY_DEATH);
+        Talk(EMOTE_DEATH);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_gatewatcher_gyrokillAI(Creature* creature) : BossAI(creature, DATA_GATEWATCHER_GYROKILL) { }
-
-            void JustDied(Unit* /*killer*/) override
+            switch (eventId)
             {
-                _JustDied();
-                Talk(SAY_DEATH);
+                case EVENT_STREAM_OF_MACHINE_FLUID:
+                    DoCastSelf(SPELL_STREAM_OF_MACHINE_FLUID);
+                    events.Repeat(35s, 50s);
+                    break;
+                case EVENT_SAW_BLADE:
+                    DoCastVictim(SPELL_SAW_BLADE);
+                    events.Repeat(20s, 30s);
+                    break;
+                case EVENT_SHADOW_POWER:
+                    DoCastSelf(SPELL_SHADOW_POWER);
+                    events.Repeat(25s, 35s);
+                    break;
+                default:
+                    break;
             }
 
-            void EnterCombat(Unit* /*who*/) override
-            {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_STREAM_OF_MACHINE_FLUID, 10000);
-                events.ScheduleEvent(EVENT_SAW_BLADE, 20000);
-                events.ScheduleEvent(EVENT_SHADOW_POWER, 25000);
-                Talk(SAY_AGGRO);
-            }
-
-            void KilledUnit(Unit* /*victim*/) override
-            {
-                Talk(SAY_SLAY);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_STREAM_OF_MACHINE_FLUID:
-                            DoCastVictim(SPELL_STREAM_OF_MACHINE_FLUID, true);
-                            events.ScheduleEvent(EVENT_STREAM_OF_MACHINE_FLUID, urand(13000, 17000));
-                            break;
-                        case EVENT_SAW_BLADE:
-                            DoCast(me, SPELL_SAW_BLADE);
-                            Talk(SAY_SAW_BLADEs);
-                            events.ScheduleEvent(EVENT_SAW_BLADE, urand(20000, 30000));
-                            break;
-                        case EVENT_SHADOW_POWER:
-                            DoCast(me, SPELL_SHADOW_POWER);
-                            events.ScheduleEvent(EVENT_SAW_BLADE, urand(25000, 35000));
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_gatewatcher_gyrokillAI(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+
+        DoMeleeAttackIfReady();
+    }
 };
 
 void AddSC_boss_gatewatcher_gyrokill()
 {
-    new boss_gatewatcher_gyrokill();
+    RegisterMechanarCreatureAI(boss_gatewatcher_gyrokill);
 }

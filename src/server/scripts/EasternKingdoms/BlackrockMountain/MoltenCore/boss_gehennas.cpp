@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,95 +15,86 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Boss_Gehennas
-SD%Complete: 90
-SDComment: Adds MC NYI
-SDCategory: Molten Core
-EndScriptData */
-
-#include "ObjectMgr.h"
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "molten_core.h"
+#include "ScriptedCreature.h"
 
-enum Spells
+enum GehennasSpells
 {
-    SPELL_GEHENNAS_CURSE    = 19716,
-    SPELL_RAIN_OF_FIRE      = 19717,
-    SPELL_SHADOW_BOLT       = 19728,
+    SPELL_GEHENNAS_CURSE       = 19716,
+    SPELL_RAIN_OF_FIRE         = 19717,
+    SPELL_SHADOW_BOLT_VICTIM   = 19728,
+    SPELL_SHADOW_BOLT_RANDOM   = 19729
 };
 
-enum Events
+enum GehennasEvents
 {
-    EVENT_GEHENNAS_CURSE    = 1,
-    EVENT_RAIN_OF_FIRE      = 2,
-    EVENT_SHADOW_BOLT       = 3,
+    EVENT_GEHENNAS_CURSE       = 1,
+    EVENT_RAIN_OF_FIRE,
+    EVENT_SHADOW_BOLT_VICTIM,
+    EVENT_SHADOW_BOLT_RANDOM
 };
 
-class boss_gehennas : public CreatureScript
+// 12259 - Gehennas
+struct boss_gehennas : public BossAI
 {
-    public:
-        boss_gehennas() : CreatureScript("boss_gehennas") { }
+    boss_gehennas(Creature* creature) : BossAI(creature, BOSS_GEHENNAS) { }
 
-        struct boss_gehennasAI : public BossAI
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+
+        events.ScheduleEvent(EVENT_GEHENNAS_CURSE, 5s, 10s);
+        events.ScheduleEvent(EVENT_RAIN_OF_FIRE, 5s, 10s);
+        events.ScheduleEvent(EVENT_SHADOW_BOLT_VICTIM, 3s, 6s);
+        events.ScheduleEvent(EVENT_SHADOW_BOLT_RANDOM, 3s, 6s);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_gehennasAI(Creature* creature) : BossAI(creature, BOSS_GEHENNAS)
+            switch (eventId)
             {
+                case EVENT_GEHENNAS_CURSE:
+                    DoCastSelf(SPELL_GEHENNAS_CURSE);
+                    events.Repeat(25s, 30s);
+                    break;
+                case EVENT_RAIN_OF_FIRE:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                        DoCast(target, SPELL_RAIN_OF_FIRE);
+                    events.Repeat(6s, 12s);
+                    break;
+                case EVENT_SHADOW_BOLT_VICTIM:
+                    DoCastVictim(SPELL_SHADOW_BOLT_VICTIM);
+                    events.Repeat(3s, 6s);
+                    break;
+                case EVENT_SHADOW_BOLT_RANDOM:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+                        DoCast(target, SPELL_SHADOW_BOLT_RANDOM);
+                    events.Repeat(3s, 6s);
+                    break;
+                default:
+                    break;
             }
 
-            void EnterCombat(Unit* victim) override
-            {
-                BossAI::EnterCombat(victim);
-                events.ScheduleEvent(EVENT_GEHENNAS_CURSE, 12000);
-                events.ScheduleEvent(EVENT_RAIN_OF_FIRE, 10000);
-                events.ScheduleEvent(EVENT_SHADOW_BOLT, 6000);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_GEHENNAS_CURSE:
-                            DoCastVictim(SPELL_GEHENNAS_CURSE);
-                            events.ScheduleEvent(EVENT_GEHENNAS_CURSE, urand(22000, 30000));
-                            break;
-                        case EVENT_RAIN_OF_FIRE:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                                DoCast(target, SPELL_RAIN_OF_FIRE);
-                            events.ScheduleEvent(EVENT_RAIN_OF_FIRE, urand(4000, 12000));
-                            break;
-                        case EVENT_SHADOW_BOLT:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1))
-                                DoCast(target, SPELL_SHADOW_BOLT);
-                            events.ScheduleEvent(EVENT_SHADOW_BOLT, 7000);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_gehennasAI(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+
+        DoMeleeAttackIfReady();
+    }
 };
 
 void AddSC_boss_gehennas()
 {
-    new boss_gehennas();
+    RegisterMoltenCoreCreatureAI(boss_gehennas);
 }

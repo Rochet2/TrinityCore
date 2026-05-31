@@ -1,434 +1,223 @@
-/******************************************************************************/
-#ifdef JEMALLOC_H_TYPES
+#ifndef JEMALLOC_INTERNAL_TSD_H
+#define JEMALLOC_INTERNAL_TSD_H
 
-/* Maximum number of malloc_tsd users with cleanup functions. */
-#define	MALLOC_TSD_CLEANUPS_MAX	8
-
-typedef bool (*malloc_tsd_cleanup_t)(void);
-
-#if (!defined(JEMALLOC_MALLOC_THREAD_CLEANUP) && !defined(JEMALLOC_TLS) && \
-    !defined(_WIN32))
-typedef struct tsd_init_block_s tsd_init_block_t;
-typedef struct tsd_init_head_s tsd_init_head_t;
+/*
+ * We put the platform-specific data declarations and inlines into their own
+ * header files to avoid cluttering this file.  They define tsd_boot0,
+ * tsd_boot1, tsd_boot, tsd_booted_get, tsd_get_allocates, tsd_get, and tsd_set.
+ */
+#ifdef JEMALLOC_MALLOC_THREAD_CLEANUP
+#	include "jemalloc/internal/jemalloc_preamble.h"
+#	include "jemalloc/internal/tsd_malloc_thread_cleanup.h"
+#elif (defined(JEMALLOC_TLS))
+#	include "jemalloc/internal/tsd_tls.h"
+#elif (defined(_WIN32))
+#	include "jemalloc/internal/tsd_win.h"
+#else
+#	include "jemalloc/internal/tsd_generic.h"
 #endif
 
 /*
- * TLS/TSD-agnostic macro-based implementation of thread-specific data.  There
- * are four macros that support (at least) three use cases: file-private,
- * library-private, and library-private inlined.  Following is an example
- * library-private tsd variable:
- *
- * In example.h:
- *   typedef struct {
- *           int x;
- *           int y;
- *   } example_t;
- *   #define EX_INITIALIZER JEMALLOC_CONCAT({0, 0})
- *   malloc_tsd_protos(, example, example_t *)
- *   malloc_tsd_externs(example, example_t *)
- * In example.c:
- *   malloc_tsd_data(, example, example_t *, EX_INITIALIZER)
- *   malloc_tsd_funcs(, example, example_t *, EX_INITIALIZER,
- *       example_tsd_cleanup)
- *
- * The result is a set of generated functions, e.g.:
- *
- *   bool example_tsd_boot(void) {...}
- *   example_t **example_tsd_get() {...}
- *   void example_tsd_set(example_t **val) {...}
- *
- * Note that all of the functions deal in terms of (a_type *) rather than
- * (a_type)  so that it is possible to support non-pointer types (unlike
- * pthreads TSD).  example_tsd_cleanup() is passed an (a_type *) pointer that is
- * cast to (void *).  This means that the cleanup function needs to cast *and*
- * dereference the function argument, e.g.:
- *
- *   void
- *   example_tsd_cleanup(void *arg)
- *   {
- *           example_t *example = *(example_t **)arg;
- *
- *           [...]
- *           if ([want the cleanup function to be called again]) {
- *                   example_tsd_set(&example);
- *           }
- *   }
- *
- * If example_tsd_set() is called within example_tsd_cleanup(), it will be
- * called again.  This is similar to how pthreads TSD destruction works, except
- * that pthreads only calls the cleanup function again if the value was set to
- * non-NULL.
+ * tsd_foop_get_unsafe(tsd) returns a pointer to the thread-local instance of
+ * foo.  This omits some safety checks, and so can be used during tsd
+ * initialization and cleanup.
  */
+#define O(n, t, nt)                                                            \
+	JEMALLOC_ALWAYS_INLINE t *tsd_##n##p_get_unsafe(tsd_t *tsd) {          \
+		return &tsd->TSD_MANGLE(n);                                    \
+	}
+TSD_DATA_SLOW
+TSD_DATA_FAST
+TSD_DATA_SLOWER
+#undef O
 
-/* malloc_tsd_protos(). */
-#define	malloc_tsd_protos(a_attr, a_name, a_type)			\
-a_attr bool								\
-a_name##_tsd_boot(void);						\
-a_attr a_type *								\
-a_name##_tsd_get(void);							\
-a_attr void								\
-a_name##_tsd_set(a_type *val);
-
-/* malloc_tsd_externs(). */
-#ifdef JEMALLOC_MALLOC_THREAD_CLEANUP
-#define	malloc_tsd_externs(a_name, a_type)				\
-extern __thread a_type	a_name##_tls;					\
-extern __thread bool	a_name##_initialized;				\
-extern bool		a_name##_booted;
-#elif (defined(JEMALLOC_TLS))
-#define	malloc_tsd_externs(a_name, a_type)				\
-extern __thread a_type	a_name##_tls;					\
-extern pthread_key_t	a_name##_tsd;					\
-extern bool		a_name##_booted;
-#elif (defined(_WIN32))
-#define	malloc_tsd_externs(a_name, a_type)				\
-extern DWORD		a_name##_tsd;					\
-extern bool		a_name##_booted;
-#else
-#define	malloc_tsd_externs(a_name, a_type)				\
-extern pthread_key_t	a_name##_tsd;					\
-extern tsd_init_head_t	a_name##_tsd_init_head;				\
-extern bool		a_name##_booted;
-#endif
-
-/* malloc_tsd_data(). */
-#ifdef JEMALLOC_MALLOC_THREAD_CLEANUP
-#define	malloc_tsd_data(a_attr, a_name, a_type, a_initializer)		\
-a_attr __thread a_type JEMALLOC_TLS_MODEL				\
-    a_name##_tls = a_initializer;					\
-a_attr __thread bool JEMALLOC_TLS_MODEL					\
-    a_name##_initialized = false;					\
-a_attr bool		a_name##_booted = false;
-#elif (defined(JEMALLOC_TLS))
-#define	malloc_tsd_data(a_attr, a_name, a_type, a_initializer)		\
-a_attr __thread a_type JEMALLOC_TLS_MODEL				\
-    a_name##_tls = a_initializer;					\
-a_attr pthread_key_t	a_name##_tsd;					\
-a_attr bool		a_name##_booted = false;
-#elif (defined(_WIN32))
-#define	malloc_tsd_data(a_attr, a_name, a_type, a_initializer)		\
-a_attr DWORD		a_name##_tsd;					\
-a_attr bool		a_name##_booted = false;
-#else
-#define	malloc_tsd_data(a_attr, a_name, a_type, a_initializer)		\
-a_attr pthread_key_t	a_name##_tsd;					\
-a_attr tsd_init_head_t	a_name##_tsd_init_head = {			\
-	ql_head_initializer(blocks),					\
-	MALLOC_MUTEX_INITIALIZER					\
-};									\
-a_attr bool		a_name##_booted = false;
-#endif
-
-/* malloc_tsd_funcs(). */
-#ifdef JEMALLOC_MALLOC_THREAD_CLEANUP
-#define	malloc_tsd_funcs(a_attr, a_name, a_type, a_initializer,		\
-    a_cleanup)								\
-/* Initialization/cleanup. */						\
-a_attr bool								\
-a_name##_tsd_cleanup_wrapper(void)					\
-{									\
-									\
-	if (a_name##_initialized) {					\
-		a_name##_initialized = false;				\
-		a_cleanup(&a_name##_tls);				\
-	}								\
-	return (a_name##_initialized);					\
-}									\
-a_attr bool								\
-a_name##_tsd_boot(void)							\
-{									\
-									\
-	if (a_cleanup != malloc_tsd_no_cleanup) {			\
-		malloc_tsd_cleanup_register(				\
-		    &a_name##_tsd_cleanup_wrapper);			\
-	}								\
-	a_name##_booted = true;						\
-	return (false);							\
-}									\
-/* Get/set. */								\
-a_attr a_type *								\
-a_name##_tsd_get(void)							\
-{									\
-									\
-	assert(a_name##_booted);					\
-	return (&a_name##_tls);						\
-}									\
-a_attr void								\
-a_name##_tsd_set(a_type *val)						\
-{									\
-									\
-	assert(a_name##_booted);					\
-	a_name##_tls = (*val);						\
-	if (a_cleanup != malloc_tsd_no_cleanup)				\
-		a_name##_initialized = true;				\
+/* clang-format off */
+/* tsd_foop_get(tsd) returns a pointer to the thread-local instance of foo. */
+#define O(n, t, nt)							\
+JEMALLOC_ALWAYS_INLINE t *						\
+tsd_##n##p_get(tsd_t *tsd) {						\
+	/*								\
+	 * Because the state might change asynchronously if it's	\
+	 * nominal, we need to make sure that we only read it once.	\
+	 */								\
+	uint8_t state = tsd_state_get(tsd);				\
+	assert(state == tsd_state_nominal ||				\
+	    state == tsd_state_nominal_slow ||				\
+	    state == tsd_state_nominal_recompute ||			\
+	    state == tsd_state_reincarnated ||				\
+	    state == tsd_state_minimal_initialized);			\
+	return tsd_##n##p_get_unsafe(tsd);				\
 }
-#elif (defined(JEMALLOC_TLS))
-#define	malloc_tsd_funcs(a_attr, a_name, a_type, a_initializer,		\
-    a_cleanup)								\
-/* Initialization/cleanup. */						\
-a_attr bool								\
-a_name##_tsd_boot(void)							\
-{									\
-									\
-	if (a_cleanup != malloc_tsd_no_cleanup) {			\
-		if (pthread_key_create(&a_name##_tsd, a_cleanup) != 0)	\
-			return (true);					\
-	}								\
-	a_name##_booted = true;						\
-	return (false);							\
-}									\
-/* Get/set. */								\
-a_attr a_type *								\
-a_name##_tsd_get(void)							\
-{									\
-									\
-	assert(a_name##_booted);					\
-	return (&a_name##_tls);						\
-}									\
-a_attr void								\
-a_name##_tsd_set(a_type *val)						\
-{									\
-									\
-	assert(a_name##_booted);					\
-	a_name##_tls = (*val);						\
-	if (a_cleanup != malloc_tsd_no_cleanup) {			\
-		if (pthread_setspecific(a_name##_tsd,			\
-		    (void *)(&a_name##_tls))) {				\
-			malloc_write("<jemalloc>: Error"		\
-			    " setting TSD for "#a_name"\n");		\
-			if (opt_abort)					\
-				abort();				\
-		}							\
-	}								\
+/* clang-format on */
+TSD_DATA_SLOW
+TSD_DATA_FAST
+TSD_DATA_SLOWER
+#undef O
+
+/*
+ * tsdn_foop_get(tsdn) returns either the thread-local instance of foo (if tsdn
+ * isn't NULL), or NULL (if tsdn is NULL), cast to the nullable pointer type.
+ */
+#define O(n, t, nt)                                                            \
+	JEMALLOC_ALWAYS_INLINE nt *tsdn_##n##p_get(tsdn_t *tsdn) {             \
+		if (tsdn_null(tsdn)) {                                         \
+			return NULL;                                           \
+		}                                                              \
+		tsd_t *tsd = tsdn_tsd(tsdn);                                   \
+		return (nt *)tsd_##n##p_get(tsd);                              \
+	}
+TSD_DATA_SLOW
+TSD_DATA_FAST
+TSD_DATA_SLOWER
+#undef O
+
+/* tsd_foo_get(tsd) returns the value of the thread-local instance of foo. */
+#define O(n, t, nt)                                                            \
+	JEMALLOC_ALWAYS_INLINE t tsd_##n##_get(tsd_t *tsd) {                   \
+		return *tsd_##n##p_get(tsd);                                   \
+	}
+TSD_DATA_SLOW
+TSD_DATA_FAST
+TSD_DATA_SLOWER
+#undef O
+
+/* tsd_foo_set(tsd, val) updates the thread-local instance of foo to be val. */
+#define O(n, t, nt)                                                            \
+	JEMALLOC_ALWAYS_INLINE void tsd_##n##_set(tsd_t *tsd, t val) {         \
+		assert(tsd_state_get(tsd) != tsd_state_reincarnated            \
+		    && tsd_state_get(tsd) != tsd_state_minimal_initialized);   \
+		*tsd_##n##p_get(tsd) = val;                                    \
+	}
+TSD_DATA_SLOW
+TSD_DATA_FAST
+TSD_DATA_SLOWER
+#undef O
+
+JEMALLOC_ALWAYS_INLINE void
+tsd_assert_fast(tsd_t *tsd) {
+	/*
+	 * Note that our fastness assertion does *not* include global slowness
+	 * counters; it's not in general possible to ensure that they won't
+	 * change asynchronously from underneath us.
+	 */
+	assert(!malloc_slow && tsd_tcache_enabled_get(tsd)
+	    && tsd_reentrancy_level_get(tsd) == 0);
 }
-#elif (defined(_WIN32))
-#define	malloc_tsd_funcs(a_attr, a_name, a_type, a_initializer,		\
-    a_cleanup)								\
-/* Data structure. */							\
-typedef struct {							\
-	bool	initialized;						\
-	a_type	val;							\
-} a_name##_tsd_wrapper_t;						\
-/* Initialization/cleanup. */						\
-a_attr bool								\
-a_name##_tsd_cleanup_wrapper(void)					\
-{									\
-	a_name##_tsd_wrapper_t *wrapper;				\
-									\
-	wrapper = (a_name##_tsd_wrapper_t *) TlsGetValue(a_name##_tsd);	\
-	if (wrapper == NULL)						\
-		return (false);						\
-	if (a_cleanup != malloc_tsd_no_cleanup &&			\
-	    wrapper->initialized) {					\
-		a_type val = wrapper->val;				\
-		a_type tsd_static_data = a_initializer;			\
-		wrapper->initialized = false;				\
-		wrapper->val = tsd_static_data;				\
-		a_cleanup(&val);					\
-		if (wrapper->initialized) {				\
-			/* Trigger another cleanup round. */		\
-			return (true);					\
-		}							\
-	}								\
-	malloc_tsd_dalloc(wrapper);					\
-	return (false);							\
-}									\
-a_attr bool								\
-a_name##_tsd_boot(void)							\
-{									\
-									\
-	a_name##_tsd = TlsAlloc();					\
-	if (a_name##_tsd == TLS_OUT_OF_INDEXES)				\
-		return (true);						\
-	if (a_cleanup != malloc_tsd_no_cleanup) {			\
-		malloc_tsd_cleanup_register(				\
-		    &a_name##_tsd_cleanup_wrapper);			\
-	}								\
-	a_name##_booted = true;						\
-	return (false);							\
-}									\
-/* Get/set. */								\
-a_attr a_name##_tsd_wrapper_t *						\
-a_name##_tsd_get_wrapper(void)						\
-{									\
-	a_name##_tsd_wrapper_t *wrapper = (a_name##_tsd_wrapper_t *)	\
-	    TlsGetValue(a_name##_tsd);					\
-									\
-	if (wrapper == NULL) {						\
-		wrapper = (a_name##_tsd_wrapper_t *)			\
-		    malloc_tsd_malloc(sizeof(a_name##_tsd_wrapper_t));	\
-		if (wrapper == NULL) {					\
-			malloc_write("<jemalloc>: Error allocating"	\
-			    " TSD for "#a_name"\n");			\
-			abort();					\
-		} else {						\
-			static a_type tsd_static_data = a_initializer;	\
-			wrapper->initialized = false;			\
-			wrapper->val = tsd_static_data;			\
-		}							\
-		if (!TlsSetValue(a_name##_tsd, (void *)wrapper)) {	\
-			malloc_write("<jemalloc>: Error setting"	\
-			    " TSD for "#a_name"\n");			\
-			abort();					\
-		}							\
-	}								\
-	return (wrapper);						\
-}									\
-a_attr a_type *								\
-a_name##_tsd_get(void)							\
-{									\
-	a_name##_tsd_wrapper_t *wrapper;				\
-									\
-	assert(a_name##_booted);					\
-	wrapper = a_name##_tsd_get_wrapper();				\
-	return (&wrapper->val);						\
-}									\
-a_attr void								\
-a_name##_tsd_set(a_type *val)						\
-{									\
-	a_name##_tsd_wrapper_t *wrapper;				\
-									\
-	assert(a_name##_booted);					\
-	wrapper = a_name##_tsd_get_wrapper();				\
-	wrapper->val = *(val);						\
-	if (a_cleanup != malloc_tsd_no_cleanup)				\
-		wrapper->initialized = true;				\
+
+JEMALLOC_ALWAYS_INLINE bool
+tsd_fast(tsd_t *tsd) {
+	bool fast = (tsd_state_get(tsd) == tsd_state_nominal);
+	if (fast) {
+		tsd_assert_fast(tsd);
+	}
+
+	return fast;
 }
-#else
-#define	malloc_tsd_funcs(a_attr, a_name, a_type, a_initializer,		\
-    a_cleanup)								\
-/* Data structure. */							\
-typedef struct {							\
-	bool	initialized;						\
-	a_type	val;							\
-} a_name##_tsd_wrapper_t;						\
-/* Initialization/cleanup. */						\
-a_attr void								\
-a_name##_tsd_cleanup_wrapper(void *arg)					\
-{									\
-	a_name##_tsd_wrapper_t *wrapper = (a_name##_tsd_wrapper_t *)arg;\
-									\
-	if (a_cleanup != malloc_tsd_no_cleanup &&			\
-	    wrapper->initialized) {					\
-		wrapper->initialized = false;				\
-		a_cleanup(&wrapper->val);				\
-		if (wrapper->initialized) {				\
-			/* Trigger another cleanup round. */		\
-			if (pthread_setspecific(a_name##_tsd,		\
-			    (void *)wrapper)) {				\
-				malloc_write("<jemalloc>: Error"	\
-				    " setting TSD for "#a_name"\n");	\
-				if (opt_abort)				\
-					abort();			\
-			}						\
-			return;						\
-		}							\
-	}								\
-	malloc_tsd_dalloc(wrapper);					\
-}									\
-a_attr bool								\
-a_name##_tsd_boot(void)							\
-{									\
-									\
-	if (pthread_key_create(&a_name##_tsd,				\
-	    a_name##_tsd_cleanup_wrapper) != 0)				\
-		return (true);						\
-	a_name##_booted = true;						\
-	return (false);							\
-}									\
-/* Get/set. */								\
-a_attr a_name##_tsd_wrapper_t *						\
-a_name##_tsd_get_wrapper(void)						\
-{									\
-	a_name##_tsd_wrapper_t *wrapper = (a_name##_tsd_wrapper_t *)	\
-	    pthread_getspecific(a_name##_tsd);				\
-									\
-	if (wrapper == NULL) {						\
-		tsd_init_block_t block;					\
-		wrapper = tsd_init_check_recursion(			\
-		    &a_name##_tsd_init_head, &block);			\
-		if (wrapper)						\
-		    return (wrapper);					\
-		wrapper = (a_name##_tsd_wrapper_t *)			\
-		    malloc_tsd_malloc(sizeof(a_name##_tsd_wrapper_t));	\
-		block.data = wrapper;					\
-		if (wrapper == NULL) {					\
-			malloc_write("<jemalloc>: Error allocating"	\
-			    " TSD for "#a_name"\n");			\
-			abort();					\
-		} else {						\
-			static a_type tsd_static_data = a_initializer;	\
-			wrapper->initialized = false;			\
-			wrapper->val = tsd_static_data;			\
-		}							\
-		if (pthread_setspecific(a_name##_tsd,			\
-		    (void *)wrapper)) {					\
-			malloc_write("<jemalloc>: Error setting"	\
-			    " TSD for "#a_name"\n");			\
-			abort();					\
-		}							\
-		tsd_init_finish(&a_name##_tsd_init_head, &block);	\
-	}								\
-	return (wrapper);						\
-}									\
-a_attr a_type *								\
-a_name##_tsd_get(void)							\
-{									\
-	a_name##_tsd_wrapper_t *wrapper;				\
-									\
-	assert(a_name##_booted);					\
-	wrapper = a_name##_tsd_get_wrapper();				\
-	return (&wrapper->val);						\
-}									\
-a_attr void								\
-a_name##_tsd_set(a_type *val)						\
-{									\
-	a_name##_tsd_wrapper_t *wrapper;				\
-									\
-	assert(a_name##_booted);					\
-	wrapper = a_name##_tsd_get_wrapper();				\
-	wrapper->val = *(val);						\
-	if (a_cleanup != malloc_tsd_no_cleanup)				\
-		wrapper->initialized = true;				\
+
+JEMALLOC_ALWAYS_INLINE tsd_t *
+tsd_fetch_impl(bool init, bool minimal) {
+	tsd_t *tsd = tsd_get(init);
+
+	if (!init && tsd_get_allocates() && tsd == NULL) {
+		return NULL;
+	}
+	assert(tsd != NULL);
+
+	if (unlikely(tsd_state_get(tsd) != tsd_state_nominal)) {
+		return tsd_fetch_slow(tsd, minimal);
+	}
+	assert(tsd_fast(tsd));
+	tsd_assert_fast(tsd);
+
+	return tsd;
 }
-#endif
 
-#endif /* JEMALLOC_H_TYPES */
-/******************************************************************************/
-#ifdef JEMALLOC_H_STRUCTS
+/* Get a minimal TSD that requires no cleanup.  See comments in free(). */
+JEMALLOC_ALWAYS_INLINE tsd_t *
+tsd_fetch_min(void) {
+	return tsd_fetch_impl(true, true);
+}
 
-#if (!defined(JEMALLOC_MALLOC_THREAD_CLEANUP) && !defined(JEMALLOC_TLS) && \
-    !defined(_WIN32))
-struct tsd_init_block_s {
-	ql_elm(tsd_init_block_t)	link;
-	pthread_t			thread;
-	void				*data;
-};
-struct tsd_init_head_s {
-	ql_head(tsd_init_block_t)	blocks;
-	malloc_mutex_t			lock;
-};
-#endif
+/* For internal background threads use only. */
+JEMALLOC_ALWAYS_INLINE tsd_t *
+tsd_internal_fetch(void) {
+	tsd_t *tsd = tsd_fetch_min();
+	/* Use reincarnated state to prevent full initialization. */
+	tsd_state_set(tsd, tsd_state_reincarnated);
 
-#endif /* JEMALLOC_H_STRUCTS */
-/******************************************************************************/
-#ifdef JEMALLOC_H_EXTERNS
+	return tsd;
+}
 
-void	*malloc_tsd_malloc(size_t size);
-void	malloc_tsd_dalloc(void *wrapper);
-void	malloc_tsd_no_cleanup(void *);
-void	malloc_tsd_cleanup_register(bool (*f)(void));
-void	malloc_tsd_boot(void);
-#if (!defined(JEMALLOC_MALLOC_THREAD_CLEANUP) && !defined(JEMALLOC_TLS) && \
-    !defined(_WIN32))
-void	*tsd_init_check_recursion(tsd_init_head_t *head,
-    tsd_init_block_t *block);
-void	tsd_init_finish(tsd_init_head_t *head, tsd_init_block_t *block);
-#endif
+JEMALLOC_ALWAYS_INLINE tsd_t *
+tsd_fetch(void) {
+	return tsd_fetch_impl(true, false);
+}
 
-#endif /* JEMALLOC_H_EXTERNS */
-/******************************************************************************/
-#ifdef JEMALLOC_H_INLINES
+static inline bool
+tsd_nominal(tsd_t *tsd) {
+	bool nominal = tsd_state_get(tsd) <= tsd_state_nominal_max;
+	assert(nominal || tsd_reentrancy_level_get(tsd) > 0);
 
-#endif /* JEMALLOC_H_INLINES */
-/******************************************************************************/
+	return nominal;
+}
+
+JEMALLOC_ALWAYS_INLINE tsdn_t *
+tsdn_fetch(void) {
+	if (!tsd_booted_get()) {
+		return NULL;
+	}
+
+	return tsd_tsdn(tsd_fetch_impl(false, false));
+}
+
+JEMALLOC_ALWAYS_INLINE rtree_ctx_t *
+tsd_rtree_ctx(tsd_t *tsd) {
+	return tsd_rtree_ctxp_get(tsd);
+}
+
+JEMALLOC_ALWAYS_INLINE rtree_ctx_t *
+tsdn_rtree_ctx(tsdn_t *tsdn, rtree_ctx_t *fallback) {
+	/*
+	 * If tsd cannot be accessed, initialize the fallback rtree_ctx and
+	 * return a pointer to it.
+	 */
+	if (unlikely(tsdn_null(tsdn))) {
+		rtree_ctx_data_init(fallback);
+		return fallback;
+	}
+	return tsd_rtree_ctx(tsdn_tsd(tsdn));
+}
+
+static inline bool
+tsd_state_nocleanup(tsd_t *tsd) {
+	return tsd_state_get(tsd) == tsd_state_reincarnated
+	    || tsd_state_get(tsd) == tsd_state_minimal_initialized;
+}
+
+/*
+ * These "raw" tsd reentrancy functions don't have any debug checking to make
+ * sure that we're not touching arena 0.  Better is to call pre_reentrancy and
+ * post_reentrancy if this is possible.
+ */
+static inline void
+tsd_pre_reentrancy_raw(tsd_t *tsd) {
+	bool fast = tsd_fast(tsd);
+	assert(tsd_reentrancy_level_get(tsd) < INT8_MAX);
+	++*tsd_reentrancy_levelp_get(tsd);
+	if (fast) {
+		/* Prepare slow path for reentrancy. */
+		tsd_slow_update(tsd);
+		assert(tsd_state_get(tsd) == tsd_state_nominal_slow);
+	}
+}
+
+static inline void
+tsd_post_reentrancy_raw(tsd_t *tsd) {
+	int8_t *reentrancy_level = tsd_reentrancy_levelp_get(tsd);
+	assert(*reentrancy_level > 0);
+	if (--*reentrancy_level == 0) {
+		tsd_slow_update(tsd);
+	}
+}
+
+#endif /* JEMALLOC_INTERNAL_TSD_H */

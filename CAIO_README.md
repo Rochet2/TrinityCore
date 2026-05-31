@@ -7,16 +7,18 @@ Currently CAIO only supports TrinityCore 3.3.5 branch. [Compare and review](http
 
 ## Supported AIO version
 
-AIO Version 1.72
+AIO version **1.75** — must match `AIO_VERSION` in your server and client `AIO.lua` files (for example `C:\Users\tqbat\Documents\Cores\stuff\AIO`).
 
 ## Install
 
 + Clone this repository/branch or merge with your own TrinityCore 3.3.5 branch
++ `git submodule update --init --recursive` (required for `dep/smallfolk_cpp`)
 + Build/Install TrinityCore
 + [Install(Add) (C)AIO scripts](#api-reference)
-+ Run SQL files from `TrinityCore_Installation_Dir/sql/CAIO` to insert commands, permissions and strings 
-+ Copy `AIO_Client` folder from [AIO](https://github.com/Rochet2/AIO) repository to `WoW_Installation_Dir/Interface/AddOns`
-+ Copy your client side addons to `TrinityCore_Installation_Dir/lua_client_scripts`
++ Run SQL files from `TrinityCore_Installation_Dir/sql/CAIO` (`Auth.sql` on auth DB, `World.sql` on world DB)
++ Copy `AIO_Client` from your AIO tree to `WoW_Installation_Dir/Interface/AddOns/AIO_Client` (use the same AIO repo/commit as the server expects)
++ Copy server-side client addon sources into `TrinityCore_Installation_Dir/lua_client_scripts` (one folder per addon, e.g. `lua_client_scripts/ExampleWindow/ExampleWindow.lua`)
++ Set `AIO.Obfuscate`, `AIO.Compress`, and `AIO.MsgMaxLen` in `worldserver.conf` to match your `AIO.lua` settings
 
 ## Todo
 

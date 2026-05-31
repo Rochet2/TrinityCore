@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,37 +18,26 @@
 #ifndef _MMAP_COMMON_H
 #define _MMAP_COMMON_H
 
+#include "Define.h"
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "Common.h"
+#ifndef _WIN32
+    #include <cstddef>
+    #include <cstring>
+    #include <dirent.h>
+#else
+    #include <Windows.h>
+#endif
 
 #ifndef _WIN32
-    #include <stddef.h>
-    #include <dirent.h>
+    #include <cerrno>
 #endif
-
-#ifdef __linux__
-    #include <errno.h>
-#endif
-
-enum NavTerrain
-{
-    NAV_EMPTY   = 0x00,
-    NAV_GROUND  = 0x01,
-    NAV_MAGMA   = 0x02,
-    NAV_SLIME   = 0x04,
-    NAV_WATER   = 0x08,
-    NAV_UNUSED1 = 0x10,
-    NAV_UNUSED2 = 0x20,
-    NAV_UNUSED3 = 0x40,
-    NAV_UNUSED4 = 0x80
-    // we only have 8 bits
-};
 
 namespace MMAP
 {
-    inline bool matchWildcardFilter(const char* filter, const char* str)
+    inline bool matchWildcardFilter(char const* filter, char const* str)
     {
         if (!filter || !str)
             return false;
@@ -91,12 +79,12 @@ namespace MMAP
     {
     #ifdef WIN32
         HANDLE hFind;
-        WIN32_FIND_DATA findFileInfo;
+        WIN32_FIND_DATAA findFileInfo;
         std::string directory;
 
         directory = dirpath + "/" + filter;
 
-        hFind = FindFirstFile(directory.c_str(), &findFileInfo);
+        hFind = FindFirstFileA(directory.c_str(), &findFileInfo);
 
         if (hFind == INVALID_HANDLE_VALUE)
             return LISTFILE_DIRECTORY_NOT_FOUND;
@@ -105,7 +93,7 @@ namespace MMAP
             if ((findFileInfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
                 fileList.push_back(std::string(findFileInfo.cFileName));
         }
-        while (FindNextFile(hFind, &findFileInfo));
+        while (FindNextFileA(hFind, &findFileInfo));
 
         FindClose(hFind);
 
@@ -117,9 +105,9 @@ namespace MMAP
         while (dirp)
         {
             errno = 0;
-            if ((dp = readdir(dirp)) != NULL)
+            if ((dp = readdir(dirp)) != nullptr)
             {
-                if (matchWildcardFilter(filter.c_str(), dp->d_name))
+                if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && matchWildcardFilter(filter.c_str(), dp->d_name))
                     fileList.push_back(std::string(dp->d_name));
             }
             else

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,18 +18,20 @@
 #ifndef ARCATRAZ_H
 #define ARCATRAZ_H
 
+#include "CreatureAIImpl.h"
+
 #define ArcatrazScriptName "instance_arcatraz"
 #define DataHeader         "AZ"
 
 uint32 const EncounterCount = 4;
 
-enum DataTypes
+enum AZDataTypes
 {
     // Encounter States/Boss GUIDs
     DATA_ZEREKETH                               = 0,
     DATA_DALLIAH                                = 1,
     DATA_SOCCOTHRATES                           = 2,
-    DATA_HARBINGER_SKYRISS                      = 3,
+    DATA_HARBINGER_SKYRISS                      = 3, // used by SmartAI
 
     // Additional Data
     DATA_CONVERSATION                           = 4,
@@ -38,19 +40,24 @@ enum DataTypes
     DATA_WARDEN_3                               = 7, // used by SmartAI
     DATA_WARDEN_4                               = 8, // used by SmartAI
     DATA_WARDEN_5                               = 9, // used by SmartAI
-    DATA_MELLICHAR                              = 10,
-    DATA_WARDENS_SHIELD                         = 11
+    DATA_MELLICHAR,
+    DATA_WARDENS_SHIELD,
+    DATA_STASIS_POD_ALPHA,
+    DATA_STASIS_POD_BETA,
+    DATA_STASIS_POD_DELTA,
+    DATA_STASIS_POD_GAMMA,
+    DATA_STASIS_POD_OMEGA
 };
 
-enum CreatureIds
+enum AZCreatureIds
 {
     NPC_DALLIAH                                 = 20885,
     NPC_SOCCOTHRATES                            = 20886,
-    NPC_MELLICHAR                               = 20904, // skyriss will kill this unit
-    NPC_ALPHA_POD_TARGET                        = 21436
+    NPC_MELLICHAR                               = 20904,
+    NPC_MILLHOUSE                               = 20977
 };
 
-enum GameObjectIds
+enum AZGameObjectIds
 {
     GO_CONTAINMENT_CORE_SECURITY_FIELD_ALPHA    = 184318, // door opened when Wrath-Scryer Soccothrates dies
     GO_CONTAINMENT_CORE_SECURITY_FIELD_BETA     = 184319, // door opened when Dalliah the Doomsayer dies
@@ -62,10 +69,22 @@ enum GameObjectIds
     GO_WARDENS_SHIELD                           = 184802  // shield 'protecting' mellichar
 };
 
-template<class AI>
-AI* GetArcatrazAI(Creature* creature)
+enum AZSpellIds
 {
-    return GetInstanceAI<AI>(creature, ArcatrazScriptName);
+    SPELL_QID_10886                             = 39564
+};
+
+enum AZMisc
+{
+    ACTION_RESET_PRISON                         = 1
+};
+
+template <class AI, class T>
+inline AI* GetArcatrazAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, ArcatrazScriptName);
 }
+
+#define RegisterArcatrazCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetArcatrazAI)
 
 #endif // ARCATRAZ_H

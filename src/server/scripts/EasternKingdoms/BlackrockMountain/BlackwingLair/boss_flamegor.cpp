@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,8 +16,8 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "blackwing_lair.h"
+#include "ScriptedCreature.h"
 
 enum Emotes
 {
@@ -39,72 +38,59 @@ enum Events
     EVENT_FRENZY            = 3
 };
 
-class boss_flamegor : public CreatureScript
+struct boss_flamegor : public BossAI
 {
-public:
-    boss_flamegor() : CreatureScript("boss_flamegor") { }
+    boss_flamegor(Creature* creature) : BossAI(creature, DATA_FLAMEGOR) { }
 
-    struct boss_flamegorAI : public BossAI
+    void JustEngagedWith(Unit* who) override
     {
-        boss_flamegorAI(Creature* creature) : BossAI(creature, BOSS_FLAMEGOR) { }
+        BossAI::JustEngagedWith(who);
 
-        void EnterCombat(Unit* /*who*/) override
+        events.ScheduleEvent(EVENT_SHADOWFLAME, 10s, 20s);
+        events.ScheduleEvent(EVENT_WINGBUFFET, 30s);
+        events.ScheduleEvent(EVENT_FRENZY, 10s);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            if (instance->GetBossState(BOSS_BROODLORD) != DONE)
+            switch (eventId)
             {
-                EnterEvadeMode();
-                return;
+                case EVENT_SHADOWFLAME:
+                    DoCastVictim(SPELL_SHADOWFLAME);
+                    events.ScheduleEvent(EVENT_SHADOWFLAME, 10s, 20s);
+                    break;
+                case EVENT_WINGBUFFET:
+                    DoCastVictim(SPELL_WINGBUFFET);
+                    if (GetThreat(me->GetVictim()))
+                        ModifyThreatByPercent(me->GetVictim(), -75);
+                    events.ScheduleEvent(EVENT_WINGBUFFET, 30s);
+                    break;
+                case EVENT_FRENZY:
+                    Talk(EMOTE_FRENZY);
+                    DoCast(me, SPELL_FRENZY);
+                    events.ScheduleEvent(EVENT_FRENZY, 8s, 10s);
+                    break;
             }
-            _EnterCombat();
-
-            events.ScheduleEvent(EVENT_SHADOWFLAME, urand(10000, 20000));
-            events.ScheduleEvent(EVENT_WINGBUFFET, 30000);
-            events.ScheduleEvent(EVENT_FRENZY, 10000);
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            if (!UpdateVictim())
-                return;
-
-            events.Update(diff);
 
             if (me->HasUnitState(UNIT_STATE_CASTING))
                 return;
-
-            while (uint32 eventId = events.ExecuteEvent())
-            {
-                switch (eventId)
-                {
-                    case EVENT_SHADOWFLAME:
-                        DoCastVictim(SPELL_SHADOWFLAME);
-                        events.ScheduleEvent(EVENT_SHADOWFLAME, urand(10000, 20000));
-                        break;
-                    case EVENT_WINGBUFFET:
-                        DoCastVictim(SPELL_WINGBUFFET);
-                        if (DoGetThreat(me->GetVictim()))
-                            DoModifyThreatPercent(me->GetVictim(), -75);
-                        events.ScheduleEvent(EVENT_WINGBUFFET, 30000);
-                        break;
-                    case EVENT_FRENZY:
-                        Talk(EMOTE_FRENZY);
-                        DoCast(me, SPELL_FRENZY);
-                        events.ScheduleEvent(EVENT_FRENZY, urand(8000, 10000));
-                        break;
-                }
-            }
-
-            DoMeleeAttackIfReady();
         }
-    };
 
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetInstanceAI<boss_flamegorAI>(creature);
+        DoMeleeAttackIfReady();
     }
 };
 
 void AddSC_boss_flamegor()
 {
-    new boss_flamegor();
+    RegisterBlackwingLairCreatureAI(boss_flamegor);
 }

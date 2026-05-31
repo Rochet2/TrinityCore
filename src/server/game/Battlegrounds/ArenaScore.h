@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,31 +19,17 @@
 #define TRINITY_ARENA_SCORE_H
 
 #include "BattlegroundScore.h"
-#include "SharedDefines.h"
+#include <sstream>
 
-struct ArenaScore : public BattlegroundScore
+struct TC_GAME_API ArenaScore final : public BattlegroundScore
 {
     friend class Arena;
 
     protected:
-        ArenaScore(ObjectGuid playerGuid, uint32 team) : BattlegroundScore(playerGuid), TeamId(team == ALLIANCE ? BG_TEAM_ALLIANCE : BG_TEAM_HORDE) { }
+        ArenaScore(ObjectGuid playerGuid, uint32 team) : BattlegroundScore(playerGuid), TeamId(team == ALLIANCE ? PVP_TEAM_ALLIANCE : PVP_TEAM_HORDE) { }
 
-        void AppendToPacket(WorldPacket& data) final override
-        {
-            data << uint64(PlayerGuid);
-
-            data << uint32(KillingBlows);
-            data << uint8(TeamId);
-            data << uint32(DamageDone);
-            data << uint32(HealingDone);
-
-            BuildObjectivesBlock(data);
-        }
-
-        void BuildObjectivesBlock(WorldPacket& data) final override
-        {
-            data << uint32(0); // Objectives Count
-        }
+        void AppendToPacket(WorldPackets::Battleground::PVPLogData_Player& playerData) override;
+        void BuildObjectivesBlock(WorldPackets::Battleground::PVPLogData_Player& playerData) override;
 
         // For Logging purpose
         std::string ToString() const override
@@ -53,18 +39,16 @@ struct ArenaScore : public BattlegroundScore
             return stream.str();
         }
 
-        uint8 TeamId; // BattlegroundTeamId
+        uint8 TeamId; // PvPTeamId
 };
 
-struct ArenaTeamScore
+struct TC_GAME_API ArenaTeamScore
 {
     friend class Arena;
     friend class Battleground;
 
     protected:
         ArenaTeamScore() : RatingChange(0), MatchmakerRating(0) { }
-
-        virtual ~ArenaTeamScore() { }
 
         void Reset()
         {
@@ -78,22 +62,6 @@ struct ArenaTeamScore
             RatingChange = ratingChange;
             MatchmakerRating = matchMakerRating;
             TeamName = teamName;
-        }
-
-        void BuildRatingInfoBlock(WorldPacket& data)
-        {
-            uint32 ratingLost = std::abs(std::min(RatingChange, 0));
-            uint32 ratingWon = std::max(RatingChange, 0);
-
-            // should be old rating, new rating, and client will calculate rating change itself
-            data << uint32(ratingLost);
-            data << uint32(ratingWon);
-            data << uint32(MatchmakerRating);
-        }
-
-        void BuildTeamInfoBlock(WorldPacket& data)
-        {
-            data << TeamName;
         }
 
         int32 RatingChange;

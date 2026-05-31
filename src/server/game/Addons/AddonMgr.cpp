@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,11 +16,11 @@
  */
 
 #include "AddonMgr.h"
+#include "CryptoHash.h"
 #include "DatabaseEnv.h"
 #include "DBCStores.h"
 #include "Log.h"
 #include "Timer.h"
-#include <openssl/md5.h>
 
 namespace AddonMgr
 {
@@ -60,13 +59,13 @@ void LoadFromDB()
         }
         while (result->NextRow());
 
-        TC_LOG_INFO("server.loading", ">> Loaded %u known addons in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+        TC_LOG_INFO("server.loading", ">> Loaded {} known addons in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
     }
     else
         TC_LOG_INFO("server.loading", ">> Loaded 0 known addons. DB table `addons` is empty!");
 
     oldMSTime = getMSTime();
-    result = CharacterDatabase.Query("SELECT id, name, version, UNIX_TIMESTAMP(timestamp) FROM banned_addons");
+    result = CharacterDatabase.Query("SELECT id, name, version, UNIX_TIMESTAMP(timestamp) FROM banned_addons ORDER BY timestamp");
     if (result)
     {
         uint32 count = 0;
@@ -83,8 +82,8 @@ void LoadFromDB()
             std::string name = fields[1].GetString();
             std::string version = fields[2].GetString();
 
-            MD5(reinterpret_cast<uint8 const*>(name.c_str()), name.length(), addon.NameMD5);
-            MD5(reinterpret_cast<uint8 const*>(version.c_str()), version.length(), addon.VersionMD5);
+            addon.NameMD5 = Trinity::Crypto::MD5::GetDigestOf(name);
+            addon.VersionMD5 = Trinity::Crypto::MD5::GetDigestOf(version);
 
             m_bannedAddons.push_back(addon);
 
@@ -92,22 +91,20 @@ void LoadFromDB()
         }
         while (result->NextRow());
 
-        TC_LOG_INFO("server.loading", ">> Loaded %u banned addons in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+        TC_LOG_INFO("server.loading", ">> Loaded {} banned addons in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
     }
 }
 
-void SaveAddon(AddonInfo const& addon)
+void SaveAddon(std::string const& name, uint32 publicKeyCrc)
 {
-    std::string name = addon.Name;
-
-    PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_ADDON);
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_ADDON);
 
     stmt->setString(0, name);
-    stmt->setUInt32(1, addon.CRC);
+    stmt->setUInt32(1, publicKeyCrc);
 
     CharacterDatabase.Execute(stmt);
 
-    m_knownAddons.push_back(SavedAddon(addon.Name, addon.CRC));
+    m_knownAddons.emplace_back(name, publicKeyCrc);
 }
 
 SavedAddon const* GetAddonInfo(const std::string& name)
@@ -119,7 +116,7 @@ SavedAddon const* GetAddonInfo(const std::string& name)
             return &addon;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 BannedAddonList const* GetBannedAddons()

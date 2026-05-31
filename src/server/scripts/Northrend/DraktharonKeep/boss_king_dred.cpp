@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,267 +15,245 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
- * Comment: MAYBE need more improve the "Raptor Call".
- */
-
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "drak_tharon_keep.h"
+#include "Containers.h"
+#include "InstanceScript.h"
+#include "ObjectAccessor.h"
+#include "ScriptedCreature.h"
+#include "SpellInfo.h"
 
-enum Spells
+enum DredTexts
 {
-    SPELL_BELLOWING_ROAR                          = 22686, // fears the group, can be resisted/dispelled
-    SPELL_GRIEVOUS_BITE                           = 48920,
-    SPELL_MANGLING_SLASH                          = 48873, // cast on the current tank, adds debuf
-    SPELL_FEARSOME_ROAR                           = 48849,
-    SPELL_PIERCING_SLASH                          = 48878, // debuff --> Armor reduced by 75%
-    SPELL_RAPTOR_CALL                             = 59416, // dummy
-    SPELL_GUT_RIP                                 = 49710,
-    SPELL_REND                                    = 13738
+    EMOTE_SLASH                 = 0
 };
 
-enum Misc
+enum DredSpells
 {
-    ACTION_RAPTOR_KILLED                          = 1,
-    DATA_RAPTORS_KILLED                           = 2
+    // Dred
+    SPELL_BELLOWING_ROAR        = 22686,
+    SPELL_GRIEVOUS_BITE         = 48920,
+    SPELL_FEARSOME_ROAR         = 48849,
+    SPELL_RAPTOR_CALL           = 59416,
+    SPELL_MULTI_SLASH           = 48856,
+    SPELL_PIERCING_SLASH        = 48878,
+    SPELL_MANGLING_SLASH        = 48873,
+
+    // Raptors
+    SPELL_GUT_RIP               = 49710,
+    SPELL_REND                  = 13738
 };
 
-enum Events
+enum DredEvents
 {
-    EVENT_BELLOWING_ROAR                          = 1,
+    EVENT_BELLOWING_ROAR        = 1,
     EVENT_GRIEVOUS_BITE,
-    EVENT_MANGLING_SLASH,
     EVENT_FEARSOME_ROAR,
+    EVENT_RAPTOR_CALL,
+    EVENT_MULTI_SLASH,
     EVENT_PIERCING_SLASH,
-    EVENT_RAPTOR_CALL
+    EVENT_MANGLING_SLASH
 };
 
-class boss_king_dred : public CreatureScript
+enum DredMisc
 {
-    public:
-        boss_king_dred() : CreatureScript("boss_king_dred") { }
-
-        struct boss_king_dredAI : public BossAI
-        {
-            boss_king_dredAI(Creature* creature) : BossAI(creature, DATA_KING_DRED)
-            {
-                Initialize();
-            }
-
-            void Initialize()
-            {
-                raptorsKilled = 0;
-            }
-
-            void Reset() override
-            {
-                Initialize();
-                _Reset();
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                _EnterCombat();
-
-                events.ScheduleEvent(EVENT_BELLOWING_ROAR, 33000);
-                events.ScheduleEvent(EVENT_GRIEVOUS_BITE, 20000);
-                events.ScheduleEvent(EVENT_MANGLING_SLASH, 18500);
-                events.ScheduleEvent(EVENT_FEARSOME_ROAR, urand(10000, 20000));
-                events.ScheduleEvent(EVENT_PIERCING_SLASH, 17000);
-                events.ScheduleEvent(EVENT_RAPTOR_CALL, urand(20000, 25000));
-            }
-
-            void DoAction(int32 action) override
-            {
-                if (action == ACTION_RAPTOR_KILLED)
-                    ++raptorsKilled;
-            }
-
-            uint32 GetData(uint32 type) const override
-            {
-                if (type == DATA_RAPTORS_KILLED)
-                    return raptorsKilled;
-
-                return 0;
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                _JustDied();
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_BELLOWING_ROAR:
-                            DoCastAOE(SPELL_BELLOWING_ROAR);
-                            events.ScheduleEvent(EVENT_BELLOWING_ROAR, 33000);
-                            break;
-                        case EVENT_GRIEVOUS_BITE:
-                            DoCastVictim(SPELL_GRIEVOUS_BITE);
-                            events.ScheduleEvent(EVENT_GRIEVOUS_BITE, 20000);
-                            break;
-                        case EVENT_MANGLING_SLASH:
-                            DoCastVictim(SPELL_MANGLING_SLASH);
-                            events.ScheduleEvent(EVENT_MANGLING_SLASH, 18500);
-                            break;
-                        case EVENT_FEARSOME_ROAR:
-                            DoCastAOE(SPELL_FEARSOME_ROAR);
-                            events.ScheduleEvent(EVENT_FEARSOME_ROAR, urand(10000, 20000));
-                            break;
-                        case EVENT_PIERCING_SLASH:
-                            DoCastVictim(SPELL_PIERCING_SLASH);
-                            events.ScheduleEvent(EVENT_PIERCING_SLASH, 17000);
-                            break;
-                        case EVENT_RAPTOR_CALL:
-                            DoCastVictim(SPELL_RAPTOR_CALL);
-
-                            float x, y, z;
-
-                            me->GetClosePoint(x, y, z, me->GetObjectSize() / 3, 10.0f);
-                            me->SummonCreature(RAND(NPC_DRAKKARI_GUTRIPPER, NPC_DRAKKARI_SCYTHECLAW), x, y, z, 0, TEMPSUMMON_DEAD_DESPAWN, 1000);
-                            events.ScheduleEvent(EVENT_RAPTOR_CALL, urand(20000, 25000));
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-
-        private:
-            uint8 raptorsKilled;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetDrakTharonKeepAI<boss_king_dredAI>(creature);
-        }
+    ACTION_RAPTOR_KILLED        = 1,
+    DATA_RAPTORS_KILLED         = 2
 };
 
-class npc_drakkari_gutripper : public CreatureScript
+// 27483 - King Dred
+struct boss_king_dred : public BossAI
 {
-    public:
-        npc_drakkari_gutripper() : CreatureScript("npc_drakkari_gutripper") { }
+    boss_king_dred(Creature* creature) : BossAI(creature, DATA_KING_DRED), _raptorsKilled(0) { }
 
-        struct npc_drakkari_gutripperAI : public ScriptedAI
+    void Reset() override
+    {
+        _Reset();
+        _raptorsKilled = 0;
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+
+        events.ScheduleEvent(EVENT_BELLOWING_ROAR, 15s, 25s);
+        events.ScheduleEvent(EVENT_GRIEVOUS_BITE, 15s, 20s);
+        events.ScheduleEvent(EVENT_FEARSOME_ROAR, 10s, 20s);
+        events.ScheduleEvent(EVENT_RAPTOR_CALL, 15s, 20s);
+        events.ScheduleEvent(EVENT_MULTI_SLASH, 18s, 22s);
+    }
+
+    void OnSpellCast(SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_MULTI_SLASH)
+            Talk(EMOTE_SLASH);
+    }
+
+    void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
+    {
+        if (spellInfo->Id == SPELL_MULTI_SLASH)
         {
-            npc_drakkari_gutripperAI(Creature* creature) : ScriptedAI(creature)
-            {
-                Initialize();
-                instance = me->GetInstanceScript();
-            }
-
-            void Initialize()
-            {
-                GutRipTimer = urand(10000, 15000);
-            }
-
-            InstanceScript* instance;
-
-            uint32 GutRipTimer;
-
-            void Reset() override
-            {
-                Initialize();
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                if (GutRipTimer <= diff)
-                {
-                    DoCastVictim(SPELL_GUT_RIP, false);
-                    GutRipTimer = urand(10000, 15000);
-                }
-                else
-                    GutRipTimer -= diff;
-
-                DoMeleeAttackIfReady();
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                if (Creature* Dred = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_KING_DRED)))
-                    Dred->AI()->DoAction(ACTION_RAPTOR_KILLED);
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetDrakTharonKeepAI<npc_drakkari_gutripperAI>(creature);
+            events.ScheduleEvent(EVENT_PIERCING_SLASH, 1s);
+            events.ScheduleEvent(EVENT_MANGLING_SLASH, 3s);
         }
+
+        if (spellInfo->Id == SPELL_RAPTOR_CALL)
+        {
+            /// @todo: This is wrong. Engage nearby alive not yet engaged raptor instead
+            float x, y, z;
+
+            me->GetClosePoint(x, y, z, me->GetCombatReach() / 3, 10.0f);
+            me->SummonCreature(RAND(NPC_DRAKKARI_GUTRIPPER, NPC_DRAKKARI_SCYTHECLAW), x, y, z, 0, TEMPSUMMON_DEAD_DESPAWN, 1s);
+        }
+    }
+
+    void DoAction(int32 action) override
+    {
+        if (action == ACTION_RAPTOR_KILLED)
+            ++_raptorsKilled;
+    }
+
+    uint32 GetData(uint32 type) const override
+    {
+        if (type == DATA_RAPTORS_KILLED)
+            return _raptorsKilled;
+
+        return 0;
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case EVENT_BELLOWING_ROAR:
+                    DoCastAOE(SPELL_BELLOWING_ROAR);
+                    events.Repeat(15s, 20s);
+                    break;
+                case EVENT_GRIEVOUS_BITE:
+                    DoCastVictim(SPELL_GRIEVOUS_BITE);
+                    events.Repeat(20s);
+                    break;
+                case EVENT_FEARSOME_ROAR:
+                    DoCastAOE(SPELL_FEARSOME_ROAR);
+                    events.Repeat(10s, 20s);
+                    break;
+                case EVENT_RAPTOR_CALL:
+                    DoCastSelf(SPELL_RAPTOR_CALL);
+                    events.Repeat(30s);
+                    break;
+                case EVENT_MULTI_SLASH:
+                    DoCastSelf(SPELL_MULTI_SLASH);
+                    events.Repeat(18s, 22s);
+                    break;
+                case EVENT_PIERCING_SLASH:
+                    DoCastVictim(SPELL_PIERCING_SLASH);
+                    break;
+                case EVENT_MANGLING_SLASH:
+                    DoCastVictim(SPELL_MANGLING_SLASH);
+                    break;
+                default:
+                    break;
+            }
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
+        }
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    uint8 _raptorsKilled;
 };
 
-class npc_drakkari_scytheclaw : public CreatureScript
+// 26641 - Drakkari Gutripper
+struct npc_drakkari_gutripper : public ScriptedAI
 {
-    public:
-        npc_drakkari_scytheclaw() : CreatureScript("npc_drakkari_scytheclaw") { }
+    npc_drakkari_gutripper(Creature* creature) : ScriptedAI(creature), _instance(creature->GetInstanceScript()) { }
 
-        struct npc_drakkari_scytheclawAI : public ScriptedAI
+    void Reset() override
+    {
+        _scheduler.CancelAll();
+    }
+
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        _scheduler.Schedule(10s, 15s, [this](TaskContext task)
         {
-            npc_drakkari_scytheclawAI(Creature* creature) : ScriptedAI(creature)
-            {
-                Initialize();
-                instance = me->GetInstanceScript();
-            }
+            DoCastVictim(SPELL_GUT_RIP);
+            task.Repeat(10s, 15s);
+        });
+    }
 
-            void Initialize()
-            {
-                uiRendTimer = urand(10000, 15000);
-            }
+    void JustDied(Unit* /*killer*/) override
+    {
+        if (Creature* dred = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_KING_DRED)))
+            dred->AI()->DoAction(ACTION_RAPTOR_KILLED);
+    }
 
-            InstanceScript* instance;
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
 
-            uint32 uiRendTimer;
+        _scheduler.Update(diff);
 
-            void Reset() override
-            {
-                Initialize();
-            }
+        DoMeleeAttackIfReady();
+    }
 
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
+private:
+    TaskScheduler _scheduler;
+    InstanceScript* _instance;
+};
 
-                if (uiRendTimer <= diff)
-                {
-                    DoCastVictim(SPELL_REND, false);
-                    uiRendTimer = urand(10000, 15000);
-                }
-                else
-                    uiRendTimer -= diff;
+// 26628 - Drakkari Scytheclaw
+struct npc_drakkari_scytheclaw : public ScriptedAI
+{
+    npc_drakkari_scytheclaw(Creature* creature) : ScriptedAI(creature), _instance(creature->GetInstanceScript()) { }
 
-                DoMeleeAttackIfReady();
-            }
+    void Reset() override
+    {
+        _scheduler.CancelAll();
+    }
 
-            void JustDied(Unit* /*killer*/) override
-            {
-                if (Creature* Dred = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_KING_DRED)))
-                    Dred->AI()->DoAction(ACTION_RAPTOR_KILLED);
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        _scheduler.Schedule(10s, 15s, [this](TaskContext task)
         {
-            return GetDrakTharonKeepAI<npc_drakkari_scytheclawAI>(creature);
-        }
+            DoCastVictim(SPELL_REND);
+            task.Repeat(10s, 15s);
+        });
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        if (Creature* dred = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_KING_DRED)))
+            dred->AI()->DoAction(ACTION_RAPTOR_KILLED);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        _scheduler.Update(diff);
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    TaskScheduler _scheduler;
+    InstanceScript* _instance;
 };
 
 class achievement_king_dred : public AchievementCriteriaScript
@@ -300,8 +278,8 @@ class achievement_king_dred : public AchievementCriteriaScript
 
 void AddSC_boss_king_dred()
 {
-    new boss_king_dred();
-    new npc_drakkari_gutripper();
-    new npc_drakkari_scytheclaw();
+    RegisterDrakTharonKeepCreatureAI(boss_king_dred);
+    RegisterDrakTharonKeepCreatureAI(npc_drakkari_gutripper);
+    RegisterDrakTharonKeepCreatureAI(npc_drakkari_scytheclaw);
     new achievement_king_dred();
 }

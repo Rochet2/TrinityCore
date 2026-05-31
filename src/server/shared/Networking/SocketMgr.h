@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,106 +15,132 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SocketMgr_h__
-#define SocketMgr_h__
+#ifndef TRINITYCORE_SOCKET_MGR_H
+#define TRINITYCORE_SOCKET_MGR_H
 
 #include "AsyncAcceptor.h"
-#include "Config.h"
 #include "Errors.h"
 #include "NetworkThread.h"
+#include "Socket.h"
 #include <boost/asio/ip/tcp.hpp>
 #include <memory>
 
-using boost::asio::ip::tcp;
-
+namespace Trinity::Net
+{
 template<class SocketType>
 class SocketMgr
 {
 public:
+    SocketMgr(SocketMgr const&) = delete;
+    SocketMgr(SocketMgr&&) = delete;
+    SocketMgr& operator=(SocketMgr const&) = delete;
+    SocketMgr& operator=(SocketMgr&&) = delete;
+
     virtual ~SocketMgr()
     {
-        delete[] _threads;
+        ASSERT(!_threads && !_acceptor && !_threadCount, "StopNetwork must be called prior to SocketMgr destruction");
     }
 
-    virtual bool StartNetwork(boost::asio::io_service& service, std::string const& bindIp, uint16 port)
+    virtual bool StartNetwork(Asio::IoContext& ioContext, std::string const& bindIp, uint16 port, int threadCount)
     {
-        _threadCount = sConfigMgr->GetIntDefault("Network.Threads", 1);
+        ASSERT(threadCount > 0);
 
-        if (_threadCount <= 0)
-        {
-            TC_LOG_ERROR("misc", "Network.Threads is wrong in your config file");
-            return false;
-        }
-
+        std::unique_ptr<AsyncAcceptor> acceptor = nullptr;
         try
         {
-            _acceptor = new AsyncAcceptor(service, bindIp, port);
+            acceptor = std::make_unique<AsyncAcceptor>(ioContext, bindIp, port);
         }
         catch (boost::system::system_error const& err)
         {
-            TC_LOG_ERROR("network", "Exception caught in SocketMgr.StartNetwork (%s:%u): %s", bindIp.c_str(), port, err.what());
+            TC_LOG_ERROR("network", "Exception caught in SocketMgr.StartNetwork ({}:{}): {}", bindIp, port, err.what());
             return false;
         }
 
-        _threads = CreateThreads();
+        if (!acceptor->Bind())
+        {
+            TC_LOG_ERROR("network", "StartNetwork failed to bind socket acceptor");
+            return false;
+        }
+
+        _acceptor = std::move(acceptor);
+        _threadCount = threadCount;
+        _threads.reset(CreateThreads());
 
         ASSERT(_threads);
 
         for (int32 i = 0; i < _threadCount; ++i)
             _threads[i].Start();
 
+        _acceptor->SetSocketFactory([this]() { return GetSocketForAccept(); });
+
         return true;
     }
 
     virtual void StopNetwork()
     {
-        if (_threadCount != 0)
-            for (int32 i = 0; i < _threadCount; ++i)
-                _threads[i].Stop();
+        _acceptor->Close();
+
+        for (int32 i = 0; i < _threadCount; ++i)
+            _threads[i].Stop();
 
         Wait();
+
+        _acceptor = nullptr;
+        _threads = nullptr;
+        _threadCount = 0;
     }
 
     void Wait()
     {
-        if (_threadCount != 0)
-            for (int32 i = 0; i < _threadCount; ++i)
-                _threads[i].Wait();
+        for (int32 i = 0; i < _threadCount; ++i)
+            _threads[i].Wait();
     }
 
-    virtual void OnSocketOpen(tcp::socket&& sock)
+    virtual void OnSocketOpen(IoContextTcpSocket&& sock, uint32 threadIndex)
     {
-        size_t min = 0;
-
-        for (int32 i = 1; i < _threadCount; ++i)
-            if (_threads[i].GetConnectionCount() < _threads[min].GetConnectionCount())
-                min = i;
-
         try
         {
             std::shared_ptr<SocketType> newSocket = std::make_shared<SocketType>(std::move(sock));
             newSocket->Start();
 
-            _threads[min].AddSocket(newSocket);
+            _threads[threadIndex].AddSocket(newSocket);
         }
         catch (boost::system::system_error const& err)
         {
-            TC_LOG_WARN("network", "Failed to retrieve client's remote address %s", err.what());
+            TC_LOG_WARN("network", "Failed to retrieve client's remote address {}", err.what());
         }
     }
 
     int32 GetNetworkThreadCount() const { return _threadCount; }
 
+    uint32 SelectThreadWithMinConnections() const
+    {
+        uint32 min = 0;
+
+        for (int32 i = 1; i < _threadCount; ++i)
+            if (_threads[i].GetConnectionCount() < _threads[min].GetConnectionCount())
+                min = i;
+
+        return min;
+    }
+
+    std::pair<IoContextTcpSocket*, uint32> GetSocketForAccept()
+    {
+        uint32 threadIndex = SelectThreadWithMinConnections();
+        return std::make_pair(_threads[threadIndex].GetSocketForAccept(), threadIndex);
+    }
+
 protected:
-    SocketMgr() : _acceptor(nullptr), _threads(nullptr), _threadCount(1)
+    SocketMgr() : _threadCount(0)
     {
     }
 
     virtual NetworkThread<SocketType>* CreateThreads() const = 0;
 
-    AsyncAcceptor* _acceptor;
-    NetworkThread<SocketType>* _threads;
+    std::unique_ptr<AsyncAcceptor> _acceptor;
+    std::unique_ptr<NetworkThread<SocketType>[]> _threads;
     int32 _threadCount;
 };
+}
 
-#endif // SocketMgr_h__
+#endif // TRINITYCORE_SOCKET_MGR_H

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,49 +18,73 @@
 #ifndef _QUERYHOLDER_H
 #define _QUERYHOLDER_H
 
-#include <future>
+#include "SQLOperation.h"
+#include <vector>
 
-class SQLQueryHolder
+class TC_DATABASE_API SQLQueryHolderBase
 {
     friend class SQLQueryHolderTask;
     private:
-        typedef std::pair<SQLElementData, SQLResultSetUnion> SQLResultPair;
-        std::vector<SQLResultPair> m_queries;
+        std::vector<std::pair<PreparedStatementBase*, PreparedQueryResult>> m_queries;
     public:
-        SQLQueryHolder() { }
-        ~SQLQueryHolder();
-        bool SetQuery(size_t index, const char* sql);
-        template<typename Format, typename... Args>
-        bool SetPQuery(size_t index, Format&& sql, Args&&... args)
-        {
-            return SetQuery(index, Trinity::StringFormat(std::forward<Format>(sql), std::forward<Args>(args)...).c_str());
-        }
-        bool SetPreparedQuery(size_t index, PreparedStatement* stmt);
+        SQLQueryHolderBase() = default;
+        virtual ~SQLQueryHolderBase();
         void SetSize(size_t size);
-        QueryResult GetResult(size_t index);
-        PreparedQueryResult GetPreparedResult(size_t index);
-        void SetResult(size_t index, ResultSet* result);
+        PreparedQueryResult GetPreparedResult(size_t index) const;
         void SetPreparedResult(size_t index, PreparedResultSet* result);
+
+    protected:
+        bool SetPreparedQueryImpl(size_t index, PreparedStatementBase* stmt);
 };
 
-typedef std::future<SQLQueryHolder*> QueryResultHolderFuture;
-typedef std::promise<SQLQueryHolder*> QueryResultHolderPromise;
+template<typename T>
+class SQLQueryHolder : public SQLQueryHolderBase
+{
+public:
+    bool SetPreparedQuery(size_t index, PreparedStatement<T>* stmt)
+    {
+        return SetPreparedQueryImpl(index, stmt);
+    }
+};
 
-class SQLQueryHolderTask : public SQLOperation
+class TC_DATABASE_API SQLQueryHolderTask : public SQLOperation
 {
     private:
-        SQLQueryHolder* m_holder;
+        std::shared_ptr<SQLQueryHolderBase> m_holder;
         QueryResultHolderPromise m_result;
-        bool m_executed;
 
     public:
-        SQLQueryHolderTask(SQLQueryHolder* holder)
-            : m_holder(holder), m_executed(false) { }
+        explicit SQLQueryHolderTask(std::shared_ptr<SQLQueryHolderBase> holder)
+            : m_holder(std::move(holder)) { }
 
         ~SQLQueryHolderTask();
 
         bool Execute() override;
         QueryResultHolderFuture GetFuture() { return m_result.get_future(); }
 };
+
+class TC_DATABASE_API SQLQueryHolderCallback
+{
+public:
+    SQLQueryHolderCallback(std::shared_ptr<SQLQueryHolderBase>&& holder, QueryResultHolderFuture&& future)
+        : m_holder(std::move(holder)), m_future(std::move(future)) { }
+
+    SQLQueryHolderCallback(SQLQueryHolderCallback&&) = default;
+
+    SQLQueryHolderCallback& operator=(SQLQueryHolderCallback&&) = default;
+
+    void AfterComplete(std::function<void(SQLQueryHolderBase const&)> callback) &
+    {
+        m_callback = std::move(callback);
+    }
+
+    bool InvokeIfReady();
+
+    std::shared_ptr<SQLQueryHolderBase> m_holder;
+    QueryResultHolderFuture m_future;
+    std::function<void(SQLQueryHolderBase const&)> m_callback;
+};
+
+inline bool InvokeAsyncCallbackIfReady(SQLQueryHolderCallback& callback) { return callback.InvokeIfReady(); }
 
 #endif

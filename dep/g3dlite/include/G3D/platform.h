@@ -190,6 +190,7 @@ These control the version of Winsock used by G3D.
     //  http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vccore98/HTML/_core_Compiler_Reference.asp
     //
 
+#if 0
     // DLL runtime
     #ifndef _DLL
         #define _DLL
@@ -226,6 +227,8 @@ These control the version of Winsock used by G3D.
 #   include <windows.h>
 #   undef WIN32_LEAN_AND_MEAN
 #   undef NOMINMAX
+
+#endif // 0
 
 #   ifdef _G3D_INTERNAL_HIDE_WINSOCK_
 #      undef _G3D_INTERNAL_HIDE_WINSOCK_
@@ -273,7 +276,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR szCmdLine, int sw) {\
 #           define __stdcall __attribute__((stdcall))
 #       endif
 
-#   elif defined(__x86_64__)
+#   elif defined(__x86_64__) || defined(__arm) || defined(__aarch64__)
 
 #       ifndef __cdecl
 #           define __cdecl
@@ -364,13 +367,18 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR szCmdLine, int sw) {\
 #endif
 #if (!defined(_LIBCPP_VERSION) && defined(__APPLE__)) || (!defined(_LIBCPP_VERSION) && defined(__linux__))
 #   include <tr1/memory>
+#else
+#   include <memory>
+#endif
+
+namespace G3D {
+#if (!defined(_LIBCPP_VERSION) && defined(__APPLE__)) || (!defined(_LIBCPP_VERSION) && defined(__linux__))
     using std::tr1::shared_ptr;
     using std::tr1::weak_ptr;
     using std::tr1::dynamic_pointer_cast;
     using std::tr1::static_pointer_cast;
     using std::tr1::enable_shared_from_this;
 #else
-#   include <memory>
     using std::shared_ptr;
     using std::weak_ptr;
     using std::dynamic_pointer_cast;
@@ -378,7 +386,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR szCmdLine, int sw) {\
     using std::enable_shared_from_this;
 #endif
 
-namespace G3D {
     /** Options for initG3D and initGLG3D. */
     class G3DSpecification {
     public:

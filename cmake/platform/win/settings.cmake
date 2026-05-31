@@ -1,20 +1,15 @@
-# Package overloads
-set(BZIP2_LIBRARIES "bzip2")
-set(ZLIB_LIBRARIES "zlib")
+target_compile_definitions(trinity-compile-option-interface
+  INTERFACE
+    _WIN32_WINNT=0x0A00                     # Windows 10
+    NTDDI_VERSION=0x0A000007                # 19H1 (1903)
+    WIN32_LEAN_AND_MEAN
+    NOMINMAX
+    TRINITY_REQUIRED_WINDOWS_BUILD=18362)
 
-# check the CMake preload parameters (commented out by default)
+# set up output paths for executable binaries (.exe-files, and .dll-files on DLL-capable platforms)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>")
 
-# overload CMAKE_INSTALL_PREFIX if not being set properly
-#if( WIN32 )
-#  if( NOT CYGWIN )
-#    if( NOT CMAKE_INSTALL_PREFIX )
-#      set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/bin")
-#    endif()
-#  endif()
-#endif()
-
-if ( MSVC )
-  include(${CMAKE_SOURCE_DIR}/cmake/compiler/msvc/settings.cmake)
-elseif ( MINGW )
-  include(${CMAKE_SOURCE_DIR}/cmake/compiler/mingw/settings.cmake)
-endif()
+# add WindowsSettings.manifest to all executables
+target_sources(trinity-core-interface
+  INTERFACE
+    $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:${CMAKE_SOURCE_DIR}/cmake/platform/win/WindowsSettings.manifest>)

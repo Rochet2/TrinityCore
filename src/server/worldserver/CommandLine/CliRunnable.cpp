@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,6 +20,7 @@
 /// \file
 
 #include "Common.h"
+#include "Errors.h"
 #include "ObjectMgr.h"
 #include "World.h"
 #include "Configuration/Config.h"
@@ -29,76 +29,61 @@
 #include "Log.h"
 #include "Util.h"
 
-#if PLATFORM != PLATFORM_WINDOWS
+#if TRINITY_PLATFORM != TRINITY_PLATFORM_WINDOWS
+#include "Chat.h"
+#include "ChatCommand.h"
+#include <cstring>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include "Chat.h"
-
-char* command_finder(const char* text, int state)
-{
-    static int idx, len;
-    const char* ret;
-    ChatCommand* cmd = ChatHandler::getCommandTable();
-
-    if (!state)
-    {
-        idx = 0;
-        len = strlen(text);
-    }
-
-    while ((ret = cmd[idx].Name))
-    {
-        if (!cmd[idx].AllowConsole)
-        {
-            idx++;
-            continue;
-        }
-
-        idx++;
-        //printf("Checking %s \n", cmd[idx].Name);
-        if (strncmp(ret, text, len) == 0)
-            return strdup(ret);
-        if (cmd[idx].Name == NULL)
-            break;
-    }
-
-    return ((char*)NULL);
-}
-
-char** cli_completion(const char* text, int start, int /*end*/)
-{
-    char** matches = NULL;
-
-    if (start)
-        rl_bind_key('\t', rl_abort);
-    else
-        matches = rl_completion_matches((char*)text, &command_finder);
-    return matches;
-}
-
-int cli_hook_func()
-{
-       if (World::IsStopped())
-           rl_done = 1;
-       return 0;
-}
-
+#else
+#include <Windows.h>
 #endif
 
-void utf8print(void* /*arg*/, const char* str)
-{
-#if PLATFORM == PLATFORM_WINDOWS
-    wchar_t wtemp_buf[6000];
-    size_t wtemp_len = 6000-1;
-    if (!Utf8toWStr(str, strlen(str), wtemp_buf, wtemp_len))
-        return;
+static constexpr char CLI_PREFIX[] = "TC> ";
 
-    char temp_buf[6000];
-    CharToOemBuffW(&wtemp_buf[0], &temp_buf[0], wtemp_len+1);
-    printf(temp_buf);
+static inline void PrintCliPrefix()
+{
+    printf("%s", CLI_PREFIX);
+}
+
+#if TRINITY_PLATFORM != TRINITY_PLATFORM_WINDOWS
+namespace Trinity::Impl::Readline
+{
+    static std::vector<std::string> vec;
+    char* cli_unpack_vector(char const*, int state)
+    {
+        static size_t i=0;
+        if (!state)
+            i = 0;
+        if (i < vec.size())
+            return strdup(vec[i++].c_str());
+        else
+            return nullptr;
+    }
+
+    char** cli_completion(char const* text, int /*start*/, int /*end*/)
+    {
+        ::rl_attempted_completion_over = 1;
+        vec = Trinity::ChatCommands::GetAutoCompletionsFor(CliHandler(nullptr,nullptr), text);
+        return ::rl_completion_matches(text, &cli_unpack_vector);
+    }
+
+    int cli_hook_func()
+    {
+           if (World::IsStopped())
+               ::rl_done = 1;
+           return 0;
+    }
+}
+#endif
+
+void utf8print(void* /*arg*/, std::string_view str)
+{
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
+    WriteWinConsole(str);
 #else
 {
-    printf("%s", str);
+    printf(STRING_VIEW_FMT, STRING_VIEW_FMT_ARG(str));
     fflush(stdout);
 }
 #endif
@@ -106,7 +91,7 @@ void utf8print(void* /*arg*/, const char* str)
 
 void commandFinished(void*, bool /*success*/)
 {
-    printf("TC> ");
+    PrintCliPrefix();
     fflush(stdout);
 }
 
@@ -120,7 +105,7 @@ int kb_hit_return()
     tv.tv_usec = 0;
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);
-    select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
+    select(STDIN_FILENO+1, &fds, nullptr, nullptr, &tv);
     return FD_ISSET(STDIN_FILENO, &fds);
 }
 #endif
@@ -128,70 +113,69 @@ int kb_hit_return()
 /// %Thread start
 void CliThread()
 {
-    ///- Display the list of available CLI functions then beep
-    //TC_LOG_INFO("server.worldserver", "");
-#if PLATFORM != PLATFORM_WINDOWS
-    rl_attempted_completion_function = cli_completion;
-    rl_event_hook = cli_hook_func;
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
+    // print this here the first time
+    // later it will be printed after command queue updates
+    PrintCliPrefix();
+#else
+    ::rl_attempted_completion_function = &Trinity::Impl::Readline::cli_completion;
+    {
+        static char BLANK = '\0';
+        ::rl_completer_word_break_characters = &BLANK;
+    }
+    ::rl_event_hook = &Trinity::Impl::Readline::cli_hook_func;
 #endif
 
     if (sConfigMgr->GetBoolDefault("BeepAtStart", true))
         printf("\a");                                       // \a = Alert
 
-    // print this here the first time
-    // later it will be printed after command queue updates
-    printf("TC>");
-
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
+    if (sConfigMgr->GetBoolDefault("FlashAtStart", true))
+    {
+        FLASHWINFO fInfo;
+        fInfo.cbSize = sizeof(FLASHWINFO);
+        fInfo.dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG;
+        fInfo.hwnd = GetConsoleWindow();
+        fInfo.uCount = 0;
+        fInfo.dwTimeout = 0;
+        FlashWindowEx(&fInfo);
+    }
+#endif
     ///- As long as the World is running (no World::m_stopEvent), get the command line and handle it
     while (!World::IsStopped())
     {
         fflush(stdout);
 
-        char *command_str ;             // = fgets(commandbuf, sizeof(commandbuf), stdin);
+        std::string command;
 
-#if PLATFORM == PLATFORM_WINDOWS
-        char commandbuf[256];
-        command_str = fgets(commandbuf, sizeof(commandbuf), stdin);
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
+        if (!ReadWinConsole(command))
+            continue;
 #else
-        command_str = readline("TC>");
-        rl_bind_key('\t', rl_complete);
-#endif
-
-        if (command_str != NULL)
+        char* command_str = readline(CLI_PREFIX);
+        ::rl_bind_key('\t', ::rl_complete);
+        if (command_str != nullptr)
         {
-            for (int x=0; command_str[x]; ++x)
-                if (command_str[x] == '\r' || command_str[x] == '\n')
-                {
-                    command_str[x] = 0;
-                    break;
-                }
-
-            if (!*command_str)
-            {
-#if PLATFORM == PLATFORM_WINDOWS
-                printf("TC>");
-#else
-                free(command_str);
+            command = command_str;
+            free(command_str);
+        }
 #endif
-                continue;
-            }
 
-            std::string command;
-            if (!consoleToUtf8(command_str, command))         // convert from console encoding to utf8
+        if (!command.empty())
+        {
+            Optional<std::size_t> nextLineIndex = RemoveCRLF(command);
+            if (nextLineIndex && *nextLineIndex == 0)
             {
-#if PLATFORM == PLATFORM_WINDOWS
-                printf("TC>");
-#else
-                free(command_str);
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
+                PrintCliPrefix();
 #endif
                 continue;
             }
 
             fflush(stdout);
-            sWorld->QueueCliCommand(new CliCommandHolder(NULL, command.c_str(), &utf8print, &commandFinished));
-#if PLATFORM != PLATFORM_WINDOWS
+            sWorld->QueueCliCommand(new CliCommandHolder(nullptr, command.c_str(), &utf8print, &commandFinished));
+#if TRINITY_PLATFORM != TRINITY_PLATFORM_WINDOWS
             add_history(command.c_str());
-            free(command_str);
 #endif
         }
         else if (feof(stdin))

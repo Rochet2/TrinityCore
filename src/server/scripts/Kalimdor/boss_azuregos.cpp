@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,17 +16,17 @@
  */
 
 #include "ScriptMgr.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
 #include "ScriptedCreature.h"
 #include "SpellScript.h"
-#include "SpellAuraEffects.h"
-#include "Player.h"
 
-enum Say
+enum AzuregosTexts
 {
     SAY_TELEPORT             = 0
 };
 
-enum Spells
+enum AzuregosSpells
 {
     SPELL_MARK_OF_FROST      = 23182,
     SPELL_AURA_OF_FROST      = 23186,
@@ -39,7 +39,7 @@ enum Spells
     SPELL_ENRAGE             = 23537
 };
 
-enum Events
+enum AzuregosEvents
 {
     EVENT_MARK_OF_FROST      = 1,
     EVENT_MANA_STORM,
@@ -51,114 +51,103 @@ enum Events
     EVENT_ENRAGE
 };
 
-class boss_azuregos : public CreatureScript
+struct boss_azuregos : public WorldBossAI
 {
-    public:
-        boss_azuregos() : CreatureScript("boss_azuregos") { }
+    boss_azuregos(Creature* creature) : WorldBossAI(creature)
+    {
+        _enraged = false;
+    }
 
-        struct boss_azuregosAI : public WorldBossAI
+    void Reset() override
+    {
+        _Reset();
+    }
+
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        DoCast(me, SPELL_MARK_OF_FROST_AURA, true);
+        _enraged = false;
+
+        events.ScheduleEvent(EVENT_MARK_OF_FROST, 35s);
+        events.ScheduleEvent(EVENT_MANA_STORM, 5s, 17s);
+        events.ScheduleEvent(EVENT_CHILL, 10s, 30s);
+        events.ScheduleEvent(EVENT_BREATH, 2s, 8s);
+        events.ScheduleEvent(EVENT_TELEPORT, 30s);
+        events.ScheduleEvent(EVENT_REFLECT, 15s, 30s);
+        events.ScheduleEvent(EVENT_CLEAVE, 7s);
+    }
+
+    void KilledUnit(Unit* who) override
+    {
+        if (who->GetTypeId() == TYPEID_PLAYER)
+            who->CastSpell(who, SPELL_MARK_OF_FROST, true);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_azuregosAI(Creature* creature) : WorldBossAI(creature)
+            switch (eventId)
             {
-                _enraged = false;
-            }
-
-            void Reset() override
-            {
-                _Reset();
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                DoCast(me, SPELL_MARK_OF_FROST_AURA, true);
-                _enraged = false;
-
-                events.ScheduleEvent(EVENT_MARK_OF_FROST, 35000);
-                events.ScheduleEvent(EVENT_MANA_STORM, urand(5000, 17000));
-                events.ScheduleEvent(EVENT_CHILL, urand(10000, 30000));
-                events.ScheduleEvent(EVENT_BREATH, urand(2000, 8000));
-                events.ScheduleEvent(EVENT_TELEPORT, 30000);
-                events.ScheduleEvent(EVENT_REFLECT, urand(15000, 30000));
-                events.ScheduleEvent(EVENT_CLEAVE, 7000);
-            }
-
-            void KilledUnit(Unit* who) override
-            {
-                if (who->GetTypeId() == TYPEID_PLAYER)
-                    who->CastSpell(who, SPELL_MARK_OF_FROST, true);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
+                case EVENT_MANA_STORM:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 60.0f, true))
+                        DoCast(target, SPELL_MANA_STORM);
+                    events.ScheduleEvent(EVENT_MANA_STORM, 7500ms, 12500ms);
+                    break;
+                case EVENT_CHILL:
+                    DoCastVictim(SPELL_CHILL);
+                    events.ScheduleEvent(EVENT_CHILL, 13s, 25s);
+                    break;
+                case EVENT_BREATH:
+                    DoCastVictim(SPELL_FROST_BREATH);
+                    events.ScheduleEvent(EVENT_BREATH, 10s, 15s);
+                    break;
+                case EVENT_TELEPORT:
                 {
-                    switch (eventId)
-                    {
-                        case EVENT_MANA_STORM:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 60.0f, true))
-                                DoCast(target, SPELL_MANA_STORM);
-                            events.ScheduleEvent(EVENT_MANA_STORM, urand(7500, 12500));
-                            break;
-                        case EVENT_CHILL:
-                            DoCastVictim(SPELL_CHILL);
-                            events.ScheduleEvent(EVENT_CHILL, urand(13000, 25000));
-                            break;
-                        case EVENT_BREATH:
-                            DoCastVictim(SPELL_FROST_BREATH);
-                            events.ScheduleEvent(EVENT_BREATH, urand(10000, 15000));
-                            break;
-                        case EVENT_TELEPORT:
-                        {
-                            Talk(SAY_TELEPORT);
-                            ThreatContainer::StorageType const& threatlist = me->getThreatManager().getThreatList();
-                            for (ThreatContainer::StorageType::const_iterator i = threatlist.begin(); i != threatlist.end(); ++i)
-                            {
-                                if (Player* player = ObjectAccessor::GetPlayer(*me, (*i)->getUnitGuid()))
-                                    DoTeleportPlayer(player, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ()+3, player->GetOrientation());
-                            }
+                    Talk(SAY_TELEPORT);
+                    for (auto const& pair : me->GetCombatManager().GetPvECombatRefs())
+                        if (Player* player = pair.second->GetOther(me)->ToPlayer())
+                            DoTeleportPlayer(player, me->GetPositionX(), me->GetPositionY(), me->GetPositionZ()+3, player->GetOrientation());
 
-                            DoResetThreat();
-                            events.ScheduleEvent(EVENT_TELEPORT, 30000);
-                            break;
-                        }
-                        case EVENT_REFLECT:
-                            DoCast(me, SPELL_REFLECT);
-                            events.ScheduleEvent(EVENT_REFLECT, urand(20000, 35000));
-                            break;
-                        case EVENT_CLEAVE:
-                            DoCastVictim(SPELL_CLEAVE);
-                            events.ScheduleEvent(EVENT_CLEAVE, 7000);
-                            break;
-                        default:
-                            break;
-                    }
+                    ResetThreatList();
+                    events.ScheduleEvent(EVENT_TELEPORT, 30s);
+                    break;
                 }
-
-                if (HealthBelowPct(26) && !_enraged)
-                {
-                    DoCast(me, SPELL_ENRAGE);
-                    _enraged = true;
-                }
-
-                DoMeleeAttackIfReady();
+                case EVENT_REFLECT:
+                    DoCast(me, SPELL_REFLECT);
+                    events.ScheduleEvent(EVENT_REFLECT, 20s, 35s);
+                    break;
+                case EVENT_CLEAVE:
+                    DoCastVictim(SPELL_CLEAVE);
+                    events.ScheduleEvent(EVENT_CLEAVE, 7s);
+                    break;
+                default:
+                    break;
             }
 
-        private:
-            bool _enraged;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_azuregosAI(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+
+        if (HealthBelowPct(26) && !_enraged)
+        {
+            DoCast(me, SPELL_ENRAGE);
+            _enraged = true;
+        }
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    bool _enraged;
 };
 
 class MarkOfFrostTargetSelector
@@ -174,50 +163,36 @@ class MarkOfFrostTargetSelector
         }
 };
 
-class spell_mark_of_frost : public SpellScriptLoader
+// 23183 - Mark of Frost - Triggered spell
+class spell_mark_of_frost : public SpellScript
 {
-    public:
-        spell_mark_of_frost() : SpellScriptLoader("spell_mark_of_frost") { }
+    PrepareSpellScript(spell_mark_of_frost);
 
-        class spell_mark_of_frost_SpellScript : public SpellScript
-        {
-            PrepareSpellScript(spell_mark_of_frost_SpellScript);
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MARK_OF_FROST, SPELL_AURA_OF_FROST });
+    }
 
-            bool Validate(SpellInfo const* /*spellInfo*/) override
-            {
-                if (!sSpellMgr->GetSpellInfo(SPELL_MARK_OF_FROST))
-                    return false;
-                if (!sSpellMgr->GetSpellInfo(SPELL_AURA_OF_FROST))
-                    return false;
-                return true;
-            }
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        targets.remove_if(MarkOfFrostTargetSelector());
+    }
 
-            void FilterTargets(std::list<WorldObject*>& targets)
-            {
-                targets.remove_if(MarkOfFrostTargetSelector());
-            }
+    void HandleEffect(SpellEffIndex effIndex)
+    {
+        PreventHitDefaultEffect(effIndex);
+        GetHitUnit()->CastSpell(GetHitUnit(), SPELL_AURA_OF_FROST, true);
+    }
 
-            void HandleEffect(SpellEffIndex effIndex)
-            {
-                PreventHitDefaultEffect(effIndex);
-                GetHitUnit()->CastSpell(GetHitUnit(), SPELL_AURA_OF_FROST, true);
-            }
-
-            void Register() override
-            {
-                OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_mark_of_frost_SpellScript::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
-                OnEffectHitTarget += SpellEffectFn(spell_mark_of_frost_SpellScript::HandleEffect, EFFECT_0, SPELL_EFFECT_APPLY_AURA);
-            }
-        };
-
-        SpellScript* GetSpellScript() const override
-        {
-            return new spell_mark_of_frost_SpellScript();
-        }
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_mark_of_frost::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
+        OnEffectHitTarget += SpellEffectFn(spell_mark_of_frost::HandleEffect, EFFECT_0, SPELL_EFFECT_APPLY_AURA);
+    }
 };
 
 void AddSC_boss_azuregos()
 {
-    new boss_azuregos();
-    new spell_mark_of_frost();
+    RegisterCreatureAI(boss_azuregos);
+    RegisterSpellScript(spell_mark_of_frost);
 }

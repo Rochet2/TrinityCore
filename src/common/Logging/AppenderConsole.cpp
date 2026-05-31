@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,27 +15,29 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "AppenderConsole.h"
+#include "LogMessage.h"
+#include "SmartEnum.h"
+#include "StringFormat.h"
+#include "StringConvert.h"
+#include "Util.h"
 #include <sstream>
 
-#include "AppenderConsole.h"
-#include "Config.h"
-#include "Util.h"
-
-#if PLATFORM == PLATFORM_WINDOWS
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
   #include <Windows.h>
 #endif
 
-AppenderConsole::AppenderConsole(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, ExtraAppenderArgs extraArgs)
+AppenderConsole::AppenderConsole(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, std::vector<std::string_view> const& args)
     : Appender(id, name, level, flags), _colored(false)
 {
-    for (uint8 i = 0; i < MaxLogLevels; ++i)
-        _colors[i] = ColorTypes(MaxColors);
+    for (uint8 i = 0; i < NUM_ENABLED_LOG_LEVELS; ++i)
+        _colors[i] = ColorTypes(NUM_COLOR_TYPES);
 
-    if (!extraArgs.empty())
-        InitColors(extraArgs[0]);
+    if (3 < args.size())
+        InitColors(name, args[3]);
 }
 
-void AppenderConsole::InitColors(std::string const& str)
+void AppenderConsole::InitColors(std::string const& name, std::string_view str)
 {
     if (str.empty())
     {
@@ -43,31 +45,31 @@ void AppenderConsole::InitColors(std::string const& str)
         return;
     }
 
-    int color[MaxLogLevels];
-
-    std::istringstream ss(str);
-
-    for (uint8 i = 0; i < MaxLogLevels; ++i)
+    std::vector<std::string_view> colorStrs = Trinity::Tokenize(str, ' ', false);
+    if (colorStrs.size() != NUM_ENABLED_LOG_LEVELS)
     {
-        ss >> color[i];
-
-        if (!ss)
-            return;
-
-        if (color[i] < 0 || color[i] >= MaxColors)
-            return;
+        throw InvalidAppenderArgsException(Trinity::StringFormat("Log::CreateAppenderFromConfig: Invalid color data '{}' for console appender {} (expected {} entries, got {})",
+            str, name, NUM_ENABLED_LOG_LEVELS, colorStrs.size()));
     }
 
-    for (uint8 i = 0; i < MaxLogLevels; ++i)
-        _colors[i] = ColorTypes(color[i]);
+    for (uint8 i = 0; i < NUM_ENABLED_LOG_LEVELS; ++i)
+    {
+        if (Optional<uint8> color = Trinity::StringTo<uint8>(colorStrs[i]); color && EnumUtils::IsValid<ColorTypes>(*color))
+            _colors[i] = static_cast<ColorTypes>(*color);
+        else
+        {
+            throw InvalidAppenderArgsException(Trinity::StringFormat("Log::CreateAppenderFromConfig: Invalid color '{}' for log level {} on console appender {}",
+                colorStrs[i], EnumUtils::ToTitle(static_cast<LogLevel>(i)), name));
+        }
+    }
 
     _colored = true;
 }
 
 void AppenderConsole::SetColor(bool stdout_stream, ColorTypes color)
 {
-#if PLATFORM == PLATFORM_WINDOWS
-    static WORD WinColorFG[MaxColors] =
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
+    static WORD WinColorFG[NUM_COLOR_TYPES] =
     {
         0,                                                  // BLACK
         FOREGROUND_RED,                                     // RED
@@ -128,7 +130,7 @@ void AppenderConsole::SetColor(bool stdout_stream, ColorTypes color)
         BG_WHITE
     };
 
-    static uint8 UnixColorFG[MaxColors] =
+    static uint8 UnixColorFG[NUM_COLOR_TYPES] =
     {
         FG_BLACK,                                          // BLACK
         FG_RED,                                            // RED
@@ -147,18 +149,27 @@ void AppenderConsole::SetColor(bool stdout_stream, ColorTypes color)
         FG_WHITE                                           // LWHITE
     };
 
-    fprintf((stdout_stream? stdout : stderr), "\x1b[%d%sm", UnixColorFG[color], (color >= YELLOW && color < MaxColors ? ";1" : ""));
+    fprintf((stdout_stream? stdout : stderr), "\x1b[%d%sm", UnixColorFG[color], (color >= YELLOW && color < NUM_COLOR_TYPES ? ";1" : ""));
     #endif
 }
 
 void AppenderConsole::ResetColor(bool stdout_stream)
 {
-    #if PLATFORM == PLATFORM_WINDOWS
+    #if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
     HANDLE hConsole = GetStdHandle(stdout_stream ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE);
     SetConsoleTextAttribute(hConsole, FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED);
     #else
     fprintf((stdout_stream ? stdout : stderr), "\x1b[0m");
     #endif
+}
+
+void AppenderConsole::Print(std::string const& str, bool error)
+{
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
+    WriteWinConsole(str + "\n", error);
+#else
+    utf8printf(error ? stderr : stdout, "%s\n", str.c_str());
+#endif
 }
 
 void AppenderConsole::_write(LogMessage const* message)
@@ -185,16 +196,17 @@ void AppenderConsole::_write(LogMessage const* message)
             case LOG_LEVEL_FATAL:
                index = 0;
                break;
-            case LOG_LEVEL_ERROR: // No break on purpose
+            case LOG_LEVEL_ERROR:
+                [[fallthrough]];
             default:
                index = 1;
                break;
         }
 
         SetColor(stdout_stream, _colors[index]);
-        utf8printf(stdout_stream ? stdout : stderr, "%s%s\n", message->prefix.c_str(), message->text.c_str());
+        Print(message->prefix + message->text, !stdout_stream);
         ResetColor(stdout_stream);
     }
     else
-        utf8printf(stdout_stream ? stdout : stderr, "%s%s\n", message->prefix.c_str(), message->text.c_str());
+        Print(message->prefix + message->text, !stdout_stream);
 }

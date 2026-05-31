@@ -1,19 +1,18 @@
 /*
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "MoveSplineFlag.h"
@@ -104,12 +103,12 @@ namespace Movement
         STR(Falling            ), // 0x00001000,
         STR(Fallingfar         ), // 0x00002000,
         STR(Pendingstop        ), // 0x00004000,
-        STR(PendingSTRafestop  ), // 0x00008000,
-        STR(Pendingforward     ), // 0x00010000,
-        STR(Pendingbackward    ), // 0x00020000,
-        STR(PendingSTRafeleft  ), // 0x00040000,
-        STR(PendingSTRaferight ), // 0x00080000,
-        STR(Pendingroot        ), // 0x00100000,
+        STR(PendingStrafeStop  ), // 0x00008000,
+        STR(PendingForward     ), // 0x00010000,
+        STR(PendingBackward    ), // 0x00020000,
+        STR(PendingStrafeReft  ), // 0x00040000,
+        STR(PendingStrafeRight ), // 0x00080000,
+        STR(PendingRoot        ), // 0x00100000,
         STR(Swimming           ), // 0x00200000,               // Appears With Fly Flag Also
         STR(Ascending          ), // 0x00400000,               // Swim Up Also
         STR(Descending         ), // 0x00800000,               // Swim Down Also
@@ -121,11 +120,11 @@ namespace Movement
         STR(Safe_Fall          ), // 0x20000000,               // Active Rogue Safe Fall Spell (Passive)
         STR(Hover              ), // 0x40000000
         STR(Unknown13          ), // 0x80000000
-        STR(Unk1               ),
-        STR(Unk2               ),
+        STR(NoStrafe           ),
+        STR(NoJump             ),
         STR(Unk3               ),
-        STR(Fullspeedturning   ),
-        STR(Fullspeedpitching  ),
+        STR(FullSpeedTurning   ),
+        STR(FullSpeedPitching  ),
         STR(Allow_Pitching     ),
         STR(Unk4               ),
         STR(Unk5               ),
@@ -153,7 +152,7 @@ namespace Movement
         STR(Falling      ), // 0x00000200,           // Not Compartible With Trajectory Movement
         STR(No_Spline    ), // 0x00000400,
         STR(Trajectory   ), // 0x00000800,           // Not Compartible With Fall Movement
-        STR(Walkmode     ), // 0x00001000,
+        STR(CanSwim      ), // 0x00001000,
         STR(Flying       ), // 0x00002000,           // Smooth Movement(Catmullrom Interpolation Mode), Flying Animation
         STR(Knockback    ), // 0x00004000,           // Model Orientation Fixed
         STR(Final_Point  ), // 0x00008000,
@@ -168,7 +167,7 @@ namespace Movement
         STR(Unknown6     ), // 0x01000000,
         STR(Unknown7     ), // 0x02000000,
         STR(Unknown8     ), // 0x04000000,
-        STR(OrientationInversed ), // 0x08000000,           // Appears With Runmode Flag, Nodes ), // 1, Handles Orientation
+        STR(Backward     ), // 0x08000000,           // Appears With Runmode Flag, Nodes ), // 1, Handles Orientation
         STR(Unknown10    ), // 0x10000000,
         STR(Unknown11    ), // 0x20000000,
         STR(Unknown12    ), // 0x40000000,
@@ -180,7 +179,7 @@ namespace Movement
     {
         for (int i = 0; i < N; ++i)
         {
-            if ((t & Flags(1 << i)) && names[i] != NULL)
+            if ((t & Flags(1 << i)) && names[i] != nullptr)
                 str.append(" ").append(names[i]);
         }
     }

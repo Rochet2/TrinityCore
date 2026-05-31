@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,43 +18,41 @@
 #ifndef DEF_HYJAL_H
 #define DEF_HYJAL_H
 
+#include "CreatureAIImpl.h"
+
+#define HyjalScriptName "instance_hyjal"
 #define DataHeader "HY"
 
 uint32 const EncounterCount     = 5;
 
-enum DataTypes
+enum HYDataTypes
 {
+    DATA_RAGEWINTERCHILL        = 0,
     DATA_ANETHERON              = 1,
-    DATA_ANETHERONEVENT         = 2,
-    DATA_ARCHIMONDE             = 3,
-    DATA_ARCHIMONDEEVENT        = 4,
-    DATA_AZGALOR                = 5,
-    DATA_AZGALOREVENT           = 6,
-    DATA_JAINAPROUDMOORE        = 7,
-    DATA_KAZROGAL               = 8,
-    DATA_KAZROGALEVENT          = 9,
-    DATA_RAGEWINTERCHILL        = 10,
-    DATA_RAGEWINTERCHILLEVENT   = 11,
-    DATA_THRALL                 = 12,
-    DATA_TYRANDEWHISPERWIND     = 13,
-    DATA_TRASH                  = 14,
-    DATA_RESET_TRASH_COUNT      = 15,
-    DATA_ALLIANCE_RETREAT       = 16,
-    DATA_HORDE_RETREAT          = 17,
-    DATA_RAIDDAMAGE             = 18,
-    DATA_RESET_RAIDDAMAGE       = 19,
-    TYPE_RETREAT                = 20,
-    DATA_CHANNEL_TARGET         = 21
+    DATA_KAZROGAL               = 2,
+    DATA_AZGALOR                = 3,
+    DATA_ARCHIMONDE             = 4,
+
+    DATA_JAINAPROUDMOORE        = 5,
+    DATA_THRALL                 = 6,
+    DATA_TYRANDEWHISPERWIND     = 7,
+    DATA_TRASH                  = 8,
+    DATA_RESET_TRASH_COUNT      = 9,
+    DATA_ALLIANCE_RETREAT       = 10,
+    DATA_HORDE_RETREAT          = 11,
+    DATA_RAIDDAMAGE             = 12,
+    DATA_RESET_RAIDDAMAGE       = 13,
+    TYPE_RETREAT                = 14
 };
 
-enum WorldStateIds
+enum HYWorldStateIds
 {
     WORLD_STATE_WAVES           = 2842,
     WORLD_STATE_ENEMY           = 2453,
     WORLD_STATE_ENEMYCOUNT      = 2454
 };
 
-enum CreaturesIds
+enum HYCreaturesIds
 {
     // Trash Mobs summoned in waves
     NECROMANCER                 = 17899,
@@ -82,7 +79,7 @@ enum CreaturesIds
     NPC_CHANNEL_TARGET          = 22418
 };
 
-enum GameobjectIds
+enum HYGameobjectIds
 {
     GO_HORDE_ENCAMPMENT_PORTAL  = 182060,
     GO_NIGHT_ELF_VILLAGE_PORTAL = 182061,
@@ -91,6 +88,41 @@ enum GameobjectIds
     GO_ROARING_FLAME            = 182592
 };
 
+enum HYActionIds
+{
+    ACTION_ARCHIMONDE_INTRO     = 1796800
+};
+
+enum HYPathIds
+{
+    // For bosses and other
+    PATH_ALLY_INITIAL_1         = 53400,
+    PATH_ALLY_INITIAL_2         = 53401,
+    PATH_ALLY_INITIAL_3         = 53402,
+
+    PATH_ALLY_BASE_1            = 53403,
+    PATH_ALLY_BASE_2            = 53404,
+    PATH_ALLY_BASE_3            = 53405,
+
+    PATH_HORDE_INITIAL_1        = 53406,
+    PATH_HORDE_INITIAL_2        = 53407,
+    PATH_HORDE_INITIAL_3        = 53408,
+
+    PATH_HORDE_BASE_1           = 53409,
+    PATH_HORDE_BASE_2           = 53410,
+    PATH_HORDE_BASE_3           = 53411,
+
+    PATH_HORDE_BOSS             = 53412
+};
+
 #define MINRAIDDAMAGE 700000 // minimal damage before trash can drop loot and reputation, resets if faction leader dies
+
+template <class AI, class T>
+inline AI* GetHyjalAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, HyjalScriptName);
+}
+
+#define RegisterHyjalCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetHyjalAI)
 
 #endif

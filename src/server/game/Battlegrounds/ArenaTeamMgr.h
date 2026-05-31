@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,32 +19,28 @@
 #define _ARENATEAMMGR_H
 
 #include "ArenaTeam.h"
+#include <unordered_map>
 
-class ArenaTeamMgr
+class TC_GAME_API ArenaTeamMgr
 {
 private:
     ArenaTeamMgr();
     ~ArenaTeamMgr();
 
 public:
-    static ArenaTeamMgr* instance()
-    {
-        static ArenaTeamMgr instance;
-        return &instance;
-    }
+    static ArenaTeamMgr* instance();
 
     typedef std::unordered_map<uint32, ArenaTeam*> ArenaTeamContainer;
 
     ArenaTeam* GetArenaTeamById(uint32 arenaTeamId) const;
-    ArenaTeam* GetArenaTeamByName(std::string const& arenaTeamName) const;
+    ArenaTeam* GetArenaTeamByName(std::string_view arenaTeamName) const;
     ArenaTeam* GetArenaTeamByCaptain(ObjectGuid guid) const;
 
     void LoadArenaTeams();
     void AddArenaTeam(ArenaTeam* arenaTeam);
     void RemoveArenaTeam(uint32 Id);
 
-    ArenaTeamContainer::iterator GetArenaTeamMapBegin() { return ArenaTeamStore.begin(); }
-    ArenaTeamContainer::iterator GetArenaTeamMapEnd()   { return ArenaTeamStore.end(); }
+    ArenaTeamContainer const& GetArenaTeams() const { return ArenaTeamStore; }
 
     void DistributeArenaPoints();
 

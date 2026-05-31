@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,6 +17,7 @@
 
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
+#include "SpellScript.h"
 #include "gundrak.h"
 
 enum Texts
@@ -30,7 +31,9 @@ enum Spells
     SPELL_ECK_BITE              = 55813, // Eck bites down hard, inflicting 150% of his normal damage to an enemy.
     SPELL_ECK_SPIT              = 55814, // Eck spits toxic bile at enemies in a cone in front of him, inflicting 2970 Nature damage and draining 220 mana every 1 sec for 3 sec.
     SPELL_ECK_SPRING_1          = 55815, // Eck leaps at a distant target.  --> Drops aggro and charges a random player. Tank can simply taunt him back.
-    SPELL_ECK_SPRING_2          = 55837  // Eck leaps at a distant target.
+    SPELL_ECK_SPRING_2          = 55837, // Eck leaps at a distant target.
+
+    SPELL_ECK_RESIDUE           = 55817
 };
 
 enum Events
@@ -41,85 +44,96 @@ enum Events
     EVENT_BERSERK
 };
 
-class boss_eck : public CreatureScript
+struct boss_eck : public BossAI
 {
-    public:
-        boss_eck() : CreatureScript("boss_eck") { }
+    boss_eck(Creature* creature) : BossAI(creature, DATA_ECK_THE_FEROCIOUS)
+    {
+        Initialize();
+        Talk(EMOTE_SPAWN);
+    }
 
-        struct boss_eckAI : public BossAI
+    void Initialize()
+    {
+        _berserk = false;
+    }
+
+    void Reset() override
+    {
+        _Reset();
+        Initialize();
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        events.ScheduleEvent(EVENT_BITE, 5s);
+        events.ScheduleEvent(EVENT_SPIT, 10s);
+        events.ScheduleEvent(EVENT_SPRING, 8s);
+        events.ScheduleEvent(EVENT_BERSERK, 60s, 90s); // 60-90 secs according to wowwiki
+    }
+
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (!_berserk && me->HealthBelowPctDamaged(20, damage))
         {
-            boss_eckAI(Creature* creature) : BossAI(creature, DATA_ECK_THE_FEROCIOUS)
-            {
-                Initialize();
-                Talk(EMOTE_SPAWN);
-            }
-
-            void Initialize()
-            {
-                _berserk = false;
-            }
-
-            void Reset() override
-            {
-                _Reset();
-                Initialize();
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_BITE, 5 * IN_MILLISECONDS);
-                events.ScheduleEvent(EVENT_SPIT, 10 * IN_MILLISECONDS);
-                events.ScheduleEvent(EVENT_SPRING, 8 * IN_MILLISECONDS);
-                events.ScheduleEvent(EVENT_BERSERK, urand(60 * IN_MILLISECONDS, 90 * IN_MILLISECONDS)); // 60-90 secs according to wowwiki
-            }
-
-            void DamageTaken(Unit* /*attacker*/, uint32& damage) override
-            {
-                if (!_berserk && me->HealthBelowPctDamaged(20, damage))
-                {
-                    events.RescheduleEvent(EVENT_BERSERK, 1000);
-                    _berserk = true;
-                }
-            }
-
-            void ExecuteEvent(uint32 eventId) override
-            {
-                switch (eventId)
-                {
-                    case EVENT_BITE:
-                        DoCastVictim(SPELL_ECK_BITE);
-                        events.ScheduleEvent(EVENT_BITE, urand(8 * IN_MILLISECONDS, 12 * IN_MILLISECONDS));
-                        break;
-                    case EVENT_SPIT:
-                        DoCastVictim(SPELL_ECK_SPIT);
-                        events.ScheduleEvent(EVENT_SPIT, urand(6 * IN_MILLISECONDS, 14 * IN_MILLISECONDS));
-                        break;
-                    case EVENT_SPRING:
-                        if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 1, 35.0f, true))
-                            DoCast(target, RAND(SPELL_ECK_SPRING_1, SPELL_ECK_SPRING_2));
-                        events.ScheduleEvent(EVENT_SPRING, urand(5 * IN_MILLISECONDS, 10 * IN_MILLISECONDS));
-                        break;
-                    case EVENT_BERSERK:
-                        DoCast(me, SPELL_ECK_BERSERK);
-                        _berserk = true;
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-        private:
-            bool _berserk;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetGundrakAI<boss_eckAI>(creature);
+            events.RescheduleEvent(EVENT_BERSERK, 1s);
+            _berserk = true;
         }
+    }
+
+    void ExecuteEvent(uint32 eventId) override
+    {
+        switch (eventId)
+        {
+            case EVENT_BITE:
+                DoCastVictim(SPELL_ECK_BITE);
+                events.ScheduleEvent(EVENT_BITE, 8s, 12s);
+                break;
+            case EVENT_SPIT:
+                DoCastVictim(SPELL_ECK_SPIT);
+                events.ScheduleEvent(EVENT_SPIT, 6s, 14s);
+                break;
+            case EVENT_SPRING:
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 1, 35.0f, true))
+                    DoCast(target, RAND(SPELL_ECK_SPRING_1, SPELL_ECK_SPRING_2));
+                events.ScheduleEvent(EVENT_SPRING, 5s, 10s);
+                break;
+            case EVENT_BERSERK:
+                DoCast(me, SPELL_ECK_BERSERK);
+                _berserk = true;
+                break;
+            default:
+                break;
+        }
+    }
+
+private:
+    bool _berserk;
+};
+
+// 55814 - Eck Spit
+class spell_eck_spit : public AuraScript
+{
+    PrepareAuraScript(spell_eck_spit);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_ECK_RESIDUE });
+    }
+
+    void AfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        GetTarget()->CastSpell(GetTarget(), SPELL_ECK_RESIDUE, true);
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(spell_eck_spit::AfterRemove, EFFECT_0, SPELL_AURA_PERIODIC_DAMAGE, AURA_EFFECT_HANDLE_REAL);
+    }
 };
 
 void AddSC_boss_eck()
 {
-    new boss_eck();
+    RegisterGundrakCreatureAI(boss_eck);
+    RegisterSpellScript(spell_eck_spit);
 }

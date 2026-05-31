@@ -39,9 +39,9 @@ class caio_commandscript : public CommandScript
 			return commandTable;
 		}
 		
-		static bool HandleVersionCommand(ChatHandler* handler, char const* args)
+		static bool HandleVersionCommand(ChatHandler* handler, char const* /*args*/)
 		{
-			handler->PSendSysMessage("AIO version %f.", AIO_VERSION);
+			handler->PSendSysMessage("AIO version %s (protocol %.2f).", AIO_VERSION_STRING, AIO_VERSION);
 			return true;
 		}
 
@@ -104,7 +104,7 @@ class caio_commandscript : public CommandScript
 			{
 				try
 				{
-					perm = std::stoi(args);
+					perm = std::stoi(permission);
 				}
 				catch(std::exception &)
 				{

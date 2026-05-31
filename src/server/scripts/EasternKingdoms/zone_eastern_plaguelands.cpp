@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,180 +15,42 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Eastern_Plaguelands
-SD%Complete: 100
-SDComment: Quest support: 5211, 5742. Special vendor Augustus the Touched
-SDCategory: Eastern Plaguelands
-EndScriptData */
-
-/* ContentData
-npc_ghoul_flayer
-npc_augustus_the_touched
-npc_darrowshire_spirit
-npc_tirion_fordring
-EndContentData */
-
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
-#include "ScriptedGossip.h"
-#include "Player.h"
-#include "WorldSession.h"
-
-class npc_ghoul_flayer : public CreatureScript
-{
-public:
-    npc_ghoul_flayer() : CreatureScript("npc_ghoul_flayer") { }
-
-    struct npc_ghoul_flayerAI : public ScriptedAI
-    {
-        npc_ghoul_flayerAI(Creature* creature) : ScriptedAI(creature) { }
-
-        void Reset() override { }
-
-        void EnterCombat(Unit* /*who*/) override { }
-
-        void JustDied(Unit* killer) override
-        {
-            if (killer->GetTypeId() == TYPEID_PLAYER)
-                me->SummonCreature(11064, 0.0f, 0.0f, 0.0f, 0.0f, TEMPSUMMON_TIMED_DESPAWN, 60000);
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_ghoul_flayerAI(creature);
-    }
-};
+#include "SpellScript.h"
+#include "Unit.h"
 
 /*######
-## npc_augustus_the_touched
+## Quest 5206: Marauders of Darrowshire
 ######*/
 
-class npc_augustus_the_touched : public CreatureScript
+enum MaraudersOfDarrowshire
 {
-public:
-    npc_augustus_the_touched() : CreatureScript("npc_augustus_the_touched") { }
-
-    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
-    {
-        player->PlayerTalkClass->ClearMenus();
-        if (action == GOSSIP_ACTION_TRADE)
-            player->GetSession()->SendListInventory(creature->GetGUID());
-        return true;
-    }
-
-    bool OnGossipHello(Player* player, Creature* creature) override
-    {
-        if (creature->IsQuestGiver())
-            player->PrepareQuestMenu(creature->GetGUID());
-
-        if (creature->IsVendor() && player->GetQuestRewardStatus(6164))
-            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_VENDOR, GOSSIP_TEXT_BROWSE_GOODS, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_TRADE);
-
-        player->SEND_GOSSIP_MENU(player->GetGossipTextId(creature), creature->GetGUID());
-        return true;
-    }
+    SPELL_CREATE_RESONATING_SKULL   = 17269,
+    SPELL_CREATE_BONE_DUST          = 17270
 };
 
-/*######
-## npc_darrowshire_spirit
-######*/
-
-enum DarrowshireSpirit
+// 17271 - Test Fetid Skull
+class spell_eastern_plaguelands_test_fetid_skull : public SpellScript
 {
-    SPELL_SPIRIT_SPAWNIN    = 17321
-};
+    PrepareSpellScript(spell_eastern_plaguelands_test_fetid_skull);
 
-class npc_darrowshire_spirit : public CreatureScript
-{
-public:
-    npc_darrowshire_spirit() : CreatureScript("npc_darrowshire_spirit") { }
-
-    bool OnGossipHello(Player* player, Creature* creature) override
+    bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        player->SEND_GOSSIP_MENU(3873, creature->GetGUID());
-        player->TalkedToCreature(creature->GetEntry(), creature->GetGUID());
-        creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-        return true;
+        return ValidateSpellInfo({ SPELL_CREATE_RESONATING_SKULL, SPELL_CREATE_BONE_DUST });
     }
 
-    CreatureAI* GetAI(Creature* creature) const override
+    void HandleDummy(SpellEffIndex /*effIndex*/)
     {
-        return new npc_darrowshire_spiritAI(creature);
+        GetCaster()->CastSpell(GetCaster(), roll_chance_i(50) ? SPELL_CREATE_RESONATING_SKULL : SPELL_CREATE_BONE_DUST, TRIGGERED_IGNORE_POWER_AND_REAGENT_COST);
     }
 
-    struct npc_darrowshire_spiritAI : public ScriptedAI
+    void Register() override
     {
-        npc_darrowshire_spiritAI(Creature* creature) : ScriptedAI(creature) { }
-
-        void Reset() override
-        {
-            DoCast(me, SPELL_SPIRIT_SPAWNIN);
-            me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-        }
-
-        void EnterCombat(Unit* /*who*/) override { }
-    };
-};
-
-/*######
-## npc_tirion_fordring
-######*/
-
-#define GOSSIP_HELLO    "I am ready to hear your tale, Tirion."
-#define GOSSIP_SELECT1  "Thank you, Tirion.  What of your identity?"
-#define GOSSIP_SELECT2  "That is terrible."
-#define GOSSIP_SELECT3  "I will, Tirion."
-
-class npc_tirion_fordring : public CreatureScript
-{
-public:
-    npc_tirion_fordring() : CreatureScript("npc_tirion_fordring") { }
-
-    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
-    {
-        player->PlayerTalkClass->ClearMenus();
-        switch (action)
-        {
-            case GOSSIP_ACTION_INFO_DEF+1:
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_SELECT1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-                player->SEND_GOSSIP_MENU(4493, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+2:
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_SELECT2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
-                player->SEND_GOSSIP_MENU(4494, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+3:
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_SELECT3, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 4);
-                player->SEND_GOSSIP_MENU(4495, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF+4:
-                player->CLOSE_GOSSIP_MENU();
-                player->AreaExploredOrEventHappens(5742);
-                break;
-        }
-        return true;
-    }
-
-    bool OnGossipHello(Player* player, Creature* creature) override
-    {
-        if (creature->IsQuestGiver())
-            player->PrepareQuestMenu(creature->GetGUID());
-
-        if (player->GetQuestStatus(5742) == QUEST_STATUS_INCOMPLETE && player->getStandState() == UNIT_STAND_STATE_SIT)
-            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_HELLO, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
-
-        player->SEND_GOSSIP_MENU(player->GetGossipTextId(creature), creature->GetGUID());
-
-        return true;
+        OnEffectHit += SpellEffectFn(spell_eastern_plaguelands_test_fetid_skull::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
     }
 };
 
 void AddSC_eastern_plaguelands()
 {
-    new npc_ghoul_flayer();
-    new npc_augustus_the_touched();
-    new npc_darrowshire_spirit();
-    new npc_tirion_fordring();
+    RegisterSpellScript(spell_eastern_plaguelands_test_fetid_skull);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,33 +15,42 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "ScriptMgr.h"
 #include "Chat.h"
+#include "DatabaseEnv.h"
+#include "Item.h"
 #include "Language.h"
+#include "Mail.h"
+#include "ObjectMgr.h"
 #include "Pet.h"
 #include "Player.h"
-#include "ObjectMgr.h"
-#include "ScriptMgr.h"
+#include "RBAC.h"
+#include "WorldSession.h"
+
+#if TRINITY_COMPILER == TRINITY_COMPILER_GNU
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
+using namespace Trinity::ChatCommands;
 
 class send_commandscript : public CommandScript
 {
 public:
     send_commandscript() : CommandScript("send_commandscript") { }
 
-    ChatCommand* GetCommands() const override
+    ChatCommandTable GetCommands() const override
     {
-        static ChatCommand sendCommandTable[] =
+        static ChatCommandTable sendCommandTable =
         {
-            { "items",   rbac::RBAC_PERM_COMMAND_SEND_ITEMS,   true, &HandleSendItemsCommand,   "", NULL },
-            { "mail",    rbac::RBAC_PERM_COMMAND_SEND_MAIL,    true, &HandleSendMailCommand,    "", NULL },
-            { "message", rbac::RBAC_PERM_COMMAND_SEND_MESSAGE, true, &HandleSendMessageCommand, "", NULL },
-            { "money",   rbac::RBAC_PERM_COMMAND_SEND_MONEY,   true, &HandleSendMoneyCommand,   "", NULL },
-            { NULL,      0,                             false, NULL,                      "", NULL }
+            { "items",   HandleSendItemsCommand,   rbac::RBAC_PERM_COMMAND_SEND_ITEMS,   Console::Yes },
+            { "mail",    HandleSendMailCommand,    rbac::RBAC_PERM_COMMAND_SEND_MAIL,    Console::Yes },
+            { "message", HandleSendMessageCommand, rbac::RBAC_PERM_COMMAND_SEND_MESSAGE, Console::Yes },
+            { "money",   HandleSendMoneyCommand,   rbac::RBAC_PERM_COMMAND_SEND_MONEY,   Console::Yes },
         };
 
-        static ChatCommand commandTable[] =
+        static ChatCommandTable commandTable =
         {
-            { "send", rbac::RBAC_PERM_COMMAND_SEND, false, NULL, "", sendCommandTable },
-            { NULL,   0,                      false, NULL, "", NULL }
+            { "send", sendCommandTable },
         };
         return commandTable;
     }
@@ -56,7 +65,7 @@ public:
         if (!handler->extractPlayerTarget((char*)args, &target, &targetGuid, &targetName))
             return false;
 
-        char* tail1 = strtok(NULL, "");
+        char* tail1 = strtok(nullptr, "");
         if (!tail1)
             return false;
 
@@ -64,7 +73,7 @@ public:
         if (!msgSubject)
             return false;
 
-        char* tail2 = strtok(NULL, "");
+        char* tail2 = strtok(nullptr, "");
         if (!tail2)
             return false;
 
@@ -76,11 +85,11 @@ public:
         std::string subject = msgSubject;
         std::string text    = msgText;
 
-        // from console show not existed sender
-        MailSender sender(MAIL_NORMAL, handler->GetSession() ? handler->GetSession()->GetPlayer()->GetGUIDLow() : 0, MAIL_STATIONERY_GM);
+        // from console, use non-existing sender
+        MailSender sender(MAIL_NORMAL, handler->GetSession() ? handler->GetSession()->GetPlayer()->GetGUID().GetCounter() : 0, MAIL_STATIONERY_GM);
 
         /// @todo Fix poor design
-        SQLTransaction trans = CharacterDatabase.BeginTransaction();
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
         MailDraft(subject, text)
             .SendMailTo(trans, MailReceiver(target, targetGuid.GetCounter()), sender);
 
@@ -101,7 +110,7 @@ public:
         if (!handler->extractPlayerTarget((char*)args, &receiver, &receiverGuid, &receiverName))
             return false;
 
-        char* tail1 = strtok(NULL, "");
+        char* tail1 = strtok(nullptr, "");
         if (!tail1)
             return false;
 
@@ -109,7 +118,7 @@ public:
         if (!msgSubject)
             return false;
 
-        char* tail2 = strtok(NULL, "");
+        char* tail2 = strtok(nullptr, "");
         if (!tail2)
             return false;
 
@@ -127,45 +136,45 @@ public:
         ItemPairs items;
 
         // get all tail string
-        char* tail = strtok(NULL, "");
+        char* tail = strtok(nullptr, "");
 
         // get from tail next item str
         while (char* itemStr = strtok(tail, " "))
         {
             // and get new tail
-            tail = strtok(NULL, "");
+            tail = strtok(nullptr, "");
 
             // parse item str
             char const* itemIdStr = strtok(itemStr, ":");
-            char const* itemCountStr = strtok(NULL, " ");
+            char const* itemCountStr = strtok(nullptr, " ");
 
-            uint32 itemId = atoi(itemIdStr);
+            Optional<uint32> itemId = Trinity::StringTo<uint32>(itemIdStr);
             if (!itemId)
                 return false;
 
-            ItemTemplate const* item_proto = sObjectMgr->GetItemTemplate(itemId);
+            ItemTemplate const* item_proto = sObjectMgr->GetItemTemplate(*itemId);
             if (!item_proto)
             {
-                handler->PSendSysMessage(LANG_COMMAND_ITEMIDINVALID, itemId);
+                handler->PSendSysMessage(LANG_COMMAND_ITEMIDINVALID, *itemId);
                 handler->SetSentErrorMessage(true);
                 return false;
             }
 
             uint32 itemCount = itemCountStr ? atoi(itemCountStr) : 1;
-            if (itemCount < 1 || (item_proto->MaxCount > 0 && itemCount > uint32(item_proto->MaxCount)))
+            if (itemCount < 1 || (item_proto->GetMaxCount() > 0 && itemCount > uint32(item_proto->GetMaxCount())))
             {
-                handler->PSendSysMessage(LANG_COMMAND_INVALID_ITEM_COUNT, itemCount, itemId);
+                handler->PSendSysMessage(LANG_COMMAND_INVALID_ITEM_COUNT, itemCount, *itemId);
                 handler->SetSentErrorMessage(true);
                 return false;
             }
 
             while (itemCount > item_proto->GetMaxStackSize())
             {
-                items.push_back(ItemPair(itemId, item_proto->GetMaxStackSize()));
+                items.push_back(ItemPair(*itemId, item_proto->GetMaxStackSize()));
                 itemCount -= item_proto->GetMaxStackSize();
             }
 
-            items.push_back(ItemPair(itemId, itemCount));
+            items.push_back(ItemPair(*itemId, itemCount));
 
             if (items.size() > MAX_MAIL_ITEMS)
             {
@@ -175,19 +184,19 @@ public:
             }
         }
 
-        // from console show not existed sender
-        MailSender sender(MAIL_NORMAL, handler->GetSession() ? handler->GetSession()->GetPlayer()->GetGUIDLow() : 0, MAIL_STATIONERY_GM);
+        // from console show nonexisting sender
+        MailSender sender(MAIL_NORMAL, handler->GetSession() ? handler->GetSession()->GetPlayer()->GetGUID().GetCounter() : 0, MAIL_STATIONERY_GM);
 
         // fill mail
         MailDraft draft(subject, text);
 
-        SQLTransaction trans = CharacterDatabase.BeginTransaction();
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
 
         for (ItemPairs::const_iterator itr = items.begin(); itr != items.end(); ++itr)
         {
             if (Item* item = Item::CreateItem(itr->first, itr->second, handler->GetSession() ? handler->GetSession()->GetPlayer() : 0))
             {
-                item->SaveToDB(trans);                               // save for prevent lost at next mail load, if send fail then item will deleted
+                item->SaveToDB(trans);              // Save to prevent being lost at next mail load. If send fails, the item will be deleted.
                 draft.AddItem(item);
             }
         }
@@ -200,53 +209,22 @@ public:
         return true;
     }
     /// Send money by mail
-    static bool HandleSendMoneyCommand(ChatHandler* handler, char const* args)
+    static bool HandleSendMoneyCommand(ChatHandler* handler, PlayerIdentifier const& receiver, QuotedString const& subject, QuotedString const& text, uint32 money)
     {
         /// format: name "subject text" "mail text" money
 
-        Player* receiver;
-        ObjectGuid receiverGuid;
-        std::string receiverName;
-        if (!handler->extractPlayerTarget((char*)args, &receiver, &receiverGuid, &receiverName))
-            return false;
+        // from console show nonexisting sender
+        MailSender sender(MAIL_NORMAL, handler->GetSession() ? handler->GetSession()->GetPlayer()->GetGUID().GetCounter() : 0, MAIL_STATIONERY_GM);
 
-        char* tail1 = strtok(NULL, "");
-        if (!tail1)
-            return false;
-
-        char* msgSubject = handler->extractQuotedArg(tail1);
-        if (!msgSubject)
-            return false;
-
-        char* tail2 = strtok(NULL, "");
-        if (!tail2)
-            return false;
-
-        char* msgText = handler->extractQuotedArg(tail2);
-        if (!msgText)
-            return false;
-
-        char* moneyStr = strtok(NULL, "");
-        int32 money = moneyStr ? atoi(moneyStr) : 0;
-        if (money <= 0)
-            return false;
-
-        // msgSubject, msgText isn't NUL after prev. check
-        std::string subject = msgSubject;
-        std::string text    = msgText;
-
-        // from console show not existed sender
-        MailSender sender(MAIL_NORMAL, handler->GetSession() ? handler->GetSession()->GetPlayer()->GetGUIDLow() : 0, MAIL_STATIONERY_GM);
-
-        SQLTransaction trans = CharacterDatabase.BeginTransaction();
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
 
         MailDraft(subject, text)
             .AddMoney(money)
-            .SendMailTo(trans, MailReceiver(receiver, receiverGuid.GetCounter()), sender);
+            .SendMailTo(trans, MailReceiver(receiver.GetConnectedPlayer(), receiver.GetGUID().GetCounter()), sender);
 
         CharacterDatabase.CommitTransaction(trans);
 
-        std::string nameLink = handler->playerLink(receiverName);
+        std::string nameLink = handler->playerLink(receiver.GetName());
         handler->PSendSysMessage(LANG_MAIL_SENT, nameLink.c_str());
         return true;
     }
@@ -258,11 +236,11 @@ public:
         if (!handler->extractPlayerTarget((char*)args, &player))
             return false;
 
-        char* msgStr = strtok(NULL, "");
+        char* msgStr = strtok(nullptr, "");
         if (!msgStr)
             return false;
 
-        ///- Check that he is not logging out.
+        /// - Check if player is logging out.
         if (player->GetSession()->isLogingOut())
         {
             handler->SendSysMessage(LANG_PLAYER_NOT_FOUND);

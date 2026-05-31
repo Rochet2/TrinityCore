@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,108 +22,81 @@ Comment: All arena team related commands
 Category: commandscripts
 EndScriptData */
 
-#include "ObjectMgr.h"
+#include "ScriptMgr.h"
+#include "ArenaTeamMgr.h"
+#include "CharacterCache.h"
 #include "Chat.h"
 #include "Language.h"
-#include "ArenaTeamMgr.h"
+#include "Log.h"
+#include "ObjectMgr.h"
 #include "Player.h"
-#include "ScriptMgr.h"
+#include "RBAC.h"
+#include "WorldSession.h"
+
+using namespace Trinity::ChatCommands;
 
 class arena_commandscript : public CommandScript
 {
 public:
     arena_commandscript() : CommandScript("arena_commandscript") { }
 
-    ChatCommand* GetCommands() const override
+    ChatCommandTable GetCommands() const override
     {
-        static ChatCommand arenaCommandTable[] =
+        static ChatCommandTable arenaCommandTable =
         {
-            { "create",         rbac::RBAC_PERM_COMMAND_ARENA_CREATE,   true, &HandleArenaCreateCommand,   "", NULL },
-            { "disband",        rbac::RBAC_PERM_COMMAND_ARENA_DISBAND,  true, &HandleArenaDisbandCommand,  "", NULL },
-            { "rename",         rbac::RBAC_PERM_COMMAND_ARENA_RENAME,   true, &HandleArenaRenameCommand,   "", NULL },
-            { "captain",        rbac::RBAC_PERM_COMMAND_ARENA_CAPTAIN, false, &HandleArenaCaptainCommand,  "", NULL },
-            { "info",           rbac::RBAC_PERM_COMMAND_ARENA_INFO,     true, &HandleArenaInfoCommand,     "", NULL },
-            { "lookup",         rbac::RBAC_PERM_COMMAND_ARENA_LOOKUP,  false, &HandleArenaLookupCommand,   "", NULL },
-            { NULL, 0, false, NULL, "", NULL }
+            { "create",         HandleArenaCreateCommand,   rbac::RBAC_PERM_COMMAND_ARENA_CREATE,  Console::Yes },
+            { "disband",        HandleArenaDisbandCommand,  rbac::RBAC_PERM_COMMAND_ARENA_DISBAND, Console::Yes },
+            { "rename",         HandleArenaRenameCommand,   rbac::RBAC_PERM_COMMAND_ARENA_RENAME,  Console::Yes },
+            { "captain",        HandleArenaCaptainCommand,  rbac::RBAC_PERM_COMMAND_ARENA_CAPTAIN, Console::No },
+            { "info",           HandleArenaInfoCommand,     rbac::RBAC_PERM_COMMAND_ARENA_INFO,    Console::Yes },
+            { "lookup",         HandleArenaLookupCommand,   rbac::RBAC_PERM_COMMAND_ARENA_LOOKUP,  Console::No },
         };
-        static ChatCommand commandTable[] =
+        static ChatCommandTable commandTable =
         {
-            { "arena",          rbac::RBAC_PERM_COMMAND_ARENA,     false, NULL,                       "", arenaCommandTable },
-            { NULL, 0, false, NULL, "", NULL }
+            { "arena", arenaCommandTable },
         };
         return commandTable;
     }
 
-    static bool HandleArenaCreateCommand(ChatHandler* handler, char const* args)
+    static bool HandleArenaCreateCommand(ChatHandler* handler, Optional<PlayerIdentifier> captain, QuotedString name, ArenaTeamTypes type)
     {
-        if (!*args)
-            return false;
-
-        Player* target;
-        if (!handler->extractPlayerTarget(*args != '"' ? (char*)args : NULL, &target))
-            return false;
-
-        char* tailStr = *args != '"' ? strtok(NULL, "") : (char*)args;
-        if (!tailStr)
-            return false;
-
-        char* name = handler->extractQuotedArg(tailStr);
-        if (!name)
-            return false;
-
-        char* typeStr = strtok(NULL, "");
-        if (!typeStr)
-            return false;
-
-        int8 type = atoi(typeStr);
         if (sArenaTeamMgr->GetArenaTeamByName(name))
         {
-            handler->PSendSysMessage(LANG_ARENA_ERROR_NAME_EXISTS, name);
+            handler->PSendSysMessage(LANG_ARENA_ERROR_NAME_EXISTS, name.c_str());
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        if (type == 2 || type == 3 || type == 5 )
+        if (!captain)
+            captain = PlayerIdentifier::FromTargetOrSelf(handler);
+        if (!captain)
+            return false;
+
+        if (sCharacterCache->GetCharacterArenaTeamIdByGuid(captain->GetGUID(), type) != 0)
         {
-            if (Player::GetArenaTeamIdFromDB(target->GetGUID(), type) != 0)
-            {
-                handler->PSendSysMessage(LANG_ARENA_ERROR_SIZE, target->GetName().c_str());
-                handler->SetSentErrorMessage(true);
-                return false;
-            }
-
-            ArenaTeam* arena = new ArenaTeam();
-
-            if (!arena->Create(target->GetGUID(), type, name, 4293102085, 101, 4293253939, 4, 4284049911))
-            {
-                delete arena;
-                handler->SendSysMessage(LANG_BAD_VALUE);
-                handler->SetSentErrorMessage(true);
-                return false;
-            }
-
-            sArenaTeamMgr->AddArenaTeam(arena);
-            handler->PSendSysMessage(LANG_ARENA_CREATE, arena->GetName().c_str(), arena->GetId(), arena->GetType(), arena->GetCaptain().GetCounter());
+            handler->PSendSysMessage(LANG_ARENA_ERROR_SIZE, captain->GetName().c_str());
+            handler->SetSentErrorMessage(true);
+            return false;
         }
-        else
+
+        ArenaTeam* arena = new ArenaTeam();
+
+        if (!arena->Create(captain->GetGUID(), type, name, 4293102085, 101, 4293253939, 4, 4284049911))
         {
+            delete arena;
             handler->SendSysMessage(LANG_BAD_VALUE);
             handler->SetSentErrorMessage(true);
             return false;
         }
 
+        sArenaTeamMgr->AddArenaTeam(arena);
+        handler->PSendSysMessage(LANG_ARENA_CREATE, arena->GetName().c_str(), arena->GetId(), arena->GetType(), arena->GetCaptain().ToString().c_str());
+
         return true;
     }
 
-    static bool HandleArenaDisbandCommand(ChatHandler* handler, char const* args)
+    static bool HandleArenaDisbandCommand(ChatHandler* handler, uint32 teamId)
     {
-        if (!*args)
-            return false;
-
-        uint32 teamId = atoi((char*)args);
-        if (!teamId)
-            return false;
-
         ArenaTeam* arena = sArenaTeamMgr->GetArenaTeamById(teamId);
 
         if (!arena)
@@ -142,52 +115,25 @@ public:
 
         std::string name = arena->GetName();
         arena->Disband();
-        if (handler->GetSession())
-            TC_LOG_DEBUG("bg.arena", "GameMaster: %s [GUID: %u] disbanded arena team type: %u [Id: %u].",
-                handler->GetSession()->GetPlayer()->GetName().c_str(), handler->GetSession()->GetPlayer()->GetGUIDLow(), arena->GetType(), teamId);
-        else
-            TC_LOG_DEBUG("bg.arena", "Console: disbanded arena team type: %u [Id: %u].", arena->GetType(), teamId);
-
-        delete(arena);
+        delete arena;
 
         handler->PSendSysMessage(LANG_ARENA_DISBAND, name.c_str(), teamId);
         return true;
     }
 
-    static bool HandleArenaRenameCommand(ChatHandler* handler, char const* _args)
+    static bool HandleArenaRenameCommand(ChatHandler* handler, QuotedString oldName, QuotedString newName)
     {
-        if (!*_args)
-            return false;
-
-        char* args = (char *)_args;
-
-        char const* oldArenaStr = handler->extractQuotedArg(args);
-        if (!oldArenaStr)
-        {
-            handler->SendSysMessage(LANG_BAD_VALUE);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        char const* newArenaStr = handler->extractQuotedArg(strtok(NULL, ""));
-        if (!newArenaStr)
-        {
-            handler->SendSysMessage(LANG_BAD_VALUE);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        ArenaTeam* arena = sArenaTeamMgr->GetArenaTeamByName(oldArenaStr);
+        ArenaTeam* arena = sArenaTeamMgr->GetArenaTeamByName(oldName);
         if (!arena)
         {
-            handler->PSendSysMessage(LANG_AREAN_ERROR_NAME_NOT_FOUND, oldArenaStr);
+            handler->PSendSysMessage(LANG_ARENA_ERROR_NAME_NOT_FOUND, oldName.c_str());
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        if (sArenaTeamMgr->GetArenaTeamByName(newArenaStr))
+        if (sArenaTeamMgr->GetArenaTeamByName(newName))
         {
-            handler->PSendSysMessage(LANG_ARENA_ERROR_NAME_EXISTS, oldArenaStr);
+            handler->PSendSysMessage(LANG_ARENA_ERROR_NAME_EXISTS, newName.c_str());
             handler->SetSentErrorMessage(true);
             return false;
         }
@@ -199,45 +145,22 @@ public:
             return false;
         }
 
-        if (!arena->SetName(newArenaStr))
+        if (arena->SetName(newName))
+        {
+            handler->PSendSysMessage(LANG_ARENA_RENAME, arena->GetId(), oldName.c_str(), newName.c_str());
+            return true;
+        }
+        else
         {
             handler->SendSysMessage(LANG_BAD_VALUE);
             handler->SetSentErrorMessage(true);
             return false;
         }
-
-        handler->PSendSysMessage(LANG_ARENA_RENAME, arena->GetId(), oldArenaStr, newArenaStr);
-        if (handler->GetSession())
-            TC_LOG_DEBUG("bg.arena", "GameMaster: %s [GUID: %u] rename arena team \"%s\"[Id: %u] to \"%s\"",
-                handler->GetSession()->GetPlayer()->GetName().c_str(), handler->GetSession()->GetPlayer()->GetGUIDLow(), oldArenaStr, arena->GetId(), newArenaStr);
-        else
-            TC_LOG_DEBUG("bg.arena", "Console: rename arena team \"%s\"[Id: %u] to \"%s\"", oldArenaStr, arena->GetId(), newArenaStr);
-
-        return true;
     }
 
-    static bool HandleArenaCaptainCommand(ChatHandler* handler, char const* args)
+    static bool HandleArenaCaptainCommand(ChatHandler* handler, uint32 teamId, Optional<PlayerIdentifier> target)
     {
-        if (!*args)
-            return false;
-
-        char* idStr;
-        char* nameStr;
-        handler->extractOptFirstArg((char*)args, &idStr, &nameStr);
-        if (!idStr)
-            return false;
-
-        uint32 teamId = atoi(idStr);
-        if (!teamId)
-            return false;
-
-        Player* target;
-        ObjectGuid targetGuid;
-        if (!handler->extractPlayerTarget(nameStr, &target, &targetGuid))
-            return false;
-
         ArenaTeam* arena = sArenaTeamMgr->GetArenaTeamById(teamId);
-
         if (!arena)
         {
             handler->PSendSysMessage(LANG_ARENA_ERROR_NOT_FOUND, teamId);
@@ -245,13 +168,6 @@ public:
             return false;
         }
 
-        if (!target)
-        {
-            handler->PSendSysMessage(LANG_PLAYER_NOT_EXIST_OR_OFFLINE, nameStr);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
         if (arena->IsFighting())
         {
             handler->SendSysMessage(LANG_ARENA_ERROR_COMBAT);
@@ -259,49 +175,36 @@ public:
             return false;
         }
 
-        if (!arena->IsMember(targetGuid))
+        if (!target)
+            target = PlayerIdentifier::FromTargetOrSelf(handler);
+        if (!target)
+            return false;
+
+        if (!arena->IsMember(target->GetGUID()))
         {
-            handler->PSendSysMessage(LANG_ARENA_ERROR_NOT_MEMBER, nameStr, arena->GetName().c_str());
+            handler->PSendSysMessage(LANG_ARENA_ERROR_NOT_MEMBER, target->GetName().c_str(), arena->GetName().c_str());
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        if (arena->GetCaptain() == targetGuid)
+        if (arena->GetCaptain() == target->GetGUID())
         {
-            handler->PSendSysMessage(LANG_ARENA_ERROR_CAPTAIN, nameStr, arena->GetName().c_str());
+            handler->PSendSysMessage(LANG_ARENA_ERROR_CAPTAIN, target->GetName().c_str(), arena->GetName().c_str());
             handler->SetSentErrorMessage(true);
             return false;
         }
 
-        arena->SetCaptain(targetGuid);
+        CharacterCacheEntry const* oldCaptainNameData = sCharacterCache->GetCharacterCacheByGuid(arena->GetCaptain());
+        char const* oldCaptainName = oldCaptainNameData ? oldCaptainNameData->Name.c_str() : "<unknown>";
 
-        CharacterNameData const* oldCaptainNameData = sWorld->GetCharacterNameData(arena->GetCaptain());
-        if (!oldCaptainNameData)
-        {
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        handler->PSendSysMessage(LANG_ARENA_CAPTAIN, arena->GetName().c_str(), arena->GetId(), oldCaptainNameData->m_name.c_str(), target->GetName().c_str());
-        if (handler->GetSession())
-            TC_LOG_DEBUG("bg.arena", "GameMaster: %s [GUID: %u] promoted player: %s [GUID: %u] to leader of arena team \"%s\"[Id: %u]",
-                handler->GetSession()->GetPlayer()->GetName().c_str(), handler->GetSession()->GetPlayer()->GetGUIDLow(), target->GetName().c_str(), target->GetGUIDLow(), arena->GetName().c_str(), arena->GetId());
-        else
-            TC_LOG_DEBUG("bg.arena", "Console: promoted player: %s [GUID: %u] to leader of arena team \"%s\"[Id: %u]",
-                target->GetName().c_str(), target->GetGUIDLow(), arena->GetName().c_str(), arena->GetId());
+        arena->SetCaptain(target->GetGUID());
+        handler->PSendSysMessage(LANG_ARENA_CAPTAIN, arena->GetName().c_str(), arena->GetId(), oldCaptainName, target->GetName().c_str());
 
         return true;
     }
 
-    static bool HandleArenaInfoCommand(ChatHandler* handler, char const* args)
+    static bool HandleArenaInfoCommand(ChatHandler* handler, uint32 teamId)
     {
-        if (!*args)
-            return false;
-
-        uint32 teamId = atoi((char*)args);
-        if (!teamId)
-            return false;
-
         ArenaTeam* arena = sArenaTeamMgr->GetArenaTeamById(teamId);
 
         if (!arena)
@@ -313,35 +216,24 @@ public:
 
         handler->PSendSysMessage(LANG_ARENA_INFO_HEADER, arena->GetName().c_str(), arena->GetId(), arena->GetRating(), arena->GetType(), arena->GetType());
         for (ArenaTeam::MemberList::iterator itr = arena->m_membersBegin(); itr != arena->m_membersEnd(); ++itr)
-            handler->PSendSysMessage(LANG_ARENA_INFO_MEMBERS, itr->Name.c_str(), itr->Guid.GetCounter(), itr->PersonalRating, (arena->GetCaptain() == itr->Guid ? "- Captain" : ""));
+            handler->PSendSysMessage(LANG_ARENA_INFO_MEMBERS, itr->Name.c_str(), itr->Guid.ToString().c_str(), itr->PersonalRating, (arena->GetCaptain() == itr->Guid ? " - Captain" : ""));
 
         return true;
     }
 
-    static bool HandleArenaLookupCommand(ChatHandler* handler, char const* args)
+    static bool HandleArenaLookupCommand(ChatHandler* handler, Tail needle)
     {
-        if (!*args)
+        if (needle.empty())
             return false;
-
-        std::string namepart = args;
-        std::wstring wnamepart;
-
-        if (!Utf8toWStr(namepart, wnamepart))
-            return false;
-
-        wstrToLower(wnamepart);
 
         bool found = false;
-        ArenaTeamMgr::ArenaTeamContainer::const_iterator i = sArenaTeamMgr->GetArenaTeamMapBegin();
-        for (; i != sArenaTeamMgr->GetArenaTeamMapEnd(); ++i)
+        for (auto [teamId, team] : sArenaTeamMgr->GetArenaTeams())
         {
-            ArenaTeam* arena = i->second;
-
-            if (Utf8FitTo(arena->GetName(), wnamepart))
+            if (StringContainsStringI(team->GetName(), needle))
             {
                 if (handler->GetSession())
                 {
-                    handler->PSendSysMessage(LANG_ARENA_LOOKUP, arena->GetName().c_str(), arena->GetId(), arena->GetType(), arena->GetType());
+                    handler->PSendSysMessage(LANG_ARENA_LOOKUP, team->GetName().c_str(), team->GetId(), team->GetType(), team->GetType());
                     found = true;
                     continue;
                 }
@@ -349,7 +241,7 @@ public:
         }
 
         if (!found)
-            handler->PSendSysMessage(LANG_AREAN_ERROR_NAME_NOT_FOUND, namepart.c_str());
+            handler->PSendSysMessage(LANG_ARENA_ERROR_NAME_NOT_FOUND, std::string(needle).c_str());
 
         return true;
     }

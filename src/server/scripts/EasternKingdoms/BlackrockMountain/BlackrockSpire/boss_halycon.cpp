@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,8 +16,8 @@
  */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "blackrock_spire.h"
+#include "ScriptedCreature.h"
 
 enum Spells
 {
@@ -38,82 +38,74 @@ enum Events
 
 const Position SummonLocation = { -167.9561f, -411.7844f, 76.23057f, 1.53589f };
 
-class boss_halycon : public CreatureScript
+struct boss_halycon : public BossAI
 {
-public:
-    boss_halycon() : CreatureScript("boss_halycon") { }
-
-    struct boss_halyconAI : public BossAI
+    boss_halycon(Creature* creature) : BossAI(creature, DATA_HALYCON)
     {
-        boss_halyconAI(Creature* creature) : BossAI(creature, DATA_HALYCON)
+        Initialize();
+    }
+
+    void Initialize()
+    {
+        Summoned = false;
+    }
+
+    void Reset() override
+    {
+        _Reset();
+        Initialize();
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        events.ScheduleEvent(EVENT_REND, 17s, 20s);
+        events.ScheduleEvent(EVENT_THRASH, 10s, 12s);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        me->SummonCreature(NPC_GIZRUL_THE_SLAVENER, SummonLocation, TEMPSUMMON_TIMED_DESPAWN, 5min);
+        Talk(EMOTE_DEATH);
+
+        Summoned = true;
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            Summoned = false;
-        }
-
-        void Reset() override
-        {
-            _Reset();
-            Initialize();
-        }
-
-        void EnterCombat(Unit* /*who*/) override
-        {
-            _EnterCombat();
-            events.ScheduleEvent(EVENT_REND, urand(17000,20000));
-            events.ScheduleEvent(EVENT_THRASH, urand(10000,12000));
-        }
-
-        void JustDied(Unit* /*killer*/) override
-        {
-            me->SummonCreature(NPC_GIZRUL_THE_SLAVENER, SummonLocation, TEMPSUMMON_TIMED_DESPAWN, 300000);
-            Talk(EMOTE_DEATH);
-
-            Summoned = true;
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            if (!UpdateVictim())
-                return;
-
-            events.Update(diff);
+            switch (eventId)
+            {
+                case EVENT_REND:
+                    DoCastVictim(SPELL_REND);
+                    events.ScheduleEvent(EVENT_REND, 8s, 10s);
+                    break;
+                case EVENT_THRASH:
+                    DoCast(me, SPELL_THRASH);
+                    break;
+                default:
+                    break;
+            }
 
             if (me->HasUnitState(UNIT_STATE_CASTING))
                 return;
-
-            while (uint32 eventId = events.ExecuteEvent())
-            {
-                switch (eventId)
-                {
-                    case EVENT_REND:
-                        DoCastVictim(SPELL_REND);
-                        events.ScheduleEvent(EVENT_REND, urand(8000,10000));
-                        break;
-                    case EVENT_THRASH:
-                        DoCast(me, SPELL_THRASH);
-                        break;
-                    default:
-                        break;
-                }
-            }
-            DoMeleeAttackIfReady();
         }
-        private:
-            bool Summoned;
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new boss_halyconAI(creature);
+        DoMeleeAttackIfReady();
     }
+    private:
+        bool Summoned;
 };
 
 void AddSC_boss_halycon()
 {
-    new boss_halycon();
+    RegisterBlackrockSpireCreatureAI(boss_halycon);
 }

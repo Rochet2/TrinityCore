@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,18 +18,18 @@
 #ifndef APPENDERFILE_H
 #define APPENDERFILE_H
 
-#include <atomic>
 #include "Appender.h"
+#include <atomic>
 
-class AppenderFile : public Appender
+class TC_COMMON_API AppenderFile : public Appender
 {
     public:
-        typedef std::integral_constant<AppenderType, APPENDER_FILE>::type TypeIndex;
+        static constexpr AppenderType type = APPENDER_FILE;
 
-        AppenderFile(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, ExtraAppenderArgs extraArgs);
+        AppenderFile(uint8 id, std::string const& name, LogLevel level, AppenderFlags flags, std::vector<std::string_view> const& args);
         ~AppenderFile();
         FILE* OpenFile(std::string const& name, std::string const& mode, bool backup);
-        AppenderType getType() const override { return TypeIndex::value; }
+        AppenderType getType() const override { return type; }
 
     private:
         void CloseFile();

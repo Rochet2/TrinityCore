@@ -17,7 +17,15 @@ class AIOMsg
 			const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil())
 			: _val(TTABLE)
 		{
-			Add(scriptKey, handlerKey, a1, a2, a3, a4, a5);
+			Add(scriptKey, handlerKey, a1, a2, a3, a4, a5, a6);
+		}
+
+		AIOMsg(const char* scriptKey, const char* handlerKey,
+			const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
+			const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil())
+			: _val(TTABLE)
+		{
+			Add(LuaVal(scriptKey), LuaVal(handlerKey), a1, a2, a3, a4, a5, a6);
 		}
 
 		//Adds another block
@@ -25,6 +33,13 @@ class AIOMsg
 		AIOMsg &Add(const LuaVal &scriptKey, const LuaVal &handlerKey,
 			const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
 			const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
+
+		AIOMsg &Add(const char* scriptKey, const char* handlerKey,
+			const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
+			const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil())
+		{
+			return Add(LuaVal(scriptKey), LuaVal(handlerKey), a1, a2, a3, a4, a5, a6);
+		}
 
 		//Appends the last block
 		//You can add additional arguments to the last block

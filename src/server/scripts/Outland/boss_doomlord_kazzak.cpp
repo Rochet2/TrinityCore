@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -34,16 +33,17 @@ enum Texts
 
 enum Spells
 {
-    SPELL_SHADOW_VOLLEY         = 32963,
-    SPELL_CLEAVE                = 31779,
-    SPELL_THUNDERCLAP           = 36706,
-    SPELL_VOID_BOLT             = 39329,
-    SPELL_MARK_OF_KAZZAK        = 32960,
-    SPELL_MARK_OF_KAZZAK_DAMAGE = 32961,
-    SPELL_ENRAGE                = 32964,
-    SPELL_CAPTURE_SOUL          = 32966,
-    SPELL_TWISTED_REFLECTION    = 21063,
-    SPELL_BERSERK               = 32965,
+    SPELL_SHADOW_VOLLEY             = 32963,
+    SPELL_CLEAVE                    = 31779,
+    SPELL_THUNDERCLAP               = 36706,
+    SPELL_VOID_BOLT                 = 39329,
+    SPELL_MARK_OF_KAZZAK            = 32960,
+    SPELL_MARK_OF_KAZZAK_DAMAGE     = 32961,
+    SPELL_ENRAGE                    = 32964,
+    SPELL_CAPTURE_SOUL              = 32966,
+    SPELL_TWISTED_REFLECTION        = 21063,
+    SPELL_TWISTED_REFLECTION_HEAL   = 21064,
+    SPELL_BERSERK                   = 32965,
 };
 
 enum Events
@@ -58,172 +58,176 @@ enum Events
     EVENT_BERSERK               = 8
 };
 
-class boss_doomlord_kazzak : public CreatureScript
+struct boss_doomlord_kazzak : public ScriptedAI
 {
-    public:
-        boss_doomlord_kazzak() : CreatureScript("boss_doomlord_kazzak") { }
+    boss_doomlord_kazzak(Creature* creature) : ScriptedAI(creature)
+    {
+    }
 
-        struct boss_doomlordkazzakAI : public ScriptedAI
+    void Reset() override
+    {
+        _events.Reset();
+        _events.ScheduleEvent(EVENT_SHADOW_VOLLEY, 6s, 10s);
+        _events.ScheduleEvent(EVENT_CLEAVE, 7s);
+        _events.ScheduleEvent(EVENT_THUNDERCLAP, 14s, 18s);
+        _events.ScheduleEvent(EVENT_VOID_BOLT, 30s);
+        _events.ScheduleEvent(EVENT_MARK_OF_KAZZAK, 25s);
+        _events.ScheduleEvent(EVENT_ENRAGE, 1min);
+        _events.ScheduleEvent(EVENT_TWISTED_REFLECTION, 33s);
+        _events.ScheduleEvent(EVENT_BERSERK, 3min);
+    }
+
+    void JustAppeared() override
+    {
+        Talk(SAY_INTRO);
+    }
+
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        Talk(SAY_AGGRO);
+    }
+
+    void KilledUnit(Unit* victim) override
+    {
+        // When Kazzak kills a player (not pets/totems), he regens some health
+        if (victim->GetTypeId() != TYPEID_PLAYER)
+            return;
+
+        DoCast(me, SPELL_CAPTURE_SOUL);
+
+        Talk(SAY_KILL);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        Talk(SAY_DEATH);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        // Return since we have no target
+        if (!UpdateVictim())
+            return;
+
+        _events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = _events.ExecuteEvent())
         {
-            boss_doomlordkazzakAI(Creature* creature) : ScriptedAI(creature)
+            switch (eventId)
             {
+                case EVENT_SHADOW_VOLLEY:
+                    DoCastVictim(SPELL_SHADOW_VOLLEY);
+                    _events.ScheduleEvent(EVENT_SHADOW_VOLLEY, 4s, 6s);
+                    break;
+                case EVENT_CLEAVE:
+                    DoCastVictim(SPELL_CLEAVE);
+                    _events.ScheduleEvent(EVENT_CLEAVE, 8s, 12s);
+                    break;
+                case EVENT_THUNDERCLAP:
+                    DoCastVictim(SPELL_THUNDERCLAP);
+                    _events.ScheduleEvent(EVENT_THUNDERCLAP, 10s, 14s);
+                    break;
+                case EVENT_VOID_BOLT:
+                    DoCastVictim(SPELL_VOID_BOLT);
+                    _events.ScheduleEvent(EVENT_VOID_BOLT, 15s, 18s);
+                    break;
+                case EVENT_MARK_OF_KAZZAK:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.0f, true))
+                        DoCast(target, SPELL_MARK_OF_KAZZAK);
+                    _events.ScheduleEvent(EVENT_MARK_OF_KAZZAK, 20s);
+                    break;
+                case EVENT_ENRAGE:
+                    Talk(EMOTE_FRENZY);
+                    DoCast(me, SPELL_ENRAGE);
+                    _events.ScheduleEvent(EVENT_ENRAGE, 30s);
+                    break;
+                case EVENT_TWISTED_REFLECTION:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.0f, true))
+                        DoCast(target, SPELL_TWISTED_REFLECTION);
+                    _events.ScheduleEvent(EVENT_TWISTED_REFLECTION, 15s);
+                    break;
+                case EVENT_BERSERK:
+                    DoCast(me, SPELL_BERSERK);
+                    break;
+                default:
+                    break;
             }
-
-            void Reset() override
-            {
-                _events.Reset();
-                _events.ScheduleEvent(EVENT_SHADOW_VOLLEY, urand(6000, 10000));
-                _events.ScheduleEvent(EVENT_CLEAVE, 7000);
-                _events.ScheduleEvent(EVENT_THUNDERCLAP, urand(14000, 18000));
-                _events.ScheduleEvent(EVENT_VOID_BOLT, 30000);
-                _events.ScheduleEvent(EVENT_MARK_OF_KAZZAK, 25000);
-                _events.ScheduleEvent(EVENT_ENRAGE, 60000);
-                _events.ScheduleEvent(EVENT_TWISTED_REFLECTION, 33000);
-                _events.ScheduleEvent(EVENT_BERSERK, 180000);
-            }
-
-            void JustRespawned() override
-            {
-                Talk(SAY_INTRO);
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                Talk(SAY_AGGRO);
-            }
-
-            void KilledUnit(Unit* victim) override
-            {
-                // When Kazzak kills a player (not pets/totems), he regens some health
-                if (victim->GetTypeId() != TYPEID_PLAYER)
-                    return;
-
-                DoCast(me, SPELL_CAPTURE_SOUL);
-
-                Talk(SAY_KILL);
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                Talk(SAY_DEATH);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                // Return since we have no target
-                if (!UpdateVictim())
-                    return;
-
-                _events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = _events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_SHADOW_VOLLEY:
-                            DoCastVictim(SPELL_SHADOW_VOLLEY);
-                            _events.ScheduleEvent(EVENT_SHADOW_VOLLEY, urand(4000, 6000));
-                            break;
-                        case EVENT_CLEAVE:
-                            DoCastVictim(SPELL_CLEAVE);
-                            _events.ScheduleEvent(EVENT_CLEAVE, urand(8000, 12000));
-                            break;
-                        case EVENT_THUNDERCLAP:
-                            DoCastVictim(SPELL_THUNDERCLAP);
-                            _events.ScheduleEvent(EVENT_THUNDERCLAP, urand(10000, 14000));
-                            break;
-                        case EVENT_VOID_BOLT:
-                            DoCastVictim(SPELL_VOID_BOLT);
-                            _events.ScheduleEvent(EVENT_VOID_BOLT, urand(15000, 18000));
-                            break;
-                        case EVENT_MARK_OF_KAZZAK:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, true))
-                                DoCast(target, SPELL_MARK_OF_KAZZAK);
-                            _events.ScheduleEvent(EVENT_MARK_OF_KAZZAK, 20000);
-                            break;
-                        case EVENT_ENRAGE:
-                            Talk(EMOTE_FRENZY);
-                            DoCast(me, SPELL_ENRAGE);
-                            _events.ScheduleEvent(EVENT_ENRAGE, 30000);
-                            break;
-                        case EVENT_TWISTED_REFLECTION:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, true))
-                                DoCast(target, SPELL_TWISTED_REFLECTION);
-                            _events.ScheduleEvent(EVENT_TWISTED_REFLECTION, 15000);
-                            break;
-                        case EVENT_BERSERK:
-                            DoCast(me, SPELL_BERSERK);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-
-        private:
-            EventMap _events;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_doomlordkazzakAI(creature);
         }
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    EventMap _events;
 };
 
-class spell_mark_of_kazzak : public SpellScriptLoader
+// 32960 - Mark of Kazzak
+class spell_mark_of_kazzak : public AuraScript
 {
-    public:
-        spell_mark_of_kazzak() : SpellScriptLoader("spell_mark_of_kazzak") { }
+    PrepareAuraScript(spell_mark_of_kazzak);
 
-        class spell_mark_of_kazzak_AuraScript : public AuraScript
+    bool Validate(SpellInfo const* /*spell*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MARK_OF_KAZZAK_DAMAGE });
+    }
+
+    void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& /*canBeRecalculated*/)
+    {
+        if (Unit* owner = GetUnitOwner())
+            amount = CalculatePct(owner->GetPower(POWER_MANA), 5);
+    }
+
+    void OnPeriodic(AuraEffect const* aurEff)
+    {
+        Unit* target = GetTarget();
+
+        if (target->GetPower(POWER_MANA) == 0)
         {
-            PrepareAuraScript(spell_mark_of_kazzak_AuraScript);
-
-            bool Validate(SpellInfo const* /*spell*/) override
-            {
-                if (!sSpellMgr->GetSpellInfo(SPELL_MARK_OF_KAZZAK_DAMAGE))
-                    return false;
-                return true;
-            }
-
-            void CalculateAmount(AuraEffect const* /*aurEff*/, int32& amount, bool& /*canBeRecalculated*/)
-            {
-                if (Unit* owner = GetUnitOwner())
-                    amount = CalculatePct(owner->GetPower(POWER_MANA), 5);
-            }
-
-            void OnPeriodic(AuraEffect const* aurEff)
-            {
-                Unit* target = GetTarget();
-
-                if (target->GetPower(POWER_MANA) == 0)
-                {
-                    target->CastSpell(target, SPELL_MARK_OF_KAZZAK_DAMAGE, true, NULL, aurEff);
-                    // Remove aura
-                    SetDuration(0);
-                }
-            }
-
-            void Register() override
-            {
-                DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_mark_of_kazzak_AuraScript::CalculateAmount, EFFECT_0, SPELL_AURA_PERIODIC_MANA_LEECH);
-                OnEffectPeriodic += AuraEffectPeriodicFn(spell_mark_of_kazzak_AuraScript::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_MANA_LEECH);
-            }
-        };
-
-        AuraScript* GetAuraScript() const override
-        {
-            return new spell_mark_of_kazzak_AuraScript();
+            target->CastSpell(target, SPELL_MARK_OF_KAZZAK_DAMAGE, aurEff);
+            // Remove aura
+            SetDuration(0);
         }
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_mark_of_kazzak::CalculateAmount, EFFECT_0, SPELL_AURA_PERIODIC_MANA_LEECH);
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_mark_of_kazzak::OnPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_MANA_LEECH);
+    }
+};
+
+// 21063 - Twisted Reflection
+class spell_twisted_reflection : public AuraScript
+{
+    PrepareAuraScript(spell_twisted_reflection);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_TWISTED_REFLECTION_HEAL });
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+    {
+        PreventDefaultAction();
+        DamageInfo* damageInfo = eventInfo.GetDamageInfo();
+        if (!damageInfo || !damageInfo->GetDamage())
+            return;
+
+        eventInfo.GetActionTarget()->CastSpell(eventInfo.GetActor(), SPELL_TWISTED_REFLECTION_HEAL, aurEff);
+    }
+
+    void Register() override
+    {
+        OnEffectProc += AuraEffectProcFn(spell_twisted_reflection::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
 };
 
 void AddSC_boss_doomlordkazzak()
 {
-    new boss_doomlord_kazzak();
-    new spell_mark_of_kazzak();
+    RegisterCreatureAI(boss_doomlord_kazzak);
+    RegisterSpellScript(spell_mark_of_kazzak);
+    RegisterSpellScript(spell_twisted_reflection);
 }

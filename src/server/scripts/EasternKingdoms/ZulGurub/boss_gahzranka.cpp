@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,100 +15,85 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Boss_Gahz'ranka
-SD%Complete: 85
-SDComment: Massive Geyser with knockback not working. Spell buggy.
-SDCategory: Zul'Gurub
-EndScriptData */
-
-#include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "zulgurub.h"
+#include "ScriptedCreature.h"
+#include "ScriptMgr.h"
 
 enum Spells
 {
-    SPELL_FROSTBREATH               = 16099,
-    SPELL_MASSIVEGEYSER             = 22421, // Not working. (summon)
-    SPELL_SLAM                      = 24326
+    SPELL_FROSTBREATH = 16099,
+    SPELL_MASSIVEGEYSER = 22421, // Not working. (summon)
+    SPELL_SLAM = 24326
 };
 
 enum Events
 {
-    EVENT_FROSTBREATH               = 1,
-    EVENT_MASSIVEGEYSER             = 2,
-    EVENT_SLAM                      = 3
+    EVENT_FROSTBREATH = 1,
+    EVENT_MASSIVEGEYSER = 2,
+    EVENT_SLAM = 3
 };
 
-class boss_gahzranka : public CreatureScript // gahzranka
+struct boss_gahzranka : public BossAI
 {
-    public:
-        boss_gahzranka() : CreatureScript("boss_gahzranka") { }
+    boss_gahzranka(Creature* creature) : BossAI(creature, DATA_GAHZRANKA) { }
 
-        struct boss_gahzrankaAI : public BossAI
+    void Reset() override
+    {
+        _Reset();
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        _JustDied();
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        events.ScheduleEvent(EVENT_FROSTBREATH, 8s);
+        events.ScheduleEvent(EVENT_MASSIVEGEYSER, 25s);
+        events.ScheduleEvent(EVENT_SLAM, 15s);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_gahzrankaAI(Creature* creature) : BossAI(creature, DATA_GAHZRANKA) { }
-
-            void Reset() override
+            switch (eventId)
             {
-                _Reset();
+                case EVENT_FROSTBREATH:
+                    DoCastVictim(SPELL_FROSTBREATH, true);
+                    events.ScheduleEvent(EVENT_FROSTBREATH, 7s, 11s);
+                    break;
+                case EVENT_MASSIVEGEYSER:
+                    DoCastVictim(SPELL_MASSIVEGEYSER, true);
+                    events.ScheduleEvent(EVENT_MASSIVEGEYSER, 22s, 32s);
+                    break;
+                case EVENT_SLAM:
+                    DoCastVictim(SPELL_SLAM, true);
+                    events.ScheduleEvent(EVENT_SLAM, 12s, 20s);
+                    break;
+                default:
+                    break;
             }
 
-            void JustDied(Unit* /*killer*/) override
-            {
-                _JustDied();
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_FROSTBREATH, 8000);
-                events.ScheduleEvent(EVENT_MASSIVEGEYSER, 25000);
-                events.ScheduleEvent(EVENT_SLAM, 17000);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_FROSTBREATH:
-                            DoCastVictim(SPELL_FROSTBREATH, true);
-                            events.ScheduleEvent(EVENT_FROSTBREATH, urand(7000, 11000));
-                            break;
-                        case EVENT_MASSIVEGEYSER:
-                            DoCastVictim(SPELL_MASSIVEGEYSER, true);
-                            events.ScheduleEvent(EVENT_MASSIVEGEYSER, urand(22000, 32000));
-                            break;
-                        case EVENT_SLAM:
-                            DoCastVictim(SPELL_SLAM, true);
-                            events.ScheduleEvent(EVENT_SLAM, urand(12000, 20000));
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_gahzrankaAI(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+
+        DoMeleeAttackIfReady();
+    }
 };
 
 void AddSC_boss_gahzranka()
 {
-    new boss_gahzranka();
+    RegisterZulGurubCreatureAI(boss_gahzranka);
 }

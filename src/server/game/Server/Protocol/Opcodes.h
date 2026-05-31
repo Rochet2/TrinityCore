@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,12 +22,11 @@
 #ifndef _OPCODES_H
 #define _OPCODES_H
 
-#include "Common.h"
+#include "Define.h"
+#include <string>
 
-/// List of Opcodes
-enum Opcodes
+enum Opcodes : uint16
 {
-    MSG_NULL_ACTION                                 = 0x000,
     CMSG_BOOTME                                     = 0x001,
     CMSG_DBLOOKUP                                   = 0x002,
     SMSG_DBLOOKUP                                   = 0x003,
@@ -94,7 +92,7 @@ enum Opcodes
     SMSG_TRANSFER_PENDING                           = 0x03F,
     SMSG_TRANSFER_ABORTED                           = 0x040,
     SMSG_CHARACTER_LOGIN_FAILED                     = 0x041,
-    SMSG_LOGIN_SETTIMESPEED                         = 0x042,
+    SMSG_LOGIN_SET_TIME_SPEED                       = 0x042,
     SMSG_GAMETIME_UPDATE                            = 0x043,
     CMSG_GAMETIME_SET                               = 0x044,
     SMSG_GAMETIME_SET                               = 0x045,
@@ -349,15 +347,15 @@ enum Opcodes
     CMSG_DELETEEQUIPMENT_SET                        = 0x13E,
     CMSG_INSTANCE_LOCK_RESPONSE                     = 0x13F,
     CMSG_DEBUG_PASSIVE_AURA                         = 0x140,
-    CMSG_ATTACKSWING                                = 0x141,
-    CMSG_ATTACKSTOP                                 = 0x142,
-    SMSG_ATTACKSTART                                = 0x143,
-    SMSG_ATTACKSTOP                                 = 0x144,
-    SMSG_ATTACKSWING_NOTINRANGE                     = 0x145,
-    SMSG_ATTACKSWING_BADFACING                      = 0x146,
+    CMSG_ATTACK_SWING                               = 0x141,
+    CMSG_ATTACK_STOP                                = 0x142,
+    SMSG_ATTACK_START                               = 0x143,
+    SMSG_ATTACK_STOP                                = 0x144,
+    SMSG_ATTACK_SWING_NOT_IN_RANGE                  = 0x145,
+    SMSG_ATTACK_SWING_BAD_FACING                    = 0x146,
     SMSG_INSTANCE_LOCK_WARNING_QUERY                = 0x147,
-    SMSG_ATTACKSWING_DEADTARGET                     = 0x148,
-    SMSG_ATTACKSWING_CANT_ATTACK                    = 0x149,
+    SMSG_ATTACK_SWING_DEAD_TARGET                   = 0x148,
+    SMSG_ATTACK_SWING_CANT_ATTACK                   = 0x149,
     SMSG_ATTACKERSTATEUPDATE                        = 0x14A,
     SMSG_BATTLEFIELD_PORT_DENIED                    = 0x14B,
     CMSG_PERFORM_ACTION_SET                         = 0x14C,
@@ -369,10 +367,10 @@ enum Opcodes
     SMSG_BREAK_TARGET                               = 0x152,
     CMSG_SAVE_PLAYER                                = 0x153,
     CMSG_SETDEATHBINDPOINT                          = 0x154,
-    SMSG_BINDPOINTUPDATE                            = 0x155,
+    SMSG_BIND_POINT_UPDATE                          = 0x155,
     CMSG_GETDEATHBINDZONE                           = 0x156,
     SMSG_BINDZONEREPLY                              = 0x157,
-    SMSG_PLAYERBOUND                                = 0x158,
+    SMSG_PLAYER_BOUND                               = 0x158,
     SMSG_CLIENT_CONTROL_UPDATE                      = 0x159,
     CMSG_REPOP_REQUEST                              = 0x15A,
     SMSG_RESURRECT_REQUEST                          = 0x15B,
@@ -394,7 +392,7 @@ enum Opcodes
     SMSG_DUEL_WINNER                                = 0x16B,
     CMSG_DUEL_ACCEPTED                              = 0x16C,
     CMSG_DUEL_CANCELLED                             = 0x16D,
-    SMSG_MOUNTRESULT                                = 0x16E,
+    SMSG_MOUNT_RESULT                               = 0x16E,
     SMSG_DISMOUNTRESULT                             = 0x16F,
     SMSG_REMOVED_FROM_PVP_QUEUE                     = 0x170,
     CMSG_MOUNTSPECIAL_ANIM                          = 0x171,
@@ -420,12 +418,12 @@ enum Opcodes
     SMSG_QUESTGIVER_QUEST_LIST                      = 0x185,
     CMSG_QUESTGIVER_QUERY_QUEST                     = 0x186,
     CMSG_QUESTGIVER_QUEST_AUTOLAUNCH                = 0x187,
-    SMSG_QUESTGIVER_QUEST_DETAILS                   = 0x188,
+    SMSG_QUEST_GIVER_QUEST_DETAILS                  = 0x188,
     CMSG_QUESTGIVER_ACCEPT_QUEST                    = 0x189,
     CMSG_QUESTGIVER_COMPLETE_QUEST                  = 0x18A,
     SMSG_QUESTGIVER_REQUEST_ITEMS                   = 0x18B,
     CMSG_QUESTGIVER_REQUEST_REWARD                  = 0x18C,
-    SMSG_QUESTGIVER_OFFER_REWARD                    = 0x18D,
+    SMSG_QUEST_GIVER_OFFER_REWARD_MESSAGE           = 0x18D,
     CMSG_QUESTGIVER_CHOOSE_REWARD                   = 0x18E,
     SMSG_QUESTGIVER_QUEST_INVALID                   = 0x18F,
     CMSG_QUESTGIVER_CANCEL                          = 0x190,
@@ -508,7 +506,7 @@ enum Opcodes
     SMSG_PONG                                       = 0x1DD,
     SMSG_CLEAR_COOLDOWN                             = 0x1DE,
     SMSG_GAMEOBJECT_PAGETEXT                        = 0x1DF,
-    CMSG_SETSHEATHED                                = 0x1E0,
+    CMSG_SET_SHEATHED                               = 0x1E0,
     SMSG_COOLDOWN_CHEAT                             = 0x1E1,
     SMSG_SPELL_DELAYED                              = 0x1E2,
     CMSG_QUEST_POI_QUERY                            = 0x1E3,
@@ -536,7 +534,7 @@ enum Opcodes
     CMSG_GM_SET_SECURITY_GROUP                      = 0x1F9,
     CMSG_GM_NUKE                                    = 0x1FA,
     MSG_RANDOM_ROLL                                 = 0x1FB,
-    SMSG_ENVIRONMENTALDAMAGELOG                     = 0x1FC,
+    SMSG_ENVIRONMENTAL_DAMAGE_LOG                   = 0x1FC,
     CMSG_CHANGEPLAYER_DIFFICULTY                    = 0x1FD,
     SMSG_RWHOIS                                     = 0x1FE,
     SMSG_LFG_PLAYER_REWARD                          = 0x1FF, // uint32, uint8, uint32, uint32, uint32, uint32, uint32, uint8, for (uint8) {uint32, uint32, uint32}
@@ -685,7 +683,7 @@ enum Opcodes
     CMSG_GROUP_RAID_CONVERT                         = 0x28E,
     CMSG_GROUP_ASSISTANT_LEADER                     = 0x28F,
     CMSG_BUYBACK_ITEM                               = 0x290,
-    SMSG_SERVER_MESSAGE                             = 0x291,
+    SMSG_CHAT_SERVER_MESSAGE                        = 0x291,
     CMSG_SET_SAVED_INSTANCE_EXTEND                  = 0x292,
     SMSG_LFG_OFFER_CONTINUE                         = 0x293,
     CMSG_TEST_DROP_RATE                             = 0x294,
@@ -1206,7 +1204,7 @@ enum Opcodes
     CMSG_FLOOD_GRACE_CHEAT                          = 0x497,
     SMSG_SERVER_FIRST_ACHIEVEMENT                   = 0x498,
     SMSG_PET_LEARNED_SPELL                          = 0x499,
-    SMSG_PET_REMOVED_SPELL                          = 0x49A,
+    SMSG_PET_UNLEARNED_SPELL                        = 0x49A,
     CMSG_CHANGE_SEATS_ON_CONTROLLED_VEHICLE         = 0x49B,
     CMSG_HEARTH_AND_RESURRECT                       = 0x49C,
     SMSG_ON_CANCEL_EXPECTED_RIDE_VEHICLE_AURA       = 0x49D,
@@ -1302,7 +1300,7 @@ enum Opcodes
     SMSG_WORLD_STATE_UI_TIMER_UPDATE                = 0x4F7,
     CMSG_CHAR_RACE_CHANGE                           = 0x4F8,
     MSG_VIEW_PHASE_SHIFT                            = 0x4F9,
-    SMSG_TALENTS_INVOLUNTARILY_RESET                = 0x4FA, // uint8
+    SMSG_TALENTS_INVOLUNTARILY_RESET                = 0x4FA, // uint8 (0 - player talents, 1 - player pet talents)
     CMSG_DEBUG_SERVER_GEO                           = 0x4FB,
     SMSG_DEBUG_SERVER_GEO                           = 0x4FC,
     SMSG_LOOT_SLOT_CHANGED                          = 0x4FD,
@@ -1321,12 +1319,12 @@ enum Opcodes
     SMSG_CAMERA_SHAKE                               = 0x50A, // uint32 SpellEffectCameraShakes.dbc index, uint32
     SMSG_SOCKET_GEMS_RESULT                         = 0x50B,
     CMSG_SET_CHARACTER_MODEL                        = 0x50C,
-    SMSG_REDIRECT_CLIENT                            = 0x50D, // uint32 ip, uint16 port, uint32 unk, uint8[20] hash (ip + port, seed=sessionkey)
-    CMSG_REDIRECTION_FAILED                         = 0x50E, // something with networking
+    SMSG_CONNECT_TO                                 = 0x50D, // uint32 ip, uint16 port, uint32 unk, uint8[20] hash (ip + port, seed=sessionkey)
+    CMSG_CONNECT_TO_FAILED                          = 0x50E, // something with networking
     SMSG_SUSPEND_COMMS                              = 0x50F,
     CMSG_SUSPEND_COMMS_ACK                          = 0x510,
-    SMSG_FORCE_SEND_QUEUED_PACKETS                  = 0x511,
-    CMSG_REDIRECTION_AUTH_PROOF                     = 0x512,
+    SMSG_RESUME_COMMS                               = 0x511,
+    CMSG_AUTH_CONTINUED_SESSION                     = 0x512,
     CMSG_DROP_NEW_CONNECTION                        = 0x513,
     SMSG_SEND_ALL_COMBAT_LOG                        = 0x514,
     SMSG_OPEN_LFG_DUNGEON_FINDER                    = 0x515,
@@ -1341,6 +1339,15 @@ enum Opcodes
     SMSG_MULTIPLE_MOVES                             = 0x51E, // uncompressed version of SMSG_COMPRESSED_MOVES
     NUM_MSG_TYPES                                   = 0x51F
 };
+
+enum OpcodeMisc : uint16
+{
+    NUM_OPCODE_HANDLERS = NUM_MSG_TYPES,
+    NULL_OPCODE = 0x0000
+};
+
+typedef Opcodes OpcodeClient;
+typedef Opcodes OpcodeServer;
 
 /// Player state
 enum SessionStatus
@@ -1363,34 +1370,64 @@ enum PacketProcessing
 class WorldSession;
 class WorldPacket;
 
-#pragma pack(push, 1)
-
-struct OpcodeHandler
+class OpcodeHandler
 {
-    char const* name;
-    SessionStatus status;
-    PacketProcessing packetProcessing;
-    void (WorldSession::*handler)(WorldPacket& recvPacket);
+public:
+    OpcodeHandler(char const* name, SessionStatus status) : Name(name), Status(status) { }
+    virtual ~OpcodeHandler() { }
+
+    char const* Name;
+    SessionStatus Status;
 };
 
-extern OpcodeHandler opcodeTable[NUM_MSG_TYPES];
+class ClientOpcodeHandler : public OpcodeHandler
+{
+public:
+    ClientOpcodeHandler(char const* name, SessionStatus status, PacketProcessing processing)
+        : OpcodeHandler(name, status), ProcessingPlace(processing) { }
 
-#pragma pack(pop)
+    virtual void Call(WorldSession* session, WorldPacket& packet) const = 0;
+
+    PacketProcessing ProcessingPlace;
+};
+
+class ServerOpcodeHandler : public OpcodeHandler
+{
+public:
+    ServerOpcodeHandler(char const* name, SessionStatus status)
+        : OpcodeHandler(name, status) { }
+};
+
+class OpcodeTable
+{
+    public:
+        OpcodeTable();
+
+        OpcodeTable(OpcodeTable const&) = delete;
+        OpcodeTable& operator=(OpcodeTable const&) = delete;
+
+        ~OpcodeTable();
+
+        void Initialize();
+
+        ClientOpcodeHandler const* operator[](Opcodes index) const
+        {
+            return _internalTableClient[index];
+        }
+
+    private:
+        template<typename Handler, Handler HandlerFunction>
+        void ValidateAndSetClientOpcode(OpcodeClient opcode, char const* name, SessionStatus status, PacketProcessing processing);
+
+        void ValidateAndSetServerOpcode(OpcodeServer opcode, char const* name, SessionStatus status);
+
+        ClientOpcodeHandler* _internalTableClient[NUM_OPCODE_HANDLERS];
+};
+
+extern OpcodeTable opcodeTable;
 
 /// Lookup opcode name for human understandable logging
-inline const char* LookupOpcodeName(uint16 id)
-{
-    if (id >= NUM_MSG_TYPES)
-        return "Received unknown opcode, it's more than max!";
-    return opcodeTable[id].name;
-}
-
-inline std::string GetOpcodeNameForLogging(uint16 opcode)
-{
-    std::ostringstream ss;
-    ss << '[' << LookupOpcodeName(opcode) << " 0x" << std::hex << std::uppercase << opcode << std::nouppercase << " (" << std::dec << opcode << ")]";
-    return ss.str();
-}
+std::string GetOpcodeNameForLogging(Opcodes opcode);
 
 #endif
 /// @}

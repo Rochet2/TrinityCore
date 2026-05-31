@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -56,19 +55,19 @@ public:
         float getFloat(size_t field) const
         {
             assert(field < file.fieldCount);
-            return *reinterpret_cast<float*>(offset+field*4);
+            return *reinterpret_cast<float*>(offset + field * 4);
         }
         unsigned int getUInt(size_t field) const
         {
             assert(field < file.fieldCount);
-            return *reinterpret_cast<unsigned int*>(offset+field*4);
+            return *reinterpret_cast<unsigned int*>(offset + field * 4);
         }
         int getInt(size_t field) const
         {
             assert(field < file.fieldCount);
-            return *reinterpret_cast<int*>(offset+field*4);
+            return *reinterpret_cast<int*>(offset + field * 4);
         }
-        const char *getString(size_t field) const
+        char const*getString(size_t field) const
         {
             assert(field < file.fieldCount);
             size_t stringOffset = getUInt(field);
@@ -76,9 +75,9 @@ public:
             return reinterpret_cast<char*>(file.stringTable + stringOffset);
         }
     private:
-        Record(DBCFile &file, unsigned char *offset): file(file), offset(offset) {}
-        DBCFile &file;
-        unsigned char *offset;
+        Record(DBCFile& file, unsigned char* offset) : file(file), offset(offset) { }
+        DBCFile& file;
+        unsigned char* offset;
 
         friend class DBCFile;
         friend class DBCFile::Iterator;
@@ -90,27 +89,24 @@ public:
     class Iterator
     {
     public:
-        Iterator(DBCFile &file, unsigned char *offset):
+        Iterator(DBCFile& file, unsigned char* offset) :
             record(file, offset) {}
         /// Advance (prefix only)
-        Iterator & operator++() {
+        Iterator& operator++() {
             record.offset += record.file.recordSize;
             return *this;
         }
         /// Return address of current instance
-        Record const & operator*() const { return record; }
-        const Record* operator->() const {
+        Record const& operator*() const { return record; }
+        Record const* operator->() const {
             return &record;
         }
         /// Comparison
-        bool operator==(const Iterator &b) const
+        bool operator==(Iterator const& b) const
         {
             return record.offset == b.record.offset;
         }
-        bool operator!=(const Iterator &b) const
-        {
-            return record.offset != b.record.offset;
-        }
+
     private:
         Record record;
 
@@ -133,9 +129,8 @@ private:
     size_t recordCount;
     size_t fieldCount;
     size_t stringSize;
-    unsigned char *data;
-    unsigned char *stringTable;
+    unsigned char* data;
+    unsigned char* stringTable;
 };
 
 #endif
-

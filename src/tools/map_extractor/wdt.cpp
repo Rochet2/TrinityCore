@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,16 +19,8 @@
 
 #include "wdt.h"
 
-u_map_fcc MWMOMagic = { {'O', 'M', 'W', 'M'} };
 u_map_fcc MPHDMagic = { {'D', 'H', 'P', 'M'} };
 u_map_fcc MAINMagic = { {'N', 'I', 'A', 'M'} };
-
-bool wdt_MWMO::prepareLoadedData()
-{
-    if (fcc != MWMOMagic.fcc)
-        return false;
-    return true;
-}
 
 bool wdt_MPHD::prepareLoadedData()
 {
@@ -49,7 +40,6 @@ WDT_file::WDT_file()
 {
     mphd = 0;
     main = 0;
-    wmo  = 0;
 }
 
 WDT_file::~WDT_file()
@@ -61,7 +51,6 @@ void WDT_file::free()
 {
     mphd = 0;
     main = 0;
-    wmo  = 0;
     FileLoader::free();
 }
 
@@ -76,9 +65,6 @@ bool WDT_file::prepareLoadedData()
         return false;
     main = (wdt_MAIN *)((uint8*)mphd + mphd->size+8);
     if (!main->prepareLoadedData())
-        return false;
-    wmo = (wdt_MWMO *)((uint8*)main+ main->size+8);
-    if (!wmo->prepareLoadedData())
         return false;
     return true;
 }

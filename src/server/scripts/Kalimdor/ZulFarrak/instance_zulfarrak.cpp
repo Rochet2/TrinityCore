@@ -1,5 +1,5 @@
- /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+/*
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,10 +16,13 @@
  */
 
 #include "ScriptMgr.h"
+#include "GameObject.h"
 #include "InstanceScript.h"
-#include "zulfarrak.h"
+#include "Map.h"
+#include "MotionMaster.h"
 #include "Player.h"
 #include "TemporarySummon.h"
+#include "zulfarrak.h"
 
 enum Misc
 {
@@ -27,7 +30,7 @@ enum Misc
     NPC_GAHZRILLA       = 7273,
 
     // Paths
-    PATH_ADDS           = 81553
+    PATH_ADDS           = 652424
 };
 
 int const pyramidSpawnTotal = 54;
@@ -99,7 +102,7 @@ float Spawnsway[2][3] =
 class instance_zulfarrak : public InstanceMapScript
 {
 public:
-    instance_zulfarrak() : InstanceMapScript("instance_zulfarrak", 209) { }
+    instance_zulfarrak() : InstanceMapScript(ZFScriptName, 209) { }
 
     InstanceScript* GetInstanceScript(InstanceMap* map) const override
     {
@@ -108,7 +111,7 @@ public:
 
     struct instance_zulfarrak_InstanceMapScript : public InstanceScript
     {
-        instance_zulfarrak_InstanceMapScript(Map* map) : InstanceScript(map)
+        instance_zulfarrak_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
         {
             SetHeaders(DataHeader);
             GahzRillaEncounter = NOT_STARTED;
@@ -216,9 +219,9 @@ public:
             switch (type)
             {
                 case EVENT_PYRAMID:
-                    PyramidPhase=data;
+                    PyramidPhase = data;
                     break;
-            };
+            }
         }
 
         virtual void Update(uint32 diff) override

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,95 +16,87 @@
  */
 
 /*
-Name: Boss_the_ravenian
-%Complete: 100
-Comment:
-Category: Scholomance
-*/
+ * Timers requires to be revisited
+ */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "scholomance.h"
+#include "ScriptedCreature.h"
 
-enum Spells
+enum RavenianSpells
 {
     SPELL_TRAMPLE                   = 15550,
-    SPELL_CLEAVE                    = 20691,
-    SPELL_SUNDERINCLEAVE            = 25174,
-    SPELL_KNOCKAWAY                 = 10101
+    SPELL_CLEAVE                    = 40504,
+    SPELL_SUNDERING_CLEAVE          = 17963,
+    SPELL_KNOCK_AWAY                = 18670
 };
 
-enum Events
+enum RavenianEvents
 {
     EVENT_TRAMPLE                   = 1,
-    EVENT_CLEAVE                    = 2,
-    EVENT_SUNDERINCLEAVE            = 3,
-    EVENT_KNOCKAWAY                 = 4
+    EVENT_CLEAVE,
+    EVENT_SUNDERING_CLEAVE,
+    EVENT_KNOCK_AWAY
 };
 
-class boss_the_ravenian : public CreatureScript
+// 10507 - The Ravenian
+struct boss_the_ravenian : public BossAI
 {
-    public: boss_the_ravenian() : CreatureScript("boss_the_ravenian") { }
+    boss_the_ravenian(Creature* creature) : BossAI(creature, DATA_THE_RAVENIAN) { }
 
-        struct boss_theravenianAI : public BossAI
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+
+        events.ScheduleEvent(EVENT_TRAMPLE, 8s, 15s);
+        events.ScheduleEvent(EVENT_CLEAVE, 10s, 15s);
+        events.ScheduleEvent(EVENT_SUNDERING_CLEAVE, 20s, 30s);
+        events.ScheduleEvent(EVENT_KNOCK_AWAY, 5s, 10s);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_theravenianAI(Creature* creature) : BossAI(creature, DATA_THERAVENIAN) { }
-
-            void EnterCombat(Unit* /*who*/) override
+            switch (eventId)
             {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_TRAMPLE, 24000);
-                events.ScheduleEvent(EVENT_CLEAVE, 15000);
-                events.ScheduleEvent(EVENT_SUNDERINCLEAVE, 40000);
-                events.ScheduleEvent(EVENT_KNOCKAWAY, 32000);
+                case EVENT_TRAMPLE:
+                    DoCastSelf(SPELL_TRAMPLE);
+                    events.Repeat(8s, 15s);
+                    break;
+                case EVENT_CLEAVE:
+                    DoCastVictim(SPELL_CLEAVE);
+                    events.Repeat(10s, 15s);
+                    break;
+                case EVENT_SUNDERING_CLEAVE:
+                    DoCastVictim(SPELL_SUNDERING_CLEAVE);
+                    events.Repeat(20s, 30s);
+                    break;
+                case EVENT_KNOCK_AWAY:
+                    DoCastVictim(SPELL_KNOCK_AWAY);
+                    events.Repeat(8s, 15s);
+                    break;
+                default:
+                    break;
             }
 
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_TRAMPLE:
-                            DoCastVictim(SPELL_TRAMPLE, true);
-                            events.ScheduleEvent(EVENT_TRAMPLE, 10000);
-                            break;
-                        case EVENT_CLEAVE:
-                            DoCastVictim(SPELL_CLEAVE, true);
-                            events.ScheduleEvent(EVENT_CLEAVE, 7000);
-                            break;
-                        case EVENT_SUNDERINCLEAVE:
-                            DoCastVictim(SPELL_SUNDERINCLEAVE, true);
-                            events.ScheduleEvent(EVENT_SUNDERINCLEAVE, 20000);
-                            break;
-                        case EVENT_KNOCKAWAY:
-                            DoCastVictim(SPELL_KNOCKAWAY, true);
-                            events.ScheduleEvent(EVENT_KNOCKAWAY, 12000);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_theravenianAI(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+
+        DoMeleeAttackIfReady();
+    }
 };
 
 void AddSC_boss_theravenian()
 {
-    new boss_the_ravenian();
+    RegisterScholomanceCreatureAI(boss_the_ravenian);
 }

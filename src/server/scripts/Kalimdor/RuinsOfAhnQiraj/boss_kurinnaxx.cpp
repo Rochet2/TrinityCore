@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,129 +15,170 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ObjectMgr.h"
+/*
+ * Timers requires to be revisited
+ */
+
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "Containers.h"
+#include "InstanceScript.h"
 #include "ruins_of_ahnqiraj.h"
-#include "CreatureTextMgr.h"
+#include "ScriptedCreature.h"
+#include "SpellInfo.h"
+#include "SpellScript.h"
 
-enum Spells
+enum KurinnaxxTexts
 {
-    SPELL_MORTALWOUND       = 25646,
-    SPELL_SANDTRAP          = 25648,
-    SPELL_ENRAGE            = 26527,
-    SPELL_SUMMON_PLAYER     = 26446,
-    SPELL_TRASH             =  3391, // Should perhaps be triggered by an aura? Couldn't find any though
-    SPELL_WIDE_SLASH        = 25814
+    SAY_KURINAXX_DEATH           = 5,
+    EMOTE_FRENZY                 = 0
 };
 
-enum Events
+enum KurinnaxxSpells
 {
-    EVENT_MORTAL_WOUND      = 1,
-    EVENT_SANDTRAP          = 2,
-    EVENT_TRASH             = 3,
-    EVENT_WIDE_SLASH        = 4
+    SPELL_MORTAL_WOUND           = 25646,
+    SPELL_SAND_TRAP_TRIGGER      = 26524,
+    SPELL_THRASH                 =  3391,
+    SPELL_WIDE_SLASH             = 25814,
+    SPELL_FRENZY                 = 26527,
+    SPELL_SUMMON_PLAYER          = 26446,
+
+    SPELL_SAND_TRAP_EFFECT       = 25648
 };
 
-enum Texts
+enum KurinnaxxEvents
 {
-    SAY_KURINAXX_DEATH      = 5, // Yelled by Ossirian the Unscarred
+    EVENT_MORTAL_WOUND           = 1,
+    EVENT_SAND_TRAP,
+    EVENT_THRASH,
+    EVENT_WIDE_SLASH,
+    EVENT_FRENZY,
+    EVENT_SUMMON_PLAYER
 };
 
-class boss_kurinnaxx : public CreatureScript
+// 15348 - Kurinnaxx
+struct boss_kurinnaxx : public BossAI
 {
-    public:
-        boss_kurinnaxx() : CreatureScript("boss_kurinnaxx") { }
+    boss_kurinnaxx(Creature* creature) : BossAI(creature, DATA_KURINNAXX), _frenzied(false) { }
 
-        struct boss_kurinnaxxAI : public BossAI
+    void Reset() override
+    {
+        _Reset();
+        _frenzied = false;
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+
+        events.ScheduleEvent(EVENT_MORTAL_WOUND, 2s, 8s);
+        events.ScheduleEvent(EVENT_SAND_TRAP, 5s, 10s);
+        events.ScheduleEvent(EVENT_THRASH, 0s, 15s);
+        events.ScheduleEvent(EVENT_WIDE_SLASH, 10s, 15s);
+        events.ScheduleEvent(EVENT_SUMMON_PLAYER, 5s);
+    }
+
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (!_frenzied && me->HealthBelowPctDamaged(30, damage))
         {
-            boss_kurinnaxxAI(Creature* creature) : BossAI(creature, DATA_KURINNAXX)
-            {
-                Initialize();
-            }
-
-            void Initialize()
-            {
-                _enraged = false;
-            }
-
-            void Reset() override
-            {
-                _Reset();
-                Initialize();
-                events.ScheduleEvent(EVENT_MORTAL_WOUND, 8000);
-                events.ScheduleEvent(EVENT_SANDTRAP, urand(5000, 15000));
-                events.ScheduleEvent(EVENT_TRASH, 1000);
-                events.ScheduleEvent(EVENT_WIDE_SLASH, 11000);
-            }
-
-            void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
-            {
-                if (!_enraged && HealthBelowPct(30))
-                {
-                    DoCast(me, SPELL_ENRAGE);
-                    _enraged = true;
-                }
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                _JustDied();
-                if (Creature* Ossirian = me->GetMap()->GetCreature(instance->GetGuidData(DATA_OSSIRIAN)))
-                    sCreatureTextMgr->SendChat(Ossirian, SAY_KURINAXX_DEATH, NULL, CHAT_MSG_ADDON, LANG_ADDON, TEXT_RANGE_ZONE);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_MORTAL_WOUND:
-                            DoCastVictim(SPELL_MORTALWOUND);
-                            events.ScheduleEvent(EVENT_MORTAL_WOUND, 8000);
-                            break;
-                        case EVENT_SANDTRAP:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100, true))
-                                target->CastSpell(target, SPELL_SANDTRAP, true);
-                            else if (Unit* victim = me->GetVictim())
-                                victim->CastSpell(victim, SPELL_SANDTRAP, true);
-                            events.ScheduleEvent(EVENT_SANDTRAP, urand(5000, 15000));
-                            break;
-                        case EVENT_WIDE_SLASH:
-                            DoCast(me, SPELL_WIDE_SLASH);
-                            events.ScheduleEvent(EVENT_WIDE_SLASH, 11000);
-                            break;
-                        case EVENT_TRASH:
-                            DoCast(me, SPELL_TRASH);
-                            events.ScheduleEvent(EVENT_WIDE_SLASH, 16000);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-            private:
-                bool _enraged;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetInstanceAI<boss_kurinnaxxAI>(creature);
+            _frenzied = true;
+            events.ScheduleEvent(EVENT_FRENZY, 0s);
         }
+    }
+
+    void OnSpellCast(SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_FRENZY)
+            Talk(EMOTE_FRENZY);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case EVENT_MORTAL_WOUND:
+                    DoCastVictim(SPELL_MORTAL_WOUND);
+                    events.Repeat(4s, 12s);
+                    break;
+                case EVENT_SAND_TRAP:
+                    DoCastSelf(SPELL_SAND_TRAP_TRIGGER);
+                    events.Repeat(5s, 15s);
+                    break;
+                case EVENT_THRASH:
+                    DoCastSelf(SPELL_THRASH);
+                    events.Repeat(10s, 20s);
+                    break;
+                case EVENT_WIDE_SLASH:
+                    DoCastSelf(SPELL_WIDE_SLASH);
+                    events.Repeat(10s, 15s);
+                    break;
+                case EVENT_FRENZY:
+                    DoCastSelf(SPELL_FRENZY);
+                    break;
+                case EVENT_SUMMON_PLAYER:
+                    if (me->GetDistance(me->GetVictim()) > 10.0f)
+                        DoCastVictim(SPELL_SUMMON_PLAYER);
+                    events.Repeat(5s);
+                    break;
+                default:
+                    break;
+            }
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
+        }
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    bool _frenzied;
+};
+
+// 26524 - Sand Trap
+class spell_kurinnaxx_sand_trap : public SpellScript
+{
+    PrepareSpellScript(spell_kurinnaxx_sand_trap);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_SAND_TRAP_EFFECT });
+    }
+
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        if (targets.empty())
+            return;
+
+        WorldObject* target = Trinity::Containers::SelectRandomContainerElement(targets);
+        targets.clear();
+        targets.push_back(target);
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        GetHitUnit()->CastSpell(GetHitUnit(), SPELL_SAND_TRAP_EFFECT, true);
+    }
+
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_kurinnaxx_sand_trap::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
+        OnEffectHitTarget += SpellEffectFn(spell_kurinnaxx_sand_trap::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
 };
 
 void AddSC_boss_kurinnaxx()
 {
-    new boss_kurinnaxx();
+    RegisterAQ20CreatureAI(boss_kurinnaxx);
+    RegisterSpellScript(spell_kurinnaxx_sand_trap);
 }

@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,47 +15,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: Boss_Luetenant_Drake
-SD%Complete: 70
-SDComment: Missing proper code for patrolling area after being spawned. Script for GO (barrels) quest 10283
-SDCategory: Caverns of Time, Old Hillsbrad Foothills
-EndScriptData */
+/* Missing proper code for patrolling area after being spawned */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "GameObject.h"
+#include "GameObjectAI.h"
+#include "InstanceScript.h"
+#include "MotionMaster.h"
 #include "old_hillsbrad.h"
 #include "ScriptedEscortAI.h"
 
-/*######
-## go_barrel_old_hillsbrad
-######*/
-
-class go_barrel_old_hillsbrad : public GameObjectScript
-{
-public:
-    go_barrel_old_hillsbrad() : GameObjectScript("go_barrel_old_hillsbrad") { }
-
-    bool OnGossipHello(Player* /*player*/, GameObject* go) override
-    {
-        if (InstanceScript* instance = go->GetInstanceScript())
-        {
-            if (instance->GetData(TYPE_BARREL_DIVERSION) == DONE)
-                return false;
-
-            instance->SetData(TYPE_BARREL_DIVERSION, IN_PROGRESS);
-        }
-
-        return false;
-    }
-
-};
-
-/*######
-## boss_lieutenant_drake
-######*/
-
-enum LieutenantDrake
+enum DrakeTexts
 {
     SAY_ENTER               = 0,
     SAY_AGGRO               = 1,
@@ -64,14 +33,25 @@ enum LieutenantDrake
     SAY_MORTAL              = 3,
     SAY_SHOUT               = 4,
     SAY_DEATH               = 5,
+};
 
+enum DrakeSpells
+{
     SPELL_WHIRLWIND         = 31909,
     SPELL_HAMSTRING         = 9080,
     SPELL_MORTAL_STRIKE     = 31911,
     SPELL_FRIGHTENING_SHOUT = 33789
 };
 
-G3D::Vector3 const DrakeWP[]=
+enum DrakeEvents
+{
+    EVENT_WHIRLWIND           = 1,
+    EVENT_HAMSTRING,
+    EVENT_MORTAL_STRIKE,
+    EVENT_FRIGHTENING_SHOUT
+};
+
+Position const DrakeWP[]=
 {
     { 2125.84f, 88.2535f, 54.8830f },
     { 2111.01f, 93.8022f, 52.6356f },
@@ -94,106 +74,119 @@ G3D::Vector3 const DrakeWP[]=
     { 2128.20f, 70.9763f, 64.4221f }
 };
 
-class boss_lieutenant_drake : public CreatureScript
+// 17848 - Lieutenant Drake
+struct boss_lieutenant_drake : public BossAI
 {
-public:
-    boss_lieutenant_drake() : CreatureScript("boss_lieutenant_drake") { }
-
-    CreatureAI* GetAI(Creature* creature) const override
+    boss_lieutenant_drake(Creature* creature) : BossAI(creature, DATA_LIEUTENANT_DRAKE)
     {
-        return new boss_lieutenant_drakeAI(creature);
+        Initialize();
     }
 
-    struct boss_lieutenant_drakeAI : public ScriptedAI
+    void Initialize()
     {
-        boss_lieutenant_drakeAI(Creature* creature) : ScriptedAI(creature)
+        CanPatrol = true;
+        wpId = 0;
+    }
+
+    bool CanPatrol;
+    uint32 wpId;
+
+    void Reset() override
+    {
+        BossAI::Reset();
+        Initialize();
+    }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        Talk(SAY_AGGRO);
+        events.ScheduleEvent(EVENT_WHIRLWIND, 20s);
+        events.ScheduleEvent(EVENT_HAMSTRING, 30s);
+        events.ScheduleEvent(EVENT_MORTAL_STRIKE, 45s);
+        events.ScheduleEvent(EVENT_FRIGHTENING_SHOUT, 25s);
+    }
+
+    void KilledUnit(Unit* /*victim*/) override
+    {
+        Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* killer) override
+    {
+        BossAI::JustDied(killer);
+        Talk(SAY_DEATH);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        /// @todo make this work
+        if (CanPatrol && wpId == 0)
         {
-            Initialize();
+            me->GetMotionMaster()->MovePoint(wpId, DrakeWP[wpId]);
+            ++wpId;
         }
 
-        void Initialize()
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            CanPatrol = true;
-            wpId = 0;
-
-            Whirlwind_Timer = 20000;
-            Fear_Timer = 30000;
-            MortalStrike_Timer = 45000;
-            ExplodingShout_Timer = 25000;
-        }
-
-        bool CanPatrol;
-        uint32 wpId;
-
-        uint32 Whirlwind_Timer;
-        uint32 Fear_Timer;
-        uint32 MortalStrike_Timer;
-        uint32 ExplodingShout_Timer;
-
-        void Reset() override
-        {
-            Initialize();
-        }
-
-        void EnterCombat(Unit* /*who*/) override
-        {
-            Talk(SAY_AGGRO);
-        }
-
-        void KilledUnit(Unit* /*victim*/) override
-        {
-            Talk(SAY_SLAY);
-        }
-
-        void JustDied(Unit* /*killer*/) override
-        {
-            Talk(SAY_DEATH);
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            /// @todo make this work
-            if (CanPatrol && wpId == 0)
+            switch (eventId)
             {
-                me->GetMotionMaster()->MovePoint(wpId, DrakeWP[wpId].x, DrakeWP[wpId].y, DrakeWP[wpId].z);
-                ++wpId;
+                case EVENT_WHIRLWIND:
+                    DoCastSelf(SPELL_WHIRLWIND);
+                    events.Repeat(20s, 25s);
+                    break;
+                case EVENT_HAMSTRING:
+                    DoCastVictim(SPELL_HAMSTRING);
+                    events.Repeat(15s, 20s);
+                    break;
+                case EVENT_MORTAL_STRIKE:
+                    Talk(SAY_MORTAL);
+                    DoCastVictim(SPELL_MORTAL_STRIKE);
+                    events.Repeat(20s, 30s);
+                    break;
+                case EVENT_FRIGHTENING_SHOUT:
+                    Talk(SAY_SHOUT);
+                    DoCastVictim(SPELL_FRIGHTENING_SHOUT);
+                    events.Repeat(25s, 35s);
+                    break;
+                default:
+                    break;
             }
 
-            //Return since we have no target
-            if (!UpdateVictim())
+            if (me->HasUnitState(UNIT_STATE_CASTING))
                 return;
-
-            //Whirlwind
-            if (Whirlwind_Timer <= diff)
-            {
-                DoCastVictim(SPELL_WHIRLWIND);
-                Whirlwind_Timer = 20000 + rand32() % 5000;
-            } else Whirlwind_Timer -= diff;
-
-            //Fear
-            if (Fear_Timer <= diff)
-            {
-                Talk(SAY_SHOUT);
-                DoCastVictim(SPELL_FRIGHTENING_SHOUT);
-                Fear_Timer = 25000 + rand32() % 10000;
-            } else Fear_Timer -= diff;
-
-            //Mortal Strike
-            if (MortalStrike_Timer <= diff)
-            {
-                Talk(SAY_MORTAL);
-                DoCastVictim(SPELL_MORTAL_STRIKE);
-                MortalStrike_Timer = 20000 + rand32() % 10000;
-            } else MortalStrike_Timer -= diff;
-
-            DoMeleeAttackIfReady();
         }
-    };
 
+        DoMeleeAttackIfReady();
+    }
+};
+
+struct go_barrel_old_hillsbrad : public GameObjectAI
+{
+    go_barrel_old_hillsbrad(GameObject* go) : GameObjectAI(go), instance(go->GetInstanceScript()) { }
+
+    InstanceScript* instance;
+
+    bool OnGossipHello(Player* /*player*/) override
+    {
+        if (instance->GetData(TYPE_BARREL_DIVERSION) == DONE)
+            return false;
+
+        instance->SetData(TYPE_BARREL_DIVERSION, IN_PROGRESS);
+        return false;
+    }
 };
 
 void AddSC_boss_lieutenant_drake()
 {
-    new go_barrel_old_hillsbrad();
-    new boss_lieutenant_drake();
+    RegisterOldHillsbradCreatureAI(boss_lieutenant_drake);
+    RegisterOldHillsbradGameObjectAI(go_barrel_old_hillsbrad);
 }

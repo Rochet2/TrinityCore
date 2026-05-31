@@ -1,36 +1,86 @@
-# Set build-directive (used in core to tell which buildtype we used)
-add_definitions(-D_BUILD_DIRECTIVE='"${CMAKE_BUILD_TYPE}"')
-
-set(GCC_EXPECTED_VERSION 4.7.2)
+set(GCC_EXPECTED_VERSION 11.1.0)
 
 if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS GCC_EXPECTED_VERSION)
   message(FATAL_ERROR "GCC: TrinityCore requires version ${GCC_EXPECTED_VERSION} to build but found ${CMAKE_CXX_COMPILER_VERSION}")
+else()
+  message(STATUS "GCC: Minimum version required is ${GCC_EXPECTED_VERSION}, found ${CMAKE_CXX_COMPILER_VERSION} - ok!")
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-message(STATUS "GCC: Enabled c++11 support")
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-message(STATUS "GCC: Enabled C99 support")
+target_compile_options(trinity-compile-option-interface
+  INTERFACE
+    -fno-delete-null-pointer-checks)
 
 if(PLATFORM EQUAL 32)
   # Required on 32-bit systems to enable SSE2 (standard on x64)
-  set(SSE_FLAGS "-msse2 -mfpmath=sse")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SSE_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SSE_FLAGS}")
+  target_compile_options(trinity-compile-option-interface
+    INTERFACE
+      -msse2
+      -mfpmath=sse)
 endif()
-add_definitions(-DHAVE_SSE2 -D__SSE2__)
-message(STATUS "GCC: SFMT enabled, SSE2 flags forced")
+if(TRINITY_SYSTEM_PROCESSOR MATCHES "x86|amd64")
+  target_compile_definitions(trinity-compile-option-interface
+    INTERFACE
+      HAVE_SSE2
+      __SSE2__)
+  message(STATUS "GCC: SFMT enabled, SSE2 flags forced")
+endif()
 
-if( WITH_WARNINGS )
-  set(WARNING_FLAGS "-W -Wall -Wextra -Winit-self -Winvalid-pch -Wfatal-errors")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${WARNING_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WARNING_FLAGS} -Woverloaded-virtual")
+if(WITH_WARNINGS)
+  target_compile_options(trinity-warning-interface
+    INTERFACE
+      -W
+      -Wall
+      -Wextra
+      -Winit-self
+      -Winvalid-pch
+      -Wfatal-errors
+      -Woverloaded-virtual
+      -Wno-missing-field-initializers # this warning is useless when combined with structure members that have default initializers
+      -Wno-maybe-uninitialized)       # this warning causes many false positives with std::optional
+
   message(STATUS "GCC: All warnings enabled")
 endif()
 
-if( WITH_COREDEBUG )
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3")
-  message(STATUS "GCC: Debug-flags set (-g3)")
+if(WITH_COREDEBUG)
+  target_compile_options(trinity-compile-option-interface
+    INTERFACE
+      -ggdb3)
+
+  message(STATUS "GCC: Debug-flags set (-ggdb3)")
+endif()
+
+if(ASAN)
+  target_compile_options(trinity-compile-option-interface
+    INTERFACE
+      -fno-omit-frame-pointer
+      -fsanitize=address
+      -fsanitize-recover=address
+      -fsanitize-address-use-after-scope)
+
+  target_link_options(trinity-compile-option-interface
+    INTERFACE
+      -fno-omit-frame-pointer
+      -fsanitize=address
+      -fsanitize-recover=address
+      -fsanitize-address-use-after-scope)
+
+  message(STATUS "GCC: Enabled Address Sanitizer")
+endif()
+
+if(BUILD_SHARED_LIBS)
+  target_compile_options(trinity-compile-option-interface
+    INTERFACE
+      -fPIC
+      -Wno-attributes)
+
+  target_compile_options(trinity-hidden-symbols-interface
+    INTERFACE
+      -fvisibility=hidden)
+
+  # Should break the build when there are TRINITY_*_API macros missing
+  # but it complains about missing references in precompiled headers.
+  # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,--no-undefined")
+  # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--no-undefined")
+
+  message(STATUS "GCC: Enabled shared linking")
 endif()

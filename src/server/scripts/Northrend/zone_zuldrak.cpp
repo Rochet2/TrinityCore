@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,185 +16,40 @@
  */
 
 #include "ScriptMgr.h"
+#include "GameObject.h"
+#include "GameObjectAI.h"
+#include "MotionMaster.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
-#include "ScriptedEscortAI.h"
-#include "Player.h"
+#include "SpellAuraEffects.h"
+#include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellScript.h"
-#include "SpellAuras.h"
-#include "SpellAuraEffects.h"
+#include "TemporarySummon.h"
 #include "Vehicle.h"
-
-/*####
-## npc_drakuru_shackles
-####*/
-
-enum DrakuruShackles
-{
-    NPC_RAGECLAW                             = 29686,
-    QUEST_TROLLS_IS_GONE_CRAZY               = 12861,
-    SPELL_LEFT_CHAIN                         = 59951,
-    SPELL_RIGHT_CHAIN                        = 59952,
-    SPELL_UNLOCK_SHACKLE                     = 55083,
-    SPELL_FREE_RAGECLAW                      = 55223
-};
-
-class npc_drakuru_shackles : public CreatureScript
-{
-public:
-    npc_drakuru_shackles() : CreatureScript("npc_drakuru_shackles") { }
-
-    struct npc_drakuru_shacklesAI : public ScriptedAI
-    {
-        npc_drakuru_shacklesAI(Creature* creature) : ScriptedAI(creature) { }
-
-        void Reset() override
-        {
-            _rageclawGUID.Clear();
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-
-            float x, y, z;
-            me->GetClosePoint(x, y, z, me->GetObjectSize() / 3, 0.1f);
-
-            if (Creature* summon = me->SummonCreature(NPC_RAGECLAW, x, y, z, 0, TEMPSUMMON_DEAD_DESPAWN, 1000))
-            {
-                _rageclawGUID = summon->GetGUID();
-                LockRageclaw(summon);
-            }
-        }
-
-        void LockRageclaw(Creature* rageclaw)
-        {
-            // pointer check not needed
-            me->SetInFront(rageclaw);
-            rageclaw->SetInFront(me);
-
-            DoCast(rageclaw, SPELL_LEFT_CHAIN, true);
-            DoCast(rageclaw, SPELL_RIGHT_CHAIN, true);
-        }
-
-        void UnlockRageclaw(Unit* who, Creature* rageclaw)
-        {
-            if (!who)
-                return;
-
-            // pointer check not needed
-            DoCast(rageclaw, SPELL_FREE_RAGECLAW, true);
-
-            me->setDeathState(DEAD);
-        }
-
-        void SpellHit(Unit* caster, const SpellInfo* spell) override
-        {
-            if (spell->Id == SPELL_UNLOCK_SHACKLE)
-            {
-                if (caster->ToPlayer()->GetQuestStatus(QUEST_TROLLS_IS_GONE_CRAZY) == QUEST_STATUS_INCOMPLETE)
-                {
-                    if (Creature* rageclaw = ObjectAccessor::GetCreature(*me, _rageclawGUID))
-                    {
-                        UnlockRageclaw(caster, rageclaw);
-                        caster->ToPlayer()->KilledMonster(rageclaw->GetCreatureTemplate(), _rageclawGUID);
-                        me->DespawnOrUnsummon();
-                    }
-                    else
-                        me->setDeathState(JUST_DIED);
-                }
-            }
-        }
-
-        private:
-            ObjectGuid _rageclawGUID;
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_drakuru_shacklesAI(creature);
-    }
-};
-
-/*####
-## npc_captured_rageclaw
-####*/
-
-enum Rageclaw
-{
-    SPELL_UNSHACKLED                         = 55085,
-    SPELL_KNEEL                              = 39656,
-    SAY_RAGECLAW                             = 0
-};
-
-class npc_captured_rageclaw : public CreatureScript
-{
-public:
-    npc_captured_rageclaw() : CreatureScript("npc_captured_rageclaw") { }
-
-    struct npc_captured_rageclawAI : public ScriptedAI
-    {
-        npc_captured_rageclawAI(Creature* creature) : ScriptedAI(creature) { }
-
-        void Reset() override
-        {
-            me->setFaction(35);
-            DoCast(me, SPELL_KNEEL, true); // Little Hack for kneel - Thanks Illy :P
-        }
-
-        void MoveInLineOfSight(Unit* /*who*/) override { }
-
-        void SpellHit(Unit* /*caster*/, const SpellInfo* spell) override
-        {
-            if (spell->Id == SPELL_FREE_RAGECLAW)
-            {
-                me->RemoveAurasDueToSpell(SPELL_LEFT_CHAIN);
-                me->RemoveAurasDueToSpell(SPELL_RIGHT_CHAIN);
-                me->RemoveAurasDueToSpell(SPELL_KNEEL);
-                me->setFaction(me->GetCreatureTemplate()->faction);
-                DoCast(me, SPELL_UNSHACKLED, true);
-                Talk(SAY_RAGECLAW);
-                me->GetMotionMaster()->MoveRandom(10);
-                me->DespawnOrUnsummon(10000);
-            }
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_captured_rageclawAI(creature);
-    }
-};
-
 
 /*####
 ## npc_released_offspring_harkoa
 ####*/
 
-class npc_released_offspring_harkoa : public CreatureScript
+struct npc_released_offspring_harkoa : public ScriptedAI
 {
-public:
-    npc_released_offspring_harkoa() : CreatureScript("npc_released_offspring_harkoa") { }
+    npc_released_offspring_harkoa(Creature* creature) : ScriptedAI(creature) { }
 
-    struct npc_released_offspring_harkoaAI : public ScriptedAI
+    void Reset() override
     {
-        npc_released_offspring_harkoaAI(Creature* creature) : ScriptedAI(creature) { }
+        float x, y, z;
+        me->GetClosePoint(x, y, z, me->GetCombatReach() / 3, 25.0f);
+        me->GetMotionMaster()->MovePoint(0, x, y, z);
+    }
 
-        void Reset() override
-        {
-            float x, y, z;
-            me->GetClosePoint(x, y, z, me->GetObjectSize() / 3, 25.0f);
-            me->GetMotionMaster()->MovePoint(0, x, y, z);
-        }
-
-        void MovementInform(uint32 Type, uint32 /*uiId*/) override
-        {
-            if (Type != POINT_MOTION_TYPE)
-                return;
-            me->DespawnOrUnsummon();
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
+    void MovementInform(uint32 Type, uint32 /*uiId*/) override
     {
-        return new npc_released_offspring_harkoaAI(creature);
+        if (Type != POINT_MOTION_TYPE)
+            return;
+        me->DespawnOrUnsummon();
     }
 };
 
@@ -215,109 +70,65 @@ enum CrusadeRecruitEvents
     EVENT_RECRUIT_2                          = 2
 };
 
-class npc_crusade_recruit : public CreatureScript
+struct npc_crusade_recruit : public ScriptedAI
 {
-public:
-    npc_crusade_recruit() : CreatureScript("npc_crusade_recruit") { }
-
-    struct npc_crusade_recruitAI : public ScriptedAI
+    npc_crusade_recruit(Creature* creature) : ScriptedAI(creature)
     {
-        npc_crusade_recruitAI(Creature* creature) : ScriptedAI(creature)
-        {
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            _heading = me->GetOrientation();
-        }
-
-        void Reset() override
-        {
-            me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-            me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_COWER);
-            Initialize();
-        }
-
-        void UpdateAI(uint32 diff) override
-        {
-            _events.Update(diff);
-
-            while (uint32 eventId = _events.ExecuteEvent())
-            {
-                switch (eventId)
-                {
-                    case EVENT_RECRUIT_1:
-                        me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
-                        me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
-                        Talk(SAY_RECRUIT);
-                        _events.ScheduleEvent(EVENT_RECRUIT_2, 3000);
-                        break;
-                    case EVENT_RECRUIT_2:
-                        me->SetWalk(true);
-                        me->GetMotionMaster()->MovePoint(0, me->GetPositionX() + (std::cos(_heading) * 10), me->GetPositionY() + (std::sin(_heading) * 10), me->GetPositionZ());
-                        me->DespawnOrUnsummon(5000);
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            if (!UpdateVictim())
-                return;
-        }
-
-        void sGossipSelect(Player* player, uint32 /*sender*/, uint32 /*action*/) override
-        {
-            _events.ScheduleEvent(EVENT_RECRUIT_1, 100);
-            player->CLOSE_GOSSIP_MENU();
-            me->CastSpell(player, SPELL_QUEST_CREDIT, true);
-            me->SetFacingToObject(player);
-        }
-
-        private:
-        EventMap _events;
-        float    _heading; // Store creature heading
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_crusade_recruitAI(creature);
+        Initialize();
     }
-};
 
-/*######
-## Quest 12916: Our Only Hope!
-## go_scourge_enclosure
-######*/
-
-enum ScourgeEnclosure
-{
-    QUEST_OUR_ONLY_HOPE                      = 12916,
-    NPC_GYMER_DUMMY                          = 29928, // From quest template
-    SPELL_GYMER_LOCK_EXPLOSION               = 55529
-};
-
-class go_scourge_enclosure : public GameObjectScript
-{
-public:
-    go_scourge_enclosure() : GameObjectScript("go_scourge_enclosure") { }
-
-    bool OnGossipHello(Player* player, GameObject* go) override
+    void Initialize()
     {
-        go->UseDoorOrButton();
-        if (player->GetQuestStatus(QUEST_OUR_ONLY_HOPE) == QUEST_STATUS_INCOMPLETE)
+        _heading = me->GetOrientation();
+    }
+
+    void Reset() override
+    {
+        me->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+        me->SetEmoteState(EMOTE_STATE_COWER);
+        Initialize();
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _events.Update(diff);
+
+        while (uint32 eventId = _events.ExecuteEvent())
         {
-            Creature* gymerDummy = go->FindNearestCreature(NPC_GYMER_DUMMY, 20.0f);
-            if (gymerDummy)
+            switch (eventId)
             {
-                player->KilledMonsterCredit(gymerDummy->GetEntry(), gymerDummy->GetGUID());
-                gymerDummy->CastSpell(gymerDummy, SPELL_GYMER_LOCK_EXPLOSION, true);
-                gymerDummy->DespawnOrUnsummon(4 * IN_MILLISECONDS);
+                case EVENT_RECRUIT_1:
+                    me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    me->SetEmoteState(EMOTE_ONESHOT_NONE);
+                    Talk(SAY_RECRUIT);
+                    _events.ScheduleEvent(EVENT_RECRUIT_2, 3s);
+                    break;
+                case EVENT_RECRUIT_2:
+                    me->SetWalk(true);
+                    me->GetMotionMaster()->MovePoint(0, me->GetPositionX() + (std::cos(_heading) * 10), me->GetPositionY() + (std::sin(_heading) * 10), me->GetPositionZ());
+                    me->DespawnOrUnsummon(5s);
+                    break;
+                default:
+                    break;
             }
         }
-        return true;
+
+        if (!UpdateVictim())
+            return;
     }
+
+    bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 /*gossipListId*/) override
+    {
+        _events.ScheduleEvent(EVENT_RECRUIT_1, 100ms);
+        CloseGossipMenuFor(player);
+        me->CastSpell(player, SPELL_QUEST_CREDIT, true);
+        me->SetFacingToObject(player);
+        return false;
+    }
+
+private:
+    EventMap _events;
+    float    _heading; // Store creature heading
 };
 
 /*######
@@ -454,131 +265,120 @@ enum FinklesteinEvents
     EVENT_HARD_6                           = 6
 };
 
-class npc_alchemist_finklestein : public CreatureScript
+struct npc_alchemist_finklestein : public ScriptedAI
 {
-public:
-    npc_alchemist_finklestein() : CreatureScript("npc_alchemist_finklestein") { }
+    npc_alchemist_finklestein(Creature* creature) : ScriptedAI(creature)
+    {
+        _getingredienttry = 0;
+    }
 
-        struct npc_alchemist_finklesteinAI : public ScriptedAI
+    void Reset() override
+    {
+        _playerGUID.Clear();
+        _getingredienttry = 0;
+        _events.ScheduleEvent(EVENT_TURN_TO_POT, 15s, 26s);
+    }
+
+    void SetData(uint32 type, uint32 data) override
+    {
+        if (type == 1 && data == 1)
+            switch (_getingredienttry)
+           {
+                case 2:
+                case 3:
+                    _events.ScheduleEvent(EVENT_EASY_123, 100ms);
+                    break;
+                case 4:
+                    _events.ScheduleEvent(EVENT_MEDIUM_4, 100ms);
+                    break;
+                case 5:
+                    _events.ScheduleEvent(EVENT_MEDIUM_5, 100ms);
+                    break;
+                case 6:
+                    _events.ScheduleEvent(EVENT_HARD_6, 100ms);
+                    break;
+                default:
+                    break;
+            }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _events.Update(diff);
+
+        while (uint32 eventId = _events.ExecuteEvent())
         {
-            npc_alchemist_finklesteinAI(Creature* creature) : ScriptedAI(creature)
+            switch (eventId)
             {
-                _getingredienttry = 0;
-            }
-
-            void Reset() override
-            {
-                _playerGUID.Clear();
-                _getingredienttry = 0;
-                _events.ScheduleEvent(EVENT_TURN_TO_POT, urand(15000, 26000));
-            }
-
-            void SetData(uint32 type, uint32 data) override
-            {
-                if (type == 1 && data == 1)
-                    switch (_getingredienttry)
-                   {
-                        case 2:
-                        case 3:
-                            _events.ScheduleEvent(EVENT_EASY_123, 100);
-                            break;
-                        case 4:
-                            _events.ScheduleEvent(EVENT_MEDIUM_4, 100);
-                            break;
-                        case 5:
-                            _events.ScheduleEvent(EVENT_MEDIUM_5, 100);
-                            break;
-                        case 6:
-                            _events.ScheduleEvent(EVENT_HARD_6, 100);
-                            break;
-                        default:
-                            break;
-                    }
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                _events.Update(diff);
-
-                while (uint32 eventId = _events.ExecuteEvent())
-                {
-                    switch (eventId)
+                case EVENT_TURN_TO_POT:
+                    me->SetFacingTo(6.230825f);
+                    me->SetEmoteState(EMOTE_STATE_USE_STANDING_NO_SHEATHE);
+                    _events.ScheduleEvent(EVENT_TURN_BACK, 11s);
+                    break;
+                case EVENT_TURN_BACK:
+                    me->SetFacingTo(4.886922f);
+                    me->SetEmoteState(EMOTE_STATE_NONE);
+                    _events.ScheduleEvent(EVENT_TURN_TO_POT, 25s, 41s);
+                    break;
+                case EVENT_EASY_123:
+                    if (Player* player = ObjectAccessor::GetPlayer(*me, _playerGUID))
                     {
-                        case EVENT_TURN_TO_POT:
-                            me->SetFacingTo(6.230825f);
-                            me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_USE_STANDING_NO_SHEATHE);
-                            _events.ScheduleEvent(EVENT_TURN_BACK, 11000);
-                            break;
-                        case EVENT_TURN_BACK:
-                            me->SetFacingTo(4.886922f);
-                            me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_NONE);
-                            _events.ScheduleEvent(EVENT_TURN_TO_POT, urand(25000, 41000));
-                            break;
-                        case EVENT_EASY_123:
-                            if (Player* player = ObjectAccessor::GetPlayer(*me, _playerGUID))
-                            {
-                                Talk(SAY_EASY_123, player);
-                                DoCast(player, SPELL_RANDOM_INGREDIENT_EASY_AURA);
-                                ++_getingredienttry;
-                            }
-                            break;
-                        case EVENT_MEDIUM_4:
-                            if (Player* player = ObjectAccessor::GetPlayer(*me, _playerGUID))
-                            {
-                                Talk(SAY_MEDIUM_4, player);
-                                DoCast(player, SPELL_RANDOM_INGREDIENT_MEDIUM_AURA);
-                                ++_getingredienttry;
-                            }
-                            break;
-                        case EVENT_MEDIUM_5:
-                            if (Player* player = ObjectAccessor::GetPlayer(*me, _playerGUID))
-                            {
-                                Talk(SAY_MEDIUM_5, player);
-                                DoCast(player, SPELL_RANDOM_INGREDIENT_MEDIUM_AURA);
-                                ++_getingredienttry;
-                            }
-                            break;
-                        case EVENT_HARD_6:
-                            if (Player* player = ObjectAccessor::GetPlayer(*me, _playerGUID))
-                            {
-                                Talk(SAY_HARD_6, player);
-                                DoCast(player, SPELL_RANDOM_INGREDIENT_HARD_AURA);
-                                ++_getingredienttry;
-                            }
-                            break;
-                        default:
-                            break;
+                        Talk(SAY_EASY_123, player);
+                        DoCast(player, SPELL_RANDOM_INGREDIENT_EASY_AURA);
+                        ++_getingredienttry;
                     }
-                }
+                    break;
+                case EVENT_MEDIUM_4:
+                    if (Player* player = ObjectAccessor::GetPlayer(*me, _playerGUID))
+                    {
+                        Talk(SAY_MEDIUM_4, player);
+                        DoCast(player, SPELL_RANDOM_INGREDIENT_MEDIUM_AURA);
+                        ++_getingredienttry;
+                    }
+                    break;
+                case EVENT_MEDIUM_5:
+                    if (Player* player = ObjectAccessor::GetPlayer(*me, _playerGUID))
+                    {
+                        Talk(SAY_MEDIUM_5, player);
+                        DoCast(player, SPELL_RANDOM_INGREDIENT_MEDIUM_AURA);
+                        ++_getingredienttry;
+                    }
+                    break;
+                case EVENT_HARD_6:
+                    if (Player* player = ObjectAccessor::GetPlayer(*me, _playerGUID))
+                    {
+                        Talk(SAY_HARD_6, player);
+                        DoCast(player, SPELL_RANDOM_INGREDIENT_HARD_AURA);
+                        ++_getingredienttry;
+                    }
+                    break;
+                default:
+                    break;
             }
-
-            void sGossipSelect(Player* player, uint32 /*sender*/, uint32 /*action*/) override
-            {
-                player->CLOSE_GOSSIP_MENU();
-                DoCast(player, SPELL_ALCHEMIST_APPRENTICE_INVISBUFF);
-                _playerGUID = player->GetGUID();
-                _getingredienttry = 1;
-                _events.ScheduleEvent(EVENT_EASY_123, 100);
-            }
-
-        private:
-            EventMap _events;
-            ObjectGuid _playerGUID;
-            uint8    _getingredienttry;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new npc_alchemist_finklesteinAI(creature);
         }
+    }
+
+    bool OnGossipSelect(Player* player, uint32 /*menuId*/, uint32 /*gossipListId*/) override
+    {
+        CloseGossipMenuFor(player);
+        DoCast(player, SPELL_ALCHEMIST_APPRENTICE_INVISBUFF);
+        _playerGUID = player->GetGUID();
+        _getingredienttry = 1;
+        _events.ScheduleEvent(EVENT_EASY_123, 100ms);
+        return false;
+    }
+
+private:
+    EventMap _events;
+    ObjectGuid _playerGUID;
+    uint8    _getingredienttry;
 };
 
-class go_finklesteins_cauldron : public GameObjectScript
+struct go_finklesteins_cauldron : public GameObjectAI
 {
-public:
-    go_finklesteins_cauldron() : GameObjectScript("go_finklesteins_cauldron") { }
+    go_finklesteins_cauldron(GameObject* go) : GameObjectAI(go) { }
 
-    bool OnGossipHello(Player* player, GameObject* /*go*/) override
+    bool OnGossipHello(Player* player) override
     {
         player->CastSpell(player, SPELL_POT_CHECK);
         return true;
@@ -610,244 +410,229 @@ uint32 const FetchIngredients[21][4] =
     { SPELL_FETCH_FROZEN_SPIDER_ICHOR,        SPELL_HAVE_FROZEN_SPIDER_ICHOR,        ITEM_FROZEN_SPIDER_ICHOR,        SAY_FROZEN_SPIDER_ICHOR        }
 };
 
-/*#####
-# spell_random_ingredient_aura
-#####*/
-
-class spell_random_ingredient_aura : public SpellScriptLoader
+// 51015 - Random Ingredient Easy Aura
+// 51154 - Random Ingredient Medium Aura
+// 51157 - Random Ingredient Hard Aura
+class spell_random_ingredient_aura : public AuraScript
 {
-    public: spell_random_ingredient_aura() : SpellScriptLoader("spell_random_ingredient_aura") { }
+    PrepareAuraScript(spell_random_ingredient_aura);
 
-        class spell_random_ingredient_aura_AuraScript : public AuraScript
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
         {
-            PrepareAuraScript(spell_random_ingredient_aura_AuraScript);
+            SPELL_RANDOM_INGREDIENT_EASY,
+            SPELL_RANDOM_INGREDIENT_MEDIUM,
+            SPELL_RANDOM_INGREDIENT_HARD
+        });
+    }
 
-            bool Validate(SpellInfo const* /*spellInfo*/) override
-            {
-                if (!sSpellMgr->GetSpellInfo(SPELL_RANDOM_INGREDIENT_EASY) || !sSpellMgr->GetSpellInfo(SPELL_RANDOM_INGREDIENT_MEDIUM) || !sSpellMgr->GetSpellInfo(SPELL_RANDOM_INGREDIENT_HARD))
-                    return false;
-                return true;
-            }
-
-            void PeriodicTick(AuraEffect const* /*aurEff*/)
-            {
-                switch (GetSpellInfo()->Id)
-                {
-                    case SPELL_RANDOM_INGREDIENT_EASY_AURA:
-                        GetTarget()->CastSpell(GetTarget(), SPELL_RANDOM_INGREDIENT_EASY);
-                        break;
-                    case SPELL_RANDOM_INGREDIENT_MEDIUM_AURA:
-                        GetTarget()->CastSpell(GetTarget(), SPELL_RANDOM_INGREDIENT_MEDIUM);
-                        break;
-                    case SPELL_RANDOM_INGREDIENT_HARD_AURA:
-                        GetTarget()->CastSpell(GetTarget(), SPELL_RANDOM_INGREDIENT_HARD);
-                        break;
-                }
-            }
-
-            void Register() override
-            {
-                OnEffectPeriodic += AuraEffectPeriodicFn(spell_random_ingredient_aura_AuraScript::PeriodicTick, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
-            }
-        };
-
-        AuraScript* GetAuraScript() const override
+    void PeriodicTick(AuraEffect const* /*aurEff*/)
+    {
+        switch (GetSpellInfo()->Id)
         {
-            return new spell_random_ingredient_aura_AuraScript();
+            case SPELL_RANDOM_INGREDIENT_EASY_AURA:
+                GetTarget()->CastSpell(GetTarget(), SPELL_RANDOM_INGREDIENT_EASY);
+                break;
+            case SPELL_RANDOM_INGREDIENT_MEDIUM_AURA:
+                GetTarget()->CastSpell(GetTarget(), SPELL_RANDOM_INGREDIENT_MEDIUM);
+                break;
+            case SPELL_RANDOM_INGREDIENT_HARD_AURA:
+                GetTarget()->CastSpell(GetTarget(), SPELL_RANDOM_INGREDIENT_HARD);
+                break;
         }
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_random_ingredient_aura::PeriodicTick, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+    }
 };
 
-/*#####
-# spell_random_ingredient
-#####*/
-
-class spell_random_ingredient : public SpellScriptLoader
+// 51105 - Random Ingredient Medium
+// 51107 - Random Ingredient Hard
+// 51134 - Random Ingredient Easy
+class spell_random_ingredient : public SpellScript
 {
-    public: spell_random_ingredient() : SpellScriptLoader("spell_random_ingredient") { }
+    PrepareSpellScript(spell_random_ingredient);
 
-        class spell_random_ingredient_SpellScript : public SpellScript
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
         {
-            PrepareSpellScript(spell_random_ingredient_SpellScript);
+            SPELL_FETCH_KNOTROOT,                   SPELL_HAVE_KNOTROOT,
+            SPELL_FETCH_PICKLED_EAGLE_EGG,          SPELL_HAVE_PICKLED_EAGLE_EGG,
+            SPELL_FETCH_SPECKLED_GUANO,             SPELL_HAVE_SPECKLED_GUANO,
+            SPELL_FETCH_WITHERED_BATWING,           SPELL_HAVE_WITHERED_BATWING,
+            SPELL_FETCH_SEASONED_SLIDER_CIDER,      SPELL_HAVE_SEASONED_SLIDER_CIDER,
+            SPELL_FETCH_PULVERIZED_GARGOYLE_TEETH,  SPELL_HAVE_PULVERIZED_GARGOYLE_TEETH,
+            SPELL_FETCH_MUDDY_MIRE_MAGGOT,          SPELL_HAVE_MUDDY_MIRE_MAGGOT,
+            SPELL_FETCH_SPIKY_SPIDER_EGG,           SPELL_HAVE_SPIKY_SPIDER_EGG,
+            SPELL_FETCH_HAIRY_HERRING_HEAD,         SPELL_HAVE_HAIRY_HERRING_HEAD,
+            SPELL_FETCH_PUTRID_PIRATE_PERSPIRATION, SPELL_HAVE_PUTRID_PIRATE_PERSPIRATION,
+            SPELL_FETCH_ICECROWN_BOTTLED_WATER,     SPELL_HAVE_ICECROWN_BOTTLED_WATER,
+            SPELL_FETCH_WASPS_WINGS,                SPELL_HAVE_WASPS_WINGS,
+            SPELL_FETCH_PRISMATIC_MOJO,             SPELL_HAVE_PRISMATIC_MOJO,
+            SPELL_FETCH_RAPTOR_CLAW,                SPELL_HAVE_RAPTOR_CLAW,
+            SPELL_FETCH_AMBERSEED,                  SPELL_HAVE_AMBERSEED,
+            SPELL_FETCH_SHRUNKEN_DRAGONS_CLAW,      SPELL_HAVE_SHRUNKEN_DRAGONS_CLAW,
+            SPELL_FETCH_CHILLED_SERPENT_MUCUS,      SPELL_HAVE_CHILLED_SERPENT_MUCUS,
+            SPELL_FETCH_CRYSTALLIZED_HOGSNOT,       SPELL_HAVE_CRYSTALLIZED_HOGSNOT,
+            SPELL_FETCH_CRUSHED_BASILISK_CRYSTALS,  SPELL_HAVE_CRUSHED_BASILISK_CRYSTALS,
+            SPELL_FETCH_TROLLBANE,                  SPELL_HAVE_TROLLBANE,
+            SPELL_FETCH_FROZEN_SPIDER_ICHOR,        SPELL_HAVE_FROZEN_SPIDER_ICHOR,
+        });
+    }
 
-            bool Validate(SpellInfo const* /*spellInfo*/) override
-            {
-                if (!sSpellMgr->GetSpellInfo(SPELL_FETCH_KNOTROOT) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_PICKLED_EAGLE_EGG) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_SPECKLED_GUANO) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_WITHERED_BATWING) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_SEASONED_SLIDER_CIDER) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_PULVERIZED_GARGOYLE_TEETH) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_MUDDY_MIRE_MAGGOT) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_SPIKY_SPIDER_EGG) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_HAIRY_HERRING_HEAD) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_PUTRID_PIRATE_PERSPIRATION) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_ICECROWN_BOTTLED_WATER) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_WASPS_WINGS) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_PRISMATIC_MOJO) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_RAPTOR_CLAW) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_AMBERSEED) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_SHRUNKEN_DRAGONS_CLAW) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_CHILLED_SERPENT_MUCUS) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_CRYSTALLIZED_HOGSNOT) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_CRUSHED_BASILISK_CRYSTALS) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_TROLLBANE) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_FROZEN_SPIDER_ICHOR))
-                    return false;
-                return true;
-            }
-
-            void HandleScriptEffect(SpellEffIndex /* effIndex */)
-            {
-                if (Player* player = GetHitPlayer())
-                {
-                    uint8 ingredient = 0;
-
-                    switch (GetSpellInfo()->Id)
-                    {
-                        case SPELL_RANDOM_INGREDIENT_EASY:
-                            ingredient = urand(0, 10);
-                            break;
-                        case SPELL_RANDOM_INGREDIENT_MEDIUM:
-                            ingredient = urand(11, 15);
-                            break;
-                        case SPELL_RANDOM_INGREDIENT_HARD:
-                            ingredient = urand(16, 20);
-                            break;
-                    }
-
-                    if (Creature* finklestein = GetClosestCreatureWithEntry(player, NPC_FINKLESTEIN, 25.0f))
-                    {
-                        finklestein->CastSpell(player, FetchIngredients[ingredient][0], true, NULL);
-                        finklestein->AI()->Talk(FetchIngredients[ingredient][3], player);
-                    }
-                }
-            }
-
-            void Register() override
-            {
-                OnEffectHitTarget += SpellEffectFn(spell_random_ingredient_SpellScript::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
-            }
-    };
-
-        SpellScript* GetSpellScript() const override
+    void HandleScriptEffect(SpellEffIndex /* effIndex */)
+    {
+        if (Player* player = GetHitPlayer())
         {
-            return new spell_random_ingredient_SpellScript();
+            uint8 ingredient = 0;
+
+            switch (GetSpellInfo()->Id)
+            {
+                case SPELL_RANDOM_INGREDIENT_EASY:
+                    ingredient = urand(0, 10);
+                    break;
+                case SPELL_RANDOM_INGREDIENT_MEDIUM:
+                    ingredient = urand(11, 15);
+                    break;
+                case SPELL_RANDOM_INGREDIENT_HARD:
+                    ingredient = urand(16, 20);
+                    break;
+            }
+
+            if (Creature* finklestein = GetClosestCreatureWithEntry(player, NPC_FINKLESTEIN, 25.0f))
+            {
+                finklestein->CastSpell(player, FetchIngredients[ingredient][0], true);
+                finklestein->AI()->Talk(FetchIngredients[ingredient][3], player);
+            }
         }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_random_ingredient::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
 };
 
 /*#####
 # spell_pot_check
 #####*/
 
-class spell_pot_check : public SpellScriptLoader
+// 51046 - Pot Check
+class spell_pot_check : public SpellScript
 {
-    public: spell_pot_check() : SpellScriptLoader("spell_pot_check") { }
+    PrepareSpellScript(spell_pot_check);
 
-        class spell_pot_check_SpellScript : public SpellScript
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
         {
-            PrepareSpellScript(spell_pot_check_SpellScript);
+            SPELL_FETCH_KNOTROOT,                   SPELL_HAVE_KNOTROOT,
+            SPELL_FETCH_PICKLED_EAGLE_EGG,          SPELL_HAVE_PICKLED_EAGLE_EGG,
+            SPELL_FETCH_SPECKLED_GUANO,             SPELL_HAVE_SPECKLED_GUANO,
+            SPELL_FETCH_WITHERED_BATWING,           SPELL_HAVE_WITHERED_BATWING,
+            SPELL_FETCH_SEASONED_SLIDER_CIDER,      SPELL_HAVE_SEASONED_SLIDER_CIDER,
+            SPELL_FETCH_PULVERIZED_GARGOYLE_TEETH,  SPELL_HAVE_PULVERIZED_GARGOYLE_TEETH,
+            SPELL_FETCH_MUDDY_MIRE_MAGGOT,          SPELL_HAVE_MUDDY_MIRE_MAGGOT,
+            SPELL_FETCH_SPIKY_SPIDER_EGG,           SPELL_HAVE_SPIKY_SPIDER_EGG,
+            SPELL_FETCH_HAIRY_HERRING_HEAD,         SPELL_HAVE_HAIRY_HERRING_HEAD,
+            SPELL_FETCH_PUTRID_PIRATE_PERSPIRATION, SPELL_HAVE_PUTRID_PIRATE_PERSPIRATION,
+            SPELL_FETCH_ICECROWN_BOTTLED_WATER,     SPELL_HAVE_ICECROWN_BOTTLED_WATER,
+            SPELL_FETCH_WASPS_WINGS,                SPELL_HAVE_WASPS_WINGS,
+            SPELL_FETCH_PRISMATIC_MOJO,             SPELL_HAVE_PRISMATIC_MOJO,
+            SPELL_FETCH_RAPTOR_CLAW,                SPELL_HAVE_RAPTOR_CLAW,
+            SPELL_FETCH_AMBERSEED,                  SPELL_HAVE_AMBERSEED,
+            SPELL_FETCH_SHRUNKEN_DRAGONS_CLAW,      SPELL_HAVE_SHRUNKEN_DRAGONS_CLAW,
+            SPELL_FETCH_CHILLED_SERPENT_MUCUS,      SPELL_HAVE_CHILLED_SERPENT_MUCUS,
+            SPELL_FETCH_CRYSTALLIZED_HOGSNOT,       SPELL_HAVE_CRYSTALLIZED_HOGSNOT,
+            SPELL_FETCH_CRUSHED_BASILISK_CRYSTALS,  SPELL_HAVE_CRUSHED_BASILISK_CRYSTALS,
+            SPELL_FETCH_TROLLBANE,                  SPELL_HAVE_TROLLBANE,
+            SPELL_FETCH_FROZEN_SPIDER_ICHOR,        SPELL_HAVE_FROZEN_SPIDER_ICHOR,
+        });
+    }
 
-            bool Validate(SpellInfo const* /*spellInfo*/) override
-            {
-                if (!sSpellMgr->GetSpellInfo(SPELL_FETCH_KNOTROOT) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_PICKLED_EAGLE_EGG) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_SPECKLED_GUANO) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_WITHERED_BATWING) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_SEASONED_SLIDER_CIDER) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_PULVERIZED_GARGOYLE_TEETH) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_MUDDY_MIRE_MAGGOT) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_SPIKY_SPIDER_EGG) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_HAIRY_HERRING_HEAD) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_PUTRID_PIRATE_PERSPIRATION) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_ICECROWN_BOTTLED_WATER) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_WASPS_WINGS) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_PRISMATIC_MOJO) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_RAPTOR_CLAW) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_AMBERSEED) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_SHRUNKEN_DRAGONS_CLAW) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_CHILLED_SERPENT_MUCUS) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_CRYSTALLIZED_HOGSNOT) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_FETCH_CRUSHED_BASILISK_CRYSTALS) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_TROLLBANE) || !sSpellMgr->GetSpellInfo(SPELL_FETCH_FROZEN_SPIDER_ICHOR) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_HAVE_KNOTROOT) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_PICKLED_EAGLE_EGG) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_SPECKLED_GUANO) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_HAVE_WITHERED_BATWING) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_SEASONED_SLIDER_CIDER) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_PULVERIZED_GARGOYLE_TEETH) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_HAVE_MUDDY_MIRE_MAGGOT) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_SPIKY_SPIDER_EGG) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_HAIRY_HERRING_HEAD) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_HAVE_PUTRID_PIRATE_PERSPIRATION) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_ICECROWN_BOTTLED_WATER) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_WASPS_WINGS) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_HAVE_PRISMATIC_MOJO) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_RAPTOR_CLAW) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_AMBERSEED) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_HAVE_SHRUNKEN_DRAGONS_CLAW) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_CHILLED_SERPENT_MUCUS) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_CRYSTALLIZED_HOGSNOT) ||
-                    !sSpellMgr->GetSpellInfo(SPELL_HAVE_CRUSHED_BASILISK_CRYSTALS) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_TROLLBANE) || !sSpellMgr->GetSpellInfo(SPELL_HAVE_FROZEN_SPIDER_ICHOR))
-                    return false;
-                return true;
-            }
-
-        void HandleScriptEffect(SpellEffIndex /* effIndex */)
+    void HandleScriptEffect(SpellEffIndex /* effIndex */)
+    {
+        if (Player* player = GetHitPlayer())
         {
-            if (Player* player = GetHitPlayer())
+            for (uint8 i = 0; i < 21; ++i)
             {
-                for (uint8 i = 0; i < 21; ++i)
+                if (player->HasAura(FetchIngredients[i][0]))
                 {
-                    if (player->HasAura(FetchIngredients[i][0]))
+                    player->CastSpell(player, SPELL_THROW_INGREDIENT);
+                    player->RemoveAura(FetchIngredients[i][0]);
+                    if (player->HasAura(FetchIngredients[i][1]))
                     {
-                        player->CastSpell(player, SPELL_THROW_INGREDIENT);
-                        player->RemoveAura(FetchIngredients[i][0]);
-                        if (player->HasAura(FetchIngredients[i][1]))
+                        player->RemoveAura(FetchIngredients[i][1]);
+                        player->DestroyItemCount(FetchIngredients[i][2], 1, true);
+                        if (i < 15)
                         {
-                            player->RemoveAura(FetchIngredients[i][1]);
-                            player->DestroyItemCount(FetchIngredients[i][2], 1, true);
-                            if (i < 15)
-                            {
-                                if (Creature* finklestein = GetClosestCreatureWithEntry(player, NPC_FINKLESTEIN, 25.0f))
-                                    finklestein->AI()->SetData(1, 1);
-                                return;
-                            }
-                            else
-                            {
-                                if (player->GetQuestStatus(QUEST_THE_ALCHEMIST_APPRENTICE_DAILY) == QUEST_STATUS_INCOMPLETE)
-                                {
-                                    player->RemoveAura(SPELL_ALCHEMIST_APPRENTICE_INVISBUFF);
-                                    player->CastSpell(player, SPELL_KILL_CREDIT);
-                                }
-                            }
+                            if (Creature* finklestein = GetClosestCreatureWithEntry(player, NPC_FINKLESTEIN, 25.0f))
+                                finklestein->AI()->SetData(1, 1);
+                            return;
                         }
                         else
                         {
-                            RemoveItems(player);
-                            player->RemoveAura(SPELL_ALCHEMIST_APPRENTICE_INVISBUFF);
-                            if (Creature* finklestein = GetClosestCreatureWithEntry(player, NPC_FINKLESTEIN, 25.0f))
-                                finklestein->AI()->Talk(SAY_RUINED, player);
-                            return;
+                            if (player->GetQuestStatus(QUEST_THE_ALCHEMIST_APPRENTICE_DAILY) == QUEST_STATUS_INCOMPLETE)
+                            {
+                                player->RemoveAura(SPELL_ALCHEMIST_APPRENTICE_INVISBUFF);
+                                player->CastSpell(player, SPELL_KILL_CREDIT);
+                            }
                         }
                     }
-                 }
-             }
-         }
-
-        void RemoveItems(Player* player)
-        {
-            for (uint8 i = 0; i < 21; ++i)
-                if (player->HasItemCount(FetchIngredients[i][2], 1, true))
-                    player->DestroyItemCount(FetchIngredients[i][2], 1, true);
+                    else
+                    {
+                        RemoveItems(player);
+                        player->RemoveAura(SPELL_ALCHEMIST_APPRENTICE_INVISBUFF);
+                        if (Creature* finklestein = GetClosestCreatureWithEntry(player, NPC_FINKLESTEIN, 25.0f))
+                            finklestein->AI()->Talk(SAY_RUINED, player);
+                        return;
+                    }
+                }
+            }
         }
+    }
 
-        void Register() override
-        {
-            OnEffectHitTarget += SpellEffectFn(spell_pot_check_SpellScript::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
-        }
-    };
+    void RemoveItems(Player* player)
+    {
+        for (uint8 i = 0; i < 21; ++i)
+            if (player->HasItemCount(FetchIngredients[i][2], 1, true))
+                player->DestroyItemCount(FetchIngredients[i][2], 1, true);
+    }
 
-        SpellScript* GetSpellScript() const override
-        {
-            return new spell_pot_check_SpellScript();
-        }
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_pot_check::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
 };
 
 /*#####
 # spell_fetch_ingredient_aura
 #####*/
 
-class spell_fetch_ingredient_aura : public SpellScriptLoader
+class spell_fetch_ingredient_aura : public AuraScript
 {
-    public: spell_fetch_ingredient_aura() : SpellScriptLoader("spell_fetch_ingredient_aura") { }
+    PrepareAuraScript(spell_fetch_ingredient_aura);
 
-        class spell_fetch_ingredient_aura_AuraScript : public AuraScript
-        {
-            PrepareAuraScript(spell_fetch_ingredient_aura_AuraScript);
+    void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        Unit* target = GetTarget();
+        if (GetTargetApplication()->GetRemoveMode() == AURA_REMOVE_BY_EXPIRE)
+            if (target->HasAura(SPELL_ALCHEMIST_APPRENTICE_INVISBUFF))
+                if (Creature* finklestein = GetClosestCreatureWithEntry(target, NPC_FINKLESTEIN, 100.0f))
+                {
+                    target->RemoveAura(SPELL_ALCHEMIST_APPRENTICE_INVISBUFF);
+                    finklestein->AI()->Talk(SAY_RUINED, target);
+                }
+    }
 
-            void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
-            {
-                Unit* target = GetTarget();
-                if (GetTargetApplication()->GetRemoveMode() == AURA_REMOVE_BY_EXPIRE)
-                    if (target->HasAura(SPELL_ALCHEMIST_APPRENTICE_INVISBUFF))
-                        if (Creature* finklestein = GetClosestCreatureWithEntry(target, NPC_FINKLESTEIN, 100.0f))
-                        {
-                            target->RemoveAura(SPELL_ALCHEMIST_APPRENTICE_INVISBUFF);
-                            finklestein->AI()->Talk(SAY_RUINED, target);
-                        }
-            }
-
-            void Register() override
-            {
-                OnEffectRemove += AuraEffectRemoveFn(spell_fetch_ingredient_aura_AuraScript::OnRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
-            }
-        };
-
-        AuraScript* GetAuraScript() const override
-        {
-            return new spell_fetch_ingredient_aura_AuraScript();
-        }
+    void Register() override
+    {
+        OnEffectRemove += AuraEffectRemoveFn(spell_fetch_ingredient_aura::OnRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
 };
 
 enum StormCloud
@@ -859,57 +644,711 @@ enum StormCloud
     RIDE_VEHICLE        = 43671
 };
 
-class npc_storm_cloud : public CreatureScript
+struct npc_storm_cloud : public ScriptedAI
 {
-public:
-    npc_storm_cloud() : CreatureScript("npc_storm_cloud") { }
+    npc_storm_cloud(Creature* creature) : ScriptedAI(creature) { }
 
-    struct npc_storm_cloudAI : public ScriptedAI
+    void Reset() override
     {
-        npc_storm_cloudAI(Creature* creature) : ScriptedAI(creature) { }
+        me->CastSpell(me, STORM_VISUAL, true);
+    }
 
-        void Reset() override
+    void JustAppeared() override
+    {
+        Reset();
+    }
+
+    void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
+    {
+        Unit* unitCaster = caster->ToUnit();
+        if (!unitCaster)
+            return;
+
+        if (spellInfo->Id != GYMERS_GRAB)
+            return;
+
+        if (Vehicle* veh = unitCaster->GetVehicleKit())
         {
-            me->CastSpell(me, STORM_VISUAL, true);
-        }
-
-        void JustRespawned() override
-        {
-            Reset();
-        }
-
-        void SpellHit(Unit* caster, const SpellInfo* spell) override
-        {
-            if (spell->Id != GYMERS_GRAB)
-                return;
-
-            if (Vehicle* veh = caster->GetVehicleKit())
-                if (veh->GetAvailableSeatCount() != 0)
+            if (veh->GetAvailableSeatCount() != 0)
             {
                 me->CastSpell(caster, RIDE_VEHICLE, true);
                 me->CastSpell(caster, HEALING_WINDS, true);
             }
         }
+    }
+};
+
+enum ScourgeDisguise
+{
+    SPELL_SCOURGE_DISGUISE             = 51966,
+    SPELL_SCOURGE_DISGUISE_INSTABILITY = 51971,
+    SPELL_SCOURGE_DISGUISE_EXPIRING    = 52010,
+    SPELL_DROP_DISGUISE                = 54089,
+    TEXT_DISGUISE_WARNING              = 28891
+};
+
+// 51966 - Scourge Disguise
+class spell_zuldrak_scourge_disguise : public AuraScript
+{
+    PrepareAuraScript(spell_zuldrak_scourge_disguise);
+
+    void ApplyEffect(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        Unit* target = GetTarget();
+        target->CastSpell(target, SPELL_SCOURGE_DISGUISE_INSTABILITY, true);
+    }
+
+    void RemoveEffect(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        Unit* target = GetTarget();
+        target->RemoveAura(SPELL_SCOURGE_DISGUISE_INSTABILITY);
+    }
+
+    void Register() override
+    {
+        OnEffectRemove += AuraEffectRemoveFn(spell_zuldrak_scourge_disguise::RemoveEffect, EFFECT_0, SPELL_AURA_TRANSFORM, AURA_EFFECT_HANDLE_REAL);
+        OnEffectApply += AuraEffectApplyFn(spell_zuldrak_scourge_disguise::ApplyEffect, EFFECT_0, SPELL_AURA_TRANSFORM, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 51971 - Scourge Disguise Instability
+class spell_zuldrak_scourge_disguise_instability : public AuraScript
+{
+    PrepareAuraScript(spell_zuldrak_scourge_disguise_instability);
+
+    void CalcPeriodic(AuraEffect const* /*aurEff*/, bool& isPeriodic, int32& amplitude)
+    {
+        isPeriodic = true;
+        amplitude = irand(30, 240) * IN_MILLISECONDS;
+    }
+
+    void HandleDummyTick(AuraEffect const* /*aurEff*/)
+    {
+        GetTarget()->CastSpell(GetTarget(), SPELL_SCOURGE_DISGUISE_EXPIRING, true);
+    }
+
+    void HandleUpdatePeriodic(AuraEffect* aurEff)
+    {
+        aurEff->CalculatePeriodic(GetCaster());
+    }
+
+    void Register() override
+    {
+        DoEffectCalcPeriodic += AuraEffectCalcPeriodicFn(spell_zuldrak_scourge_disguise_instability::CalcPeriodic, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_zuldrak_scourge_disguise_instability::HandleDummyTick, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectUpdatePeriodic += AuraEffectUpdatePeriodicFn(spell_zuldrak_scourge_disguise_instability::HandleUpdatePeriodic, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
+// 52010 - Scourge Disguise Expiring
+class spell_zuldrak_scourge_disguise_expiring : public AuraScript
+{
+    PrepareAuraScript(spell_zuldrak_scourge_disguise_expiring);
+
+    void OnApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (Player* player = GetTarget()->ToPlayer())
+            if (player->HasAura(SPELL_SCOURGE_DISGUISE))
+                player->Unit::Whisper(TEXT_DISGUISE_WARNING, player, true);
+    }
+
+    void AfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        GetTarget()->RemoveAurasDueToSpell(SPELL_SCOURGE_DISGUISE);
+    }
+
+    void Register() override
+    {
+        OnEffectApply += AuraEffectApplyFn(spell_zuldrak_scourge_disguise_expiring::OnApply, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_zuldrak_scourge_disguise_expiring::AfterRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 52335 - Drop Scourge Disguise
+// 54089 - Drop Disguise
+class spell_zuldrak_drop_disguise : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_drop_disguise);
+
+    void HandleHit()
+    {
+        if (Unit* target = GetHitUnit())
+            if (target->HasAura(SPELL_SCOURGE_DISGUISE))
+                target->CastSpell(target, SPELL_SCOURGE_DISGUISE_EXPIRING, true);
+    }
+
+    void Register() override
+    {
+        AfterHit += SpellHitFn(spell_zuldrak_drop_disguise::HandleHit);
+    }
+};
+
+/*######
+## Quest 12606: Cocooned!
+######*/
+
+enum Cocooned
+{
+    SPELL_SUMMON_SCOURGED_CAPTIVE      = 51597,
+    SPELL_SUMMON_CAPTIVE_FOOTMAN       = 51599
+};
+
+// 51596 - Cocooned: Player Not On Quest
+class spell_zuldrak_cocooned_not_on_quest : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_cocooned_not_on_quest);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_SUMMON_SCOURGED_CAPTIVE });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        GetHitUnit()->CastSpell(GetCaster(), SPELL_SUMMON_SCOURGED_CAPTIVE);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_zuldrak_cocooned_not_on_quest::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 51598 - Cocooned: Player On Quest
+class spell_zuldrak_cocooned_on_quest : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_cocooned_on_quest);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_SUMMON_SCOURGED_CAPTIVE, SPELL_SUMMON_CAPTIVE_FOOTMAN });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        GetHitUnit()->CastSpell(GetCaster(), roll_chance_i(66) ? SPELL_SUMMON_SCOURGED_CAPTIVE : SPELL_SUMMON_CAPTIVE_FOOTMAN);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_zuldrak_cocooned_on_quest::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+/*######
+## Quest 12676: Sabotage
+######*/
+
+enum Sabotage
+{
+    SPELL_EXPLODE_SCOURGEWAGON_ROLLER    = 52325,
+    SPELL_EXPLODE_SCOURGEWAGON_FRAME     = 52329,
+    SPELL_EXPLODE_SCOURGEWAGON_GRILL     = 52330,
+    SPELL_EXPLODE_SCOURGEWAGON_WHEEL     = 52332
+};
+
+// 52324 - Scourgewagon Explosion
+class spell_zuldrak_scourgewagon_explosion : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_scourgewagon_explosion);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_EXPLODE_SCOURGEWAGON_ROLLER,
+            SPELL_EXPLODE_SCOURGEWAGON_FRAME,
+            SPELL_EXPLODE_SCOURGEWAGON_GRILL,
+            SPELL_EXPLODE_SCOURGEWAGON_WHEEL
+        });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        caster->CastSpell(caster, SPELL_EXPLODE_SCOURGEWAGON_ROLLER);
+        caster->CastSpell(caster, SPELL_EXPLODE_SCOURGEWAGON_FRAME);
+        caster->CastSpell(caster, SPELL_EXPLODE_SCOURGEWAGON_GRILL);
+        caster->CastSpell(caster, SPELL_EXPLODE_SCOURGEWAGON_WHEEL);
+        caster->CastSpell(caster, SPELL_EXPLODE_SCOURGEWAGON_WHEEL);
+        caster->CastSpell(caster, SPELL_EXPLODE_SCOURGEWAGON_WHEEL);
+        caster->CastSpell(caster, SPELL_EXPLODE_SCOURGEWAGON_WHEEL);
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_zuldrak_scourgewagon_explosion::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12861: Trolls Is Gone Crazy!
+######*/
+
+// 54990 - Chains of the Scourge
+class spell_zuldrak_chains_of_the_scourge : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_chains_of_the_scourge);
+
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({ uint32(spellInfo->GetEffect(EFFECT_1).CalcValue()) });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        GetHitUnit()->CastSpell(GetCaster(), uint32(GetEffectValue()));
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_zuldrak_chains_of_the_scourge::HandleScript, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12721: Rampage
+######*/
+
+enum Rampage
+{
+    SPELL_RAMPAGE_SUMMON_AKILZON    = 52934,
+    SPELL_RAMPAGE_SUMMON_HALAZZI    = 52935,
+    SPELL_RAMPAGE_SUMMON_JANALAI    = 52936,
+    SPELL_RAMPAGE_SUMMON_NALORAKK   = 52937
+};
+
+// 52933 - Rampage: Summon Zul'Aman Gods Master
+class spell_zuldrak_rampage_summon_zulaman_gods_master : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_rampage_summon_zulaman_gods_master);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_RAMPAGE_SUMMON_AKILZON,
+            SPELL_RAMPAGE_SUMMON_HALAZZI,
+            SPELL_RAMPAGE_SUMMON_JANALAI,
+            SPELL_RAMPAGE_SUMMON_NALORAKK
+        });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        caster->CastSpell(caster, SPELL_RAMPAGE_SUMMON_AKILZON);
+        caster->CastSpell(caster, SPELL_RAMPAGE_SUMMON_HALAZZI);
+        caster->CastSpell(caster, SPELL_RAMPAGE_SUMMON_JANALAI);
+        caster->CastSpell(caster, SPELL_RAMPAGE_SUMMON_NALORAKK);
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_zuldrak_rampage_summon_zulaman_gods_master::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12627: Breaking Through Jin'Alai
+######*/
+
+enum BreakingThroughJinAlai
+{
+    SPELL_BREAKING_THROUGH_SUMMON_AKILZON    = 51861,
+    SPELL_BREAKING_THROUGH_SUMMON_JANALAI    = 52452,
+    SPELL_BREAKING_THROUGH_SUMMON_HALAZZI    = 52453,
+    SPELL_BREAKING_THROUGH_SUMMON_NALORAKK   = 52454
+};
+
+// 51862 - Breaking Through Jin'Alai: Summon Zul'Aman Gods Master
+class spell_zuldrak_breaking_through_summon_zulaman_gods_master : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_breaking_through_summon_zulaman_gods_master);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_BREAKING_THROUGH_SUMMON_AKILZON,
+            SPELL_BREAKING_THROUGH_SUMMON_JANALAI,
+            SPELL_BREAKING_THROUGH_SUMMON_HALAZZI,
+            SPELL_BREAKING_THROUGH_SUMMON_NALORAKK
+        });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        caster->CastSpell(caster, SPELL_BREAKING_THROUGH_SUMMON_AKILZON);
+        caster->CastSpell(caster, SPELL_BREAKING_THROUGH_SUMMON_JANALAI);
+        caster->CastSpell(caster, SPELL_BREAKING_THROUGH_SUMMON_HALAZZI);
+        caster->CastSpell(caster, SPELL_BREAKING_THROUGH_SUMMON_NALORAKK);
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_zuldrak_breaking_through_summon_zulaman_gods_master::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12630: Kickin' Nass and Takin' Manes
+######*/
+
+enum KickinNassAndTakinManes
+{
+    SPELL_SUMMON_NASS     = 51865
+};
+
+// 51864 - Player Summon Nass
+// 51889 - Quest Accept Summon Nass
+class spell_zuldrak_summon_nass : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_summon_nass);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_SUMMON_NASS });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        GetHitUnit()->CastSpell(GetHitUnit(), SPELL_SUMMON_NASS);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_zuldrak_summon_nass::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12730: Convocation at Zol'Heb
+######*/
+
+enum ConvocationAtZolHeb
+{
+    SPELL_AKALIS_STUN           = 52989,
+    SPELL_FLICKERING_FLAMES     = 53504
+};
+
+// 53010 - Convocation at Zol'Heb: Removef Akali's Stun
+class spell_zuldrak_remove_akalis_stun : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_remove_akalis_stun);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_AKALIS_STUN });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        GetHitUnit()->RemoveAurasDueToSpell(SPELL_AKALIS_STUN);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_zuldrak_remove_akalis_stun::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+// 53350 - Quenching Mist
+class spell_zuldrak_quenching_mist : public AuraScript
+{
+    PrepareAuraScript(spell_zuldrak_quenching_mist);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_FLICKERING_FLAMES });
+    }
+
+    void HandleEffectPeriodic(AuraEffect const* /*aurEff*/)
+    {
+        GetTarget()->RemoveAurasDueToSpell(SPELL_FLICKERING_FLAMES);
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_zuldrak_quenching_mist::HandleEffectPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_HEAL);
+    }
+};
+
+// 52989 - Akali's Stun
+class spell_zuldrak_akalis_stun : public AuraScript
+{
+    PrepareAuraScript(spell_zuldrak_akalis_stun);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_FLICKERING_FLAMES });
+    }
+
+    void AfterApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        GetTarget()->RemoveAurasDueToSpell(SPELL_FLICKERING_FLAMES);
+    }
+
+    void Register() override
+    {
+        AfterEffectApply += AuraEffectApplyFn(spell_zuldrak_akalis_stun::AfterApply, EFFECT_0, SPELL_AURA_MOD_STUN, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+/*######
+## Quest 12661: Infiltrating Voltarus / 12669: So Far, So Bad / 12676: Sabotage / 12677: Hazardous Materials / 12713: Betrayal
+######*/
+
+// 55368 - Summon Stefan
+class spell_zuldrak_summon_stefan : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_summon_stefan);
+
+    void SetDest(SpellDestination& dest)
+    {
+        // Adjust effect summon position (sniff)
+        Position const offset = { 0.0f, 0.0f, 30.0f, 0.0f };
+        dest.RelocateOffset(offset);
+    }
+
+    void Register() override
+    {
+        OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_zuldrak_summon_stefan::SetDest, EFFECT_0, TARGET_DEST_CASTER_BACK);
+    }
+};
+
+/*######
+## Quest 12527: Gluttonous Lurkers
+######*/
+
+enum GluttonousLurkers
+{
+    SPELL_SUMMON_GORGED_LURKING_BASILISK    = 50928
+};
+
+// 50894 - Zul'Drak Rat
+class spell_zuldrak_zuldrak_rat : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_zuldrak_rat);
+
+    bool Validate(SpellInfo const* /*spell*/) override
+    {
+        return ValidateSpellInfo({ SPELL_SUMMON_GORGED_LURKING_BASILISK });
+    }
+
+    void HandleScriptEffect(SpellEffIndex /* effIndex */)
+    {
+        if (GetHitAura() && GetHitAura()->GetStackAmount() >= GetSpellInfo()->StackAmount)
+        {
+            GetHitUnit()->CastSpell((Unit*) nullptr, SPELL_SUMMON_GORGED_LURKING_BASILISK, true);
+            if (Creature* basilisk = GetHitUnit()->ToCreature())
+                basilisk->DespawnOrUnsummon();
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_zuldrak_zuldrak_rat::HandleScriptEffect, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12919: The Storm King's Vengeance
+######*/
+
+enum TheStormKingsVengeance
+{
+    SPELL_RIDE_GYMER            = 43671,
+    SPELL_GRABBED               = 55424,
+    SPELL_VARGUL_EXPLOSION      = 55569
+};
+
+// 55516 - Gymer's Grab
+class spell_zuldrak_gymers_grab : public SpellScript
+{
+    PrepareSpellScript(spell_zuldrak_gymers_grab);
+
+    bool Validate(SpellInfo const* /*spell*/) override
+    {
+        return ValidateSpellInfo({ SPELL_RIDE_GYMER, SPELL_GRABBED });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        if (!GetHitCreature())
+            return;
+        CastSpellExtraArgs args(TRIGGERED_FULL_MASK);
+        args.AddSpellBP0(2);
+        GetHitCreature()->CastSpell(GetCaster(), SPELL_RIDE_GYMER, args);
+        GetHitCreature()->CastSpell(GetHitCreature(), SPELL_GRABBED, true);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_zuldrak_gymers_grab::HandleScript, EFFECT_0,  SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+// 55421 - Gymer's Throw
+class spell_zuldrak_gymers_throw : public SpellScript
+{
+   PrepareSpellScript(spell_zuldrak_gymers_throw);
+
+    bool Validate(SpellInfo const* /*spell*/) override
+    {
+        return ValidateSpellInfo({ SPELL_VARGUL_EXPLOSION });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        if (caster->IsVehicle())
+            if (Unit* passenger = caster->GetVehicleKit()->GetPassenger(1))
+            {
+                passenger->ExitVehicle();
+                caster->CastSpell(passenger, SPELL_VARGUL_EXPLOSION, true);
+            }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_zuldrak_gymers_throw::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12557: Lab Work
+######*/
+
+enum LabWork
+{
+    SPELL_LAB_WORK_HAVE_WITHERED_BATWING        = 51060,
+    SPELL_LAB_WORK_HAVE_MUDDY_MIRE_MAGGOT       = 51068,
+    SPELL_LAB_WORK_HAVE_AMBERSEED               = 51088,
+    SPELL_LAB_WORK_HAVE_CHILLED_SERPENT_MUCUS   = 51094,
+
+    SPELL_WITHERED_BATWING_KILL_CREDIT          = 51226,
+    SPELL_MUDDY_MIRE_MAGGOT_KILL_CREDIT         = 51227,
+    SPELL_AMBERSEED_KILL_CREDIT                 = 51228,
+    SPELL_CHILLED_SERPENT_MUCUS_KILL_CREDIT     = 51229
+};
+
+// 51060 - Have Withered Batwing
+// 51068 - Have Muddy Mire Maggot
+// 51088 - Have Amberseed
+// 51094 - Have Chilled Serpent Mucus
+class spell_zuldrak_have_ingredient : public AuraScript
+{
+    PrepareAuraScript(spell_zuldrak_have_ingredient);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_WITHERED_BATWING_KILL_CREDIT,
+            SPELL_MUDDY_MIRE_MAGGOT_KILL_CREDIT,
+            SPELL_AMBERSEED_KILL_CREDIT,
+            SPELL_CHILLED_SERPENT_MUCUS_KILL_CREDIT
+        });
+    }
+
+    void AfterApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        switch (GetId())
+        {
+            case SPELL_LAB_WORK_HAVE_WITHERED_BATWING:
+                GetTarget()->CastSpell(GetTarget(), SPELL_WITHERED_BATWING_KILL_CREDIT);
+                break;
+            case SPELL_LAB_WORK_HAVE_MUDDY_MIRE_MAGGOT:
+                GetTarget()->CastSpell(GetTarget(), SPELL_MUDDY_MIRE_MAGGOT_KILL_CREDIT);
+                break;
+            case SPELL_LAB_WORK_HAVE_AMBERSEED:
+                GetTarget()->CastSpell(GetTarget(), SPELL_AMBERSEED_KILL_CREDIT);
+                break;
+            case SPELL_LAB_WORK_HAVE_CHILLED_SERPENT_MUCUS:
+                GetTarget()->CastSpell(GetTarget(), SPELL_CHILLED_SERPENT_MUCUS_KILL_CREDIT);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void Register() override
+    {
+        AfterEffectApply += AuraEffectApplyFn(spell_zuldrak_have_ingredient::AfterApply, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+/*######
+## Quest 12710: Disclosure
+######*/
+
+// 52839 - Summon Escort Aura
+class spell_zuldrak_summon_escort_aura : public AuraScript
+{
+    PrepareAuraScript(spell_zuldrak_summon_escort_aura);
+
+    enum Disclosure
+    {
+        SPELL_SCOURGE_DISGUISE          = 51966,
+        SPELL_SUMMON_ESCORT             = 52775,
+        SPELL_SCOURGE_DISGUISE_ESCORT   = 52842
     };
 
-    CreatureAI* GetAI(Creature* creature) const override
+    bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return new npc_storm_cloudAI(creature);
+        return ValidateSpellInfo(
+        {
+            SPELL_SCOURGE_DISGUISE,
+            SPELL_SUMMON_ESCORT,
+            SPELL_SCOURGE_DISGUISE_ESCORT
+        });
+    }
+
+    void AfterApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        Unit* target = GetTarget();
+        target->RemoveAurasDueToSpell(SPELL_SCOURGE_DISGUISE);
+        target->CastSpell(target, SPELL_SUMMON_ESCORT);
+        target->CastSpell(target, SPELL_SCOURGE_DISGUISE_ESCORT);
+    }
+
+    void Register() override
+    {
+        AfterEffectApply += AuraEffectApplyFn(spell_zuldrak_summon_escort_aura::AfterApply, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
     }
 };
 
 void AddSC_zuldrak()
 {
-    new npc_drakuru_shackles();
-    new npc_captured_rageclaw();
-    new npc_released_offspring_harkoa();
-    new npc_crusade_recruit();
-    new go_scourge_enclosure();
-    new npc_alchemist_finklestein();
-    new go_finklesteins_cauldron();
-    new spell_random_ingredient_aura();
-    new spell_random_ingredient();
-    new spell_pot_check();
-    new spell_fetch_ingredient_aura();
-    new npc_storm_cloud();
+    RegisterCreatureAI(npc_released_offspring_harkoa);
+    RegisterCreatureAI(npc_crusade_recruit);
+    RegisterCreatureAI(npc_alchemist_finklestein);
+    RegisterGameObjectAI(go_finklesteins_cauldron);
+    RegisterSpellScript(spell_random_ingredient_aura);
+    RegisterSpellScript(spell_random_ingredient);
+    RegisterSpellScript(spell_pot_check);
+    RegisterSpellScript(spell_fetch_ingredient_aura);
+    RegisterCreatureAI(npc_storm_cloud);
+    RegisterSpellScript(spell_zuldrak_scourge_disguise);
+    RegisterSpellScript(spell_zuldrak_scourge_disguise_instability);
+    RegisterSpellScript(spell_zuldrak_scourge_disguise_expiring);
+    RegisterSpellScript(spell_zuldrak_drop_disguise);
+    RegisterSpellScript(spell_zuldrak_cocooned_not_on_quest);
+    RegisterSpellScript(spell_zuldrak_cocooned_on_quest);
+    RegisterSpellScript(spell_zuldrak_scourgewagon_explosion);
+    RegisterSpellScript(spell_zuldrak_chains_of_the_scourge);
+    RegisterSpellScript(spell_zuldrak_rampage_summon_zulaman_gods_master);
+    RegisterSpellScript(spell_zuldrak_breaking_through_summon_zulaman_gods_master);
+    RegisterSpellScript(spell_zuldrak_summon_nass);
+    RegisterSpellScript(spell_zuldrak_remove_akalis_stun);
+    RegisterSpellScript(spell_zuldrak_quenching_mist);
+    RegisterSpellScript(spell_zuldrak_akalis_stun);
+    RegisterSpellScript(spell_zuldrak_summon_stefan);
+    RegisterSpellScript(spell_zuldrak_zuldrak_rat);
+    RegisterSpellScript(spell_zuldrak_gymers_grab);
+    RegisterSpellScript(spell_zuldrak_gymers_throw);
+    RegisterSpellScript(spell_zuldrak_have_ingredient);
+    RegisterSpellScript(spell_zuldrak_summon_escort_aura);
 }

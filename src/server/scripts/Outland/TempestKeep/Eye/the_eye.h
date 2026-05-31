@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,35 +18,59 @@
 #ifndef DEF_THE_EYE_H
 #define DEF_THE_EYE_H
 
+#include "CreatureAIImpl.h"
+
+#define TheEyeScriptName "instance_the_eye"
 #define DataHeader "TE"
 
-uint32 const EncounterCount = 4;
+constexpr uint32 EncounterCount = 4;
 
-enum DataTypes
+enum TEDataTypes
 {
-    // Encounter States/Boss GUIDs
-    DATA_KAELTHAS                       = 0,
-    DATA_ALAR                           = 1,
-    DATA_HIGH_ASTROMANCER_SOLARIAN      = 2,
-    DATA_VOID_REAVER                    = 3,
+    // Encounter States
+    DATA_ALAR                           = 0,
+    DATA_VOID_REAVER                    = 1,
+    DATA_SOLARIAN                       = 2,
+    DATA_KAELTHAS                       = 3,
 
-    DATA_ASTROMANCER                    = 4,
-    DATA_GRANDASTROMANCERCAPERNIAN      = 5,
-    DATA_KAELTHASEVENT                  = 6,
-    DATA_LORDSANGUINAR                  = 7,
-    DATA_MASTERENGINEERTELONICUS        = 8,
-    DATA_THALADREDTHEDARKENER           = 9
+    // Additional Data
+    DATA_CAPERNIAN,
+    DATA_SANGUINAR,
+    DATA_TELONICUS,
+    DATA_THALADRED,
+
+    DATA_KAEL_STATUE_LEFT,
+    DATA_KAEL_STATUE_RIGHT,
+    DATA_TEMPEST_BRIDGE_WINDOW
 };
 
-enum CreatureIds
+enum TECreatureIds
 {
+    NPC_ALAR                            = 19514,
+    NPC_VOID_REAVER                     = 19516,
+    NPC_SOLARIAN                        = 18805,
+    NPC_KAELTHAS                        = 19622,
     NPC_SANGUINAR                       = 20060,
     NPC_CAPERNIAN                       = 20062,
     NPC_TELONICUS                       = 20063,
-    NPC_THALADRED                       = 20064,
-    NPC_KAELTHAS                        = 19622,
-    NPC_HIGH_ASTROMANCER_SOLARIAN       = 18805,
-    NPC_ALAR                            = 19514
+    NPC_THALADRED                       = 20064
 };
+
+enum TEGameObjectIds
+{
+    GO_TEMPEST_BRIDDGE_WINDOW           = 184069,
+    GO_KAEL_STATUE_RIGHT                = 184596,
+    GO_KAEL_STATUE_LEFT                 = 184597,
+    GO_ARCANE_DOOR_LEFT                 = 184324,
+    GO_ARCANE_DOOR_RIGHT                = 184325
+};
+
+template <class AI, class T>
+inline AI* GetTheEyeAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, TheEyeScriptName);
+}
+
+#define RegisterTheEyeCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetTheEyeAI)
 
 #endif

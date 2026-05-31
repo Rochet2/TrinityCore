@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,43 +18,43 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include "Define.h"
 #include <string>
-#include <list>
-#include <mutex>
-#include <boost/property_tree/ptree.hpp>
+#include <string_view>
+#include <vector>
 
-class ConfigMgr
+class TC_COMMON_API ConfigMgr
 {
-    ConfigMgr() { }
-    ~ConfigMgr() { }
+    ConfigMgr() = default;
+    ConfigMgr(ConfigMgr const&) = delete;
+    ConfigMgr& operator=(ConfigMgr const&) = delete;
+    ~ConfigMgr() = default;
 
 public:
     /// Method used only for loading main configuration files (authserver.conf and worldserver.conf)
-    bool LoadInitial(std::string const& file, std::string& error);
+    bool LoadInitial(std::string file, std::vector<std::string> args, std::string& error);
+    bool LoadAdditionalFile(std::string file, bool keepOnReload, std::string& error);
+    bool LoadAdditionalDir(std::string const& dir, bool keepOnReload, std::vector<std::string>& loadedFiles, std::vector<std::string>& errors);
 
-    static ConfigMgr* instance()
-    {
-        static ConfigMgr instance;
-        return &instance;
-    }
+    /// Overrides configuration with environment variables and returns overridden keys
+    std::vector<std::string> OverrideWithEnvVariablesIfAny();
 
-    bool Reload(std::string& error);
+    static ConfigMgr* instance();
 
-    std::string GetStringDefault(std::string const& name, const std::string& def);
-    bool GetBoolDefault(std::string const& name, bool def);
-    int GetIntDefault(std::string const& name, int def);
-    float GetFloatDefault(std::string const& name, float def);
+    bool Reload(std::vector<std::string>& errors);
+
+    std::string GetStringDefault(std::string const& name, const std::string& def, bool quiet = false) const;
+    bool GetBoolDefault(std::string const& name, bool def, bool quiet = false) const;
+    int GetIntDefault(std::string const& name, int def, bool quiet = false) const;
+    float GetFloatDefault(std::string const& name, float def, bool quiet = false) const;
 
     std::string const& GetFilename();
-    std::list<std::string> GetKeysByString(std::string const& name);
+    std::vector<std::string> const& GetArguments() const;
+    std::vector<std::string> GetKeysByString(std::string const& name);
 
 private:
-    std::string _filename;
-    boost::property_tree::ptree _config;
-    std::mutex _configLock;
-
-    ConfigMgr(ConfigMgr const&);
-    ConfigMgr& operator=(ConfigMgr const&);
+    template<class T>
+    T GetValueDefault(std::string const& name, T def, bool quiet) const;
 };
 
 #define sConfigMgr ConfigMgr::instance()

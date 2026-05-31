@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,7 +18,15 @@
 #ifndef TRINITYCORE_PET_DEFINES_H
 #define TRINITYCORE_PET_DEFINES_H
 
-enum PetType
+#include "Define.h"
+#include "Optional.h"
+#include <array>
+#include <string>
+#include <vector>
+
+enum ReactStates : uint8;
+
+enum PetType : uint8
 {
     SUMMON_PET              = 0,
     HUNTER_PET              = 1,
@@ -29,7 +36,7 @@ enum PetType
 #define MAX_PET_STABLES         4
 
 // stored in character_pet.slot
-enum PetSaveMode
+enum PetSaveMode : int8
 {
     PET_SAVE_AS_DELETED        = -1,                        // not saved in fact
     PET_SAVE_AS_CURRENT        =  0,                        // in current slot (with player)
@@ -60,21 +67,57 @@ enum PetSpellType
     PETSPELL_TALENT = 2
 };
 
-enum ActionFeedback
+enum class PetActionFeedback : uint8
 {
-    FEEDBACK_NONE            = 0,
-    FEEDBACK_PET_DEAD        = 1,
-    FEEDBACK_NOTHING_TO_ATT  = 2,
-    FEEDBACK_CANT_ATT_TARGET = 3
+    None            = 0,
+    Dead            = 1,
+    NoTarget        = 2,
+    InvalidTarget   = 3,
+    NoPath          = 4
 };
 
-enum PetTalk
+enum PetAction : int32
 {
-    PET_TALK_SPECIAL_SPELL  = 0,
-    PET_TALK_ATTACK         = 1
+    PET_ACTION_SPECIAL_SPELL    = 0,
+    PET_ACTION_ATTACK           = 1
 };
 
 #define PET_FOLLOW_DIST  1.0f
 #define PET_FOLLOW_ANGLE float(M_PI/2)
+
+class PetStable
+{
+public:
+    struct PetInfo
+    {
+        PetInfo() { }
+
+        std::string Name;
+        std::string ActionBar;
+        uint32 PetNumber = 0;
+        uint32 CreatureId = 0;
+        uint32 DisplayId = 0;
+        uint32 Experience = 0;
+        uint32 Health = 0;
+        uint32 Mana = 0;
+        uint32 Happiness = 0;
+        uint32 LastSaveTime = 0;
+        uint32 CreatedBySpellId = 0;
+        uint8 Level = 0;
+        ReactStates ReactState = ReactStates(0);
+        PetType Type = MAX_PET_TYPE;
+        bool WasRenamed = false;
+    };
+
+    Optional<PetInfo> CurrentPet;                                   // PET_SAVE_AS_CURRENT
+    std::array<Optional<PetInfo>, MAX_PET_STABLES> StabledPets;     // PET_SAVE_FIRST_STABLE_SLOT - PET_SAVE_LAST_STABLE_SLOT
+    uint32 MaxStabledPets = 0;
+    std::vector<PetInfo> UnslottedPets;                             // PET_SAVE_NOT_IN_SLOT
+
+    PetInfo const* GetUnslottedHunterPet() const
+    {
+        return UnslottedPets.size() == 1 && UnslottedPets[0].Type == HUNTER_PET ? &UnslottedPets[0] : nullptr;
+    }
+};
 
 #endif

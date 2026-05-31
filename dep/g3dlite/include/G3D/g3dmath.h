@@ -27,6 +27,7 @@
 #include "G3D/platform.h"
 #include <ctype.h>
 #include <float.h>
+#include <algorithm>
 #include <limits>
 #include <stdlib.h>
 #include <stdint.h>
@@ -934,7 +935,7 @@ inline double signedPow(double b, double e) {
 
 namespace std {
 inline int pow(int a, int b) {
-    return (int)pow(double(a), double(b));
+    return (int)::pow(double(a), double(b));
 }
 
 }

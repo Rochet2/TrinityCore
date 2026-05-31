@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -19,27 +18,49 @@
 #ifndef DEF_OLD_HILLSBRAD_H
 #define DEF_OLD_HILLSBRAD_H
 
+#include "CreatureAIImpl.h"
+
+#define OHScriptName "instance_old_hillsbrad"
 #define DataHeader "OH"
 
-enum DataTypes
+constexpr uint32 OldHillsbradFoothillsBossCount = 3;
+
+enum OHDataTypes
 {
-    TYPE_BARREL_DIVERSION   = 1,
-    TYPE_THRALL_EVENT       = 2,
-    TYPE_THRALL_PART1       = 3,
-    TYPE_THRALL_PART2       = 4,
-    TYPE_THRALL_PART3       = 5,
-    TYPE_THRALL_PART4       = 6,
+    DATA_LIEUTENANT_DRAKE   = 0,
+    DATA_CAPTAIN_SKARLOC    = 1,
+    DATA_EPOCH_HUNTER       = 2,
 
-    DATA_THRALL             = 7,
-    DATA_TARETHA            = 8,
-    DATA_EPOCH              = 9
+    TYPE_BARREL_DIVERSION   = 3,
+    TYPE_THRALL_EVENT       = 4,
 
+    DATA_THRALL             = 5,
+    DATA_TARETHA            = 6
 };
 
-enum WorldStateIds
+enum OHWorldStateIds
 {
     WORLD_STATE_OH              = 2436
 };
 
-#endif
+enum OHThrallEscortStates
+{
+    OH_ESCORT_PRISON_TO_SKARLOC,
+    OH_ESCORT_HORSE_RIDE,
+    OH_ESCORT_BARN_TO_TARETHA,
+    OH_ESCORT_EPOCH_HUNTER,
+    OH_ESCORT_FINISHED,
 
+    OH_ESCORT_DEATH_EVENT           // increment wipe counter
+};
+
+template <class AI, class T>
+inline AI* GetOldHillsbradAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, OHScriptName);
+}
+
+#define RegisterOldHillsbradCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetOldHillsbradAI)
+#define RegisterOldHillsbradGameObjectAI(ai_name) RegisterGameObjectAIWithFactory(ai_name, GetOldHillsbradAI)
+
+#endif

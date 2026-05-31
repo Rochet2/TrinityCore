@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,111 +15,112 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * Timers requires to be revisited
+ * Is Dark Shell cast really delayed?
+ */
+
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "mana_tombs.h"
 
-enum Texts
+enum PandemoniusTexts
 {
-    SAY_AGGRO                       = 0,
-    SAY_KILL                        = 1,
-    SAY_DEATH                       = 2,
-    EMOTE_DARK_SHELL                = 3
+    SAY_AGGRO                 = 0,
+    SAY_SLAY                  = 1,
+    SAY_DEATH                 = 2,
+    EMOTE_DARK_SHELL          = 3
 };
 
-enum Spells
+enum PandemoniusSpells
 {
-    SPELL_VOID_BLAST = 32325,
-    SPELL_DARK_SHELL = 32358
+    SPELL_VOID_BLAST          = 32325,
+    SPELL_VOID_BLAST_SCRIPT   = 32326,    // NYI. Is it used? What it does?
+    SPELL_DARK_SHELL          = 32358
 };
 
-enum Events
+enum PandemoniusEvents
 {
-    EVENT_VOID_BLAST = 1,
+    EVENT_VOID_BLAST          = 1,
     EVENT_DARK_SHELL
 };
 
-class boss_pandemonius : public CreatureScript
+uint32 constexpr DARK_SHELL_EVENT_GROUP = 1;
+
+// 18341 - Pandemonius
+struct boss_pandemonius : public BossAI
 {
-public:
-    boss_pandemonius() : CreatureScript("boss_pandemonius") { }
+    boss_pandemonius(Creature* creature) : BossAI(creature, DATA_PANDEMONIUS), _voidBlastCounter(0) { }
 
-    struct boss_pandemoniusAI : public BossAI
+    void Reset() override
     {
-        boss_pandemoniusAI(Creature* creature) : BossAI(creature, DATA_PANDEMONIUS)
-        {
-            VoidBlastCounter = 0;
-        }
-
-        void Reset() override
-        {
-            _Reset();
-            VoidBlastCounter = 0;
-        }
-
-        void JustDied(Unit* /*killer*/) override
-        {
-            Talk(SAY_DEATH);
-        }
-
-        void KilledUnit(Unit* /*victim*/) override
-        {
-            Talk(SAY_KILL);
-        }
-
-        void EnterCombat(Unit* /*who*/) override
-        {
-            _EnterCombat();
-            Talk(SAY_AGGRO);
-            events.ScheduleEvent(EVENT_DARK_SHELL, 20000);
-            events.ScheduleEvent(EVENT_VOID_BLAST, urand(8000, 23000));
-        }
-
-        void ExecuteEvent(uint32 eventId) override
-        {
-            switch (eventId)
-            {
-                case EVENT_VOID_BLAST:
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 100.0f, true))
-                    {
-                        DoCast(target, SPELL_VOID_BLAST);
-                        ++VoidBlastCounter;
-                    }
-
-                    if (VoidBlastCounter == 5)
-                    {
-                        VoidBlastCounter = 0;
-                        events.ScheduleEvent(EVENT_VOID_BLAST, urand(15000, 25000));
-                    }
-                    else
-                    {
-                        events.ScheduleEvent(EVENT_VOID_BLAST, 500);
-                        events.DelayEvents(EVENT_DARK_SHELL, 500);
-                    }
-                    break;
-                case EVENT_DARK_SHELL:
-                    if (me->IsNonMeleeSpellCast(false))
-                        me->InterruptNonMeleeSpells(true);
-                    Talk(EMOTE_DARK_SHELL);
-                    DoCast(me, SPELL_DARK_SHELL);
-                    events.ScheduleEvent(EVENT_DARK_SHELL, 20000);
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        private:
-            uint32 VoidBlastCounter;
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return GetManaTombsAI<boss_pandemoniusAI>(creature);
+        _Reset();
+        _voidBlastCounter = 0;
     }
+
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        Talk(SAY_AGGRO);
+        events.ScheduleEvent(EVENT_DARK_SHELL, 20s, DARK_SHELL_EVENT_GROUP);
+        events.ScheduleEvent(EVENT_VOID_BLAST, 8s, 23s);
+    }
+
+    void OnSpellStart(SpellInfo const* spell) override
+    {
+        if (spell->Id == sSpellMgr->GetSpellIdForDifficulty(SPELL_DARK_SHELL, me))
+            Talk(EMOTE_DARK_SHELL);
+    }
+
+    void KilledUnit(Unit* /*victim*/) override
+    {
+        Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        Talk(SAY_DEATH);
+        _JustDied();
+    }
+
+    void ExecuteEvent(uint32 eventId) override
+    {
+        switch (eventId)
+        {
+            case EVENT_VOID_BLAST:
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
+                {
+                    DoCast(target, SPELL_VOID_BLAST);
+                    ++_voidBlastCounter;
+                }
+
+                if (_voidBlastCounter == 5)
+                {
+                    _voidBlastCounter = 0;
+                    events.ScheduleEvent(EVENT_VOID_BLAST, 15s, 25s);
+                }
+                else
+                {
+                    events.ScheduleEvent(EVENT_VOID_BLAST, 500ms);
+                    events.DelayEvents(500ms, DARK_SHELL_EVENT_GROUP);
+                }
+                break;
+            case EVENT_DARK_SHELL:
+                DoCastSelf(SPELL_DARK_SHELL);
+                events.ScheduleEvent(EVENT_DARK_SHELL, 20s, DARK_SHELL_EVENT_GROUP);
+                break;
+            default:
+                break;
+        }
+    }
+
+private:
+    uint32 _voidBlastCounter;
 };
 
 void AddSC_boss_pandemonius()
 {
-    new boss_pandemonius();
+    RegisterManaTombsCreatureAI(boss_pandemonius);
 }

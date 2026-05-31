@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,9 +23,14 @@ SDCategory: Karazhan
 EndScriptData */
 
 #include "ScriptMgr.h"
-#include "ScriptedCreature.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
 #include "karazhan.h"
+#include "Map.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
+#include "ScriptedCreature.h"
+#include "TemporarySummon.h"
 
 enum Netherspite
 {
@@ -42,7 +46,6 @@ enum Netherspite
     SPELL_EMPOWERMENT           = 38549,
     SPELL_NETHERSPITE_ROAR      = 38684,
 };
-
 
 const float PortalCoord[3][3] =
 {
@@ -71,7 +74,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const override
     {
-        return GetInstanceAI<boss_netherspiteAI>(creature);
+        return GetKarazhanAI<boss_netherspiteAI>(creature);
     }
 
     struct boss_netherspiteAI : public ScriptedAI
@@ -140,6 +143,8 @@ public:
 
             HandleDoors(true);
             DestroyPortals();
+
+            instance->SetBossState(DATA_NETHERSPITE, NOT_STARTED);
         }
 
         void SummonPortals()
@@ -151,7 +156,7 @@ public:
             pos[BLUE_PORTAL] = (r > 1 ? 1 : 2); // Blue Portal not on the left side (0)
 
             for (int i = 0; i < 3; ++i)
-                if (Creature* portal = me->SummonCreature(PortalID[i], PortalCoord[pos[i]][0], PortalCoord[pos[i]][1], PortalCoord[pos[i]][2], 0, TEMPSUMMON_TIMED_DESPAWN, 60000))
+                if (Creature* portal = me->SummonCreature(PortalID[i], PortalCoord[pos[i]][0], PortalCoord[pos[i]][1], PortalCoord[pos[i]][2], 0, TEMPSUMMON_TIMED_DESPAWN, 1min))
                 {
                     PortalGUID[i] = portal->GetGUID();
                     portal->AddAura(PortalVisual[i], portal);
@@ -181,23 +186,21 @@ public:
                     // temporary store for the best suitable beam reciever
                     Unit* target = me;
 
-                    if (Map* map = me->GetMap())
-                    {
-                        Map::PlayerList const& players = map->GetPlayers();
+                    Map::PlayerList const& players = me->GetMap()->GetPlayers();
 
-                        // get the best suitable target
-                        for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
-                        {
-                            Player* p = i->GetSource();
-                            if (p && p->IsAlive() // alive
-                                && (!target || target->GetDistance2d(portal)>p->GetDistance2d(portal)) // closer than current best
-                                && !p->HasAura(PlayerDebuff[j]) // not exhausted
-                                && !p->HasAura(PlayerBuff[(j + 1) % 3]) // not on another beam
-                                && !p->HasAura(PlayerBuff[(j + 2) % 3])
-                                && IsBetween(me, p, portal)) // on the beam
-                                target = p;
-                        }
+                    // get the best suitable target
+                    for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
+                    {
+                        Player* p = i->GetSource();
+                        if (p && p->IsAlive() // alive
+                            && (!target || target->GetDistance2d(portal)>p->GetDistance2d(portal)) // closer than current best
+                            && !p->HasAura(PlayerDebuff[j]) // not exhausted
+                            && !p->HasAura(PlayerBuff[(j + 1) % 3]) // not on another beam
+                            && !p->HasAura(PlayerBuff[(j + 2) % 3])
+                            && IsBetween(me, p, portal)) // on the beam
+                            target = p;
                     }
+
                     // buff the target
                     if (target->GetTypeId() == TYPEID_PLAYER)
                         target->AddAura(PlayerBuff[j], target);
@@ -216,7 +219,7 @@ public:
                             BeamerGUID[j].Clear();
                         }
                         // create new one and start beaming on the target
-                        if (Creature* beamer = portal->SummonCreature(PortalID[j], portal->GetPositionX(), portal->GetPositionY(), portal->GetPositionZ(), portal->GetOrientation(), TEMPSUMMON_TIMED_DESPAWN, 60000))
+                        if (Creature* beamer = portal->SummonCreature(PortalID[j], portal->GetPositionX(), portal->GetPositionY(), portal->GetPositionZ(), portal->GetOrientation(), TEMPSUMMON_TIMED_DESPAWN, 1min))
                         {
                             beamer->CastSpell(target, PortalBeam[j], false);
                             BeamerGUID[j] = beamer->GetGUID();
@@ -224,7 +227,7 @@ public:
                     }
                     // aggro target if Red Beam
                     if (j == RED_PORTAL && me->GetVictim() != target && target->GetTypeId() == TYPEID_PLAYER)
-                        me->getThreatManager().addThreat(target, 100000.0f+DoGetThreat(me->GetVictim()));
+                        AddThreat(target, 100000.0f);
                 }
         }
 
@@ -261,16 +264,20 @@ public:
                 Door->SetGoState(open ? GO_STATE_ACTIVE : GO_STATE_READY);
         }
 
-        void EnterCombat(Unit* /*who*/) override
+        void JustEngagedWith(Unit* /*who*/) override
         {
             HandleDoors(false);
             SwitchToPortalPhase();
+
+            instance->SetBossState(DATA_NETHERSPITE, IN_PROGRESS);
         }
 
         void JustDied(Unit* /*killer*/) override
         {
             HandleDoors(true);
             DestroyPortals();
+
+            instance->SetBossState(DATA_NETHERSPITE, DONE);
         }
 
         void UpdateAI(uint32 diff) override
@@ -281,7 +288,7 @@ public:
             // Void Zone
             if (VoidZoneTimer <= diff)
             {
-                DoCast(SelectTarget(SELECT_TARGET_RANDOM, 1, 45, true), SPELL_VOIDZONE, true);
+                DoCast(SelectTarget(SelectTargetMethod::Random, 1, 45, true), SPELL_VOIDZONE, true);
                 VoidZoneTimer = 15000;
             } else VoidZoneTimer -= diff;
 
@@ -324,7 +331,7 @@ public:
                 // Netherbreath
                 if (NetherbreathTimer <= diff)
                 {
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 40, true))
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 40, true))
                         DoCast(target, SPELL_NETHERBREATH);
                     NetherbreathTimer = urand(5000, 7000);
                 } else NetherbreathTimer -= diff;

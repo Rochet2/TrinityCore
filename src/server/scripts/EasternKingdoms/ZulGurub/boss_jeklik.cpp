@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,251 +15,243 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ScriptMgr.h"
-#include "ScriptedCreature.h"
 #include "zulgurub.h"
+#include "ScriptedCreature.h"
+#include "ScriptMgr.h"
+#include "TemporarySummon.h"
 
-enum Says
+enum Texts
 {
-    SAY_AGGRO                   = 0,
-    SAY_RAIN_FIRE               = 1,
-    SAY_DEATH                   = 2
+    SAY_AGGRO               = 0,
+    SAY_CALL_RIDERS         = 1,
+    SAY_DEATH               = 2,
+    EMOTE_SUMMON_BATS       = 3,
+    EMOTE_GREAT_HEAL        = 4
 };
 
 enum Spells
 {
-    SPELL_CHARGE                = 22911,
-    SPELL_SONICBURST            = 23918,
-    SPELL_SCREECH               = 6605,
-    SPELL_SHADOW_WORD_PAIN      = 23952,
-    SPELL_MIND_FLAY             = 23953,
-    SPELL_CHAIN_MIND_FLAY       = 26044, // Right ID unknown. So disabled
-    SPELL_GREATERHEAL           = 23954,
-    SPELL_BAT_FORM              = 23966,
+    // Intro
+    SPELL_GREEN_CHANNELING       = 13540,
+    SPELL_BAT_FORM               = 23966,
 
-    // Batriders Spell
-    SPELL_BOMB                  = 40332 // Wrong ID but Magmadars bomb is not working...
-};
+    // Phase one
+    SPELL_PIERCE_ARMOR           = 12097,
+    SPELL_BLOOD_LEECH            = 22644,
+    SPELL_CHARGE                 = 22911,
+    SPELL_SONIC_BURST            = 23918,
+    SPELL_SWOOP                  = 23919,
+    SPELL_SUMMON_BATS            = 23974,
 
-enum BatIds
-{
-    NPC_BLOODSEEKER_BAT         = 11368,
-    NPC_FRENZIED_BAT            = 14965
+    // Phase two
+    SPELL_CURSE_OF_BLOOD         = 16098,
+    SPELL_PSYCHIC_SCREAM         = 22884,
+    SPELL_SHADOW_WORD_PAIN       = 23952,
+    SPELL_MIND_FLAY              = 23953,
+    SPELL_GREAT_HEAL             = 23954,
+
+    // Frenzied Bloodseeker Bat
+    SPELL_ROOT_SELF              = 23973,   // They spawns with this aura
+
+    // Gurubashi Bat Rider
+    SPELL_LIQUID_FIRE_PERIODIC   = 23968,   // Periodically triggers 23969
+    SPELL_LIQUID_FIRE_DAMAGE     = 23970,   // Assumedly used in script of 23969
+    SPELL_SUMMON_LIQUID_FIRE     = 23971    // Assumedly used in script of 23970
 };
 
 enum Events
 {
-    EVENT_CHARGE_JEKLIK         = 1,
+    EVENT_PIERCE_ARMOR      = 1,
+    EVENT_BLOOD_LEECH,
+    EVENT_CHARGE_JEKLIK,
     EVENT_SONIC_BURST,
-    EVENT_SCREECH,
-    EVENT_SPAWN_BATS,
+    EVENT_SWOOP,
+    EVENT_SUMMON_BATS,
+
+    EVENT_CURSE_OF_BLOOD,
+    EVENT_PSYCHIC_SCREAM,
     EVENT_SHADOW_WORD_PAIN,
     EVENT_MIND_FLAY,
-    EVENT_CHAIN_MIND_FLAY,
-    EVENT_GREATER_HEAL,
-    EVENT_SPAWN_FLYING_BATS
+    EVENT_GREAT_HEAL,
+    EVENT_SPAWN_BAT_RIDER
 };
 
 enum Phase
 {
-    PHASE_ONE                   = 1,
-    PHASE_TWO                   = 2
+    PHASE_ONE               = 1,
+    PHASE_TWO               = 2
 };
 
-Position const SpawnBat[6] =
+struct boss_jeklik : public BossAI
 {
-    { -12291.6220f, -1380.2640f, 144.8304f, 5.483f },
-    { -12289.6220f, -1380.2640f, 144.8304f, 5.483f },
-    { -12293.6220f, -1380.2640f, 144.8304f, 5.483f },
-    { -12291.6220f, -1380.2640f, 144.8304f, 5.483f },
-    { -12289.6220f, -1380.2640f, 144.8304f, 5.483f },
-    { -12293.6220f, -1380.2640f, 144.8304f, 5.483f }
-};
+    boss_jeklik(Creature* creature) : BossAI(creature, DATA_JEKLIK), _calledRiders(false) { }
 
-class boss_jeklik : public CreatureScript
-{
-    public: boss_jeklik() : CreatureScript("boss_jeklik") { }
+    void Reset() override
+    {
+        DoCastSelf(SPELL_GREEN_CHANNELING);
+        _calledRiders = false;
+        _Reset();
+    }
 
-        struct boss_jeklikAI : public BossAI
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        Talk(SAY_AGGRO);
+        events.SetPhase(PHASE_ONE);
+
+        /// @todo: Intro sequence with movement
+        events.ScheduleEvent(EVENT_PIERCE_ARMOR, 10s, 20s, 0, PHASE_ONE);
+        events.ScheduleEvent(EVENT_BLOOD_LEECH, 10s, 20s, 0, PHASE_ONE);
+        events.ScheduleEvent(EVENT_CHARGE_JEKLIK, 10s, 25s, 0, PHASE_ONE);
+        events.ScheduleEvent(EVENT_SONIC_BURST, 10s, 25s, 0, PHASE_ONE);
+        events.ScheduleEvent(EVENT_SWOOP, 10s, 15s, 0, PHASE_ONE);
+        events.ScheduleEvent(EVENT_SUMMON_BATS, 40s, 0, PHASE_ONE);
+
+        me->SetDisableGravity(true);
+        me->RemoveAurasDueToSpell(SPELL_GREEN_CHANNELING);
+        DoCastSelf(SPELL_BAT_FORM, true);
+    }
+
+    void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
+    {
+        if (events.IsInPhase(PHASE_ONE) && !HealthAbovePct(50))
         {
-            boss_jeklikAI(Creature* creature) : BossAI(creature, DATA_JEKLIK) { }
-
-            void Reset() override
-            {
-                _Reset();
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                _JustDied();
-                Talk(SAY_DEATH);
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                _EnterCombat();
-                Talk(SAY_AGGRO);
-                events.SetPhase(PHASE_ONE);
-
-                events.ScheduleEvent(EVENT_CHARGE_JEKLIK, 20000, 0, PHASE_ONE);
-                events.ScheduleEvent(EVENT_SONIC_BURST, 8000, 0, PHASE_ONE);
-                events.ScheduleEvent(EVENT_SCREECH, 13000, 0, PHASE_ONE);
-                events.ScheduleEvent(EVENT_SPAWN_BATS, 60000, 0, PHASE_ONE);
-
-                me->SetCanFly(true);
-                DoCast(me, SPELL_BAT_FORM);
-            }
-
-            void DamageTaken(Unit* /*attacker*/, uint32& /*damage*/) override
-            {
-                if (events.IsInPhase(PHASE_ONE) && !HealthAbovePct(50))
-                {
-                    me->RemoveAurasDueToSpell(SPELL_BAT_FORM);
-                    me->SetCanFly(false);
-                    DoResetThreat();
-                    events.SetPhase(PHASE_TWO);
-                    events.ScheduleEvent(EVENT_SHADOW_WORD_PAIN, 6000, 0, PHASE_TWO);
-                    events.ScheduleEvent(EVENT_MIND_FLAY, 11000, 0, PHASE_TWO);
-                    events.ScheduleEvent(EVENT_CHAIN_MIND_FLAY, 26000, 0, PHASE_TWO);
-                    events.ScheduleEvent(EVENT_GREATER_HEAL, 50000, 0, PHASE_TWO);
-                    events.ScheduleEvent(EVENT_SPAWN_FLYING_BATS, 10000, 0, PHASE_TWO);
-                    return;
-                }
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_CHARGE_JEKLIK:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                            {
-                                DoCast(target, SPELL_CHARGE);
-                                AttackStart(target);
-                            }
-                            events.ScheduleEvent(EVENT_CHARGE_JEKLIK, urand(15000, 30000), 0, PHASE_ONE);
-                            break;
-                        case EVENT_SONIC_BURST:
-                            DoCastVictim(SPELL_SONICBURST);
-                            events.ScheduleEvent(EVENT_SONIC_BURST, urand(8000, 13000), 0, PHASE_ONE);
-                            break;
-                        case EVENT_SCREECH:
-                            DoCastVictim(SPELL_SCREECH);
-                            events.ScheduleEvent(EVENT_SCREECH, urand(18000, 26000), 0, PHASE_ONE);
-                            break;
-                        case EVENT_SPAWN_BATS:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                                for (uint8 i = 0; i < 6; ++i)
-                                    if (Creature* bat = me->SummonCreature(NPC_BLOODSEEKER_BAT, SpawnBat[i], TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 15000))
-                                        bat->AI()->AttackStart(target);
-                            events.ScheduleEvent(EVENT_SPAWN_BATS, 60000, 0, PHASE_ONE);
-                            break;
-                        case EVENT_SHADOW_WORD_PAIN:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                                DoCast(target, SPELL_SHADOW_WORD_PAIN);
-                            events.ScheduleEvent(EVENT_SHADOW_WORD_PAIN, urand(12000, 18000), 0, PHASE_TWO);
-                            break;
-                        case EVENT_MIND_FLAY:
-                            DoCastVictim(SPELL_MIND_FLAY);
-                            events.ScheduleEvent(EVENT_MIND_FLAY, 16000, 0, PHASE_TWO);
-                            break;
-                        case EVENT_CHAIN_MIND_FLAY:
-                            me->InterruptNonMeleeSpells(false);
-                            DoCastVictim(SPELL_CHAIN_MIND_FLAY);
-                            events.ScheduleEvent(EVENT_CHAIN_MIND_FLAY, urand(15000, 30000), 0, PHASE_TWO);
-                            break;
-                        case EVENT_GREATER_HEAL:
-                            me->InterruptNonMeleeSpells(false);
-                            DoCast(me, SPELL_GREATERHEAL);
-                            events.ScheduleEvent(EVENT_GREATER_HEAL, urand(25000, 35000), 0, PHASE_TWO);
-                            break;
-                        case EVENT_SPAWN_FLYING_BATS:
-                            if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                                if (Creature* flyingBat = me->SummonCreature(NPC_FRENZIED_BAT, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ() + 15.0f, 0.0f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 15000))
-                                    flyingBat->AI()->AttackStart(target);
-                            events.ScheduleEvent(EVENT_SPAWN_FLYING_BATS, urand(10000, 15000), 0, PHASE_TWO);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetZulGurubAI<boss_jeklikAI>(creature);
+            me->RemoveAurasDueToSpell(SPELL_BAT_FORM);
+            me->SetDisableGravity(false);
+            ResetThreatList();
+            events.SetPhase(PHASE_TWO);
+            events.ScheduleEvent(EVENT_CURSE_OF_BLOOD, 10s, 20s, 0, PHASE_TWO);
+            events.ScheduleEvent(EVENT_PSYCHIC_SCREAM, 25s, 35s, 0, PHASE_TWO);
+            events.ScheduleEvent(EVENT_SHADOW_WORD_PAIN, 10s, 15s, 0, PHASE_TWO);
+            events.ScheduleEvent(EVENT_MIND_FLAY, 10s, 30s, 0, PHASE_TWO);
+            events.ScheduleEvent(EVENT_GREAT_HEAL, 25s, 0, PHASE_TWO);
         }
+
+        if (!_calledRiders && !HealthAbovePct(35))
+        {
+            _calledRiders = true;
+            Talk(SAY_CALL_RIDERS);
+            //events.ScheduleEvent(EVENT_SPAWN_BAT_RIDER, 0s, 0, PHASE_TWO);
+        }
+    }
+
+    void EnterEvadeMode(EvadeReason /*why*/) override
+    {
+        summons.DespawnAll();
+        _DespawnAtEvade();
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        _JustDied();
+        Talk(SAY_DEATH);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                // Phase one
+                case EVENT_PIERCE_ARMOR:
+                    DoCastVictim(SPELL_PIERCE_ARMOR);
+                    events.Repeat(20s, 30s);
+                    break;
+                case EVENT_BLOOD_LEECH:
+                    DoCastVictim(SPELL_BLOOD_LEECH);
+                    events.Repeat(10s, 20s);
+                    break;
+                case EVENT_CHARGE_JEKLIK:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.f, true))
+                        DoCast(target, SPELL_CHARGE);
+                    events.Repeat(15s, 30s);
+                    break;
+                case EVENT_SONIC_BURST:
+                    DoCastSelf(SPELL_SONIC_BURST);
+                    events.Repeat(20s, 30s);
+                    break;
+                case EVENT_SWOOP:
+                    DoCastVictim(SPELL_SWOOP);
+                    events.Repeat(15s, 20s);
+                    break;
+                case EVENT_SUMMON_BATS:
+                    Talk(EMOTE_SUMMON_BATS);
+                    DoCastSelf(SPELL_SUMMON_BATS);
+                    events.Repeat(1min);
+                    break;
+                // Phase two
+                case EVENT_CURSE_OF_BLOOD:
+                    DoCastSelf(SPELL_CURSE_OF_BLOOD);
+                    events.Repeat(25s, 30s);
+                    break;
+                case EVENT_PSYCHIC_SCREAM:
+                    DoCastSelf(SPELL_PSYCHIC_SCREAM);
+                    events.Repeat(35s, 45s);
+                    break;
+                case EVENT_SHADOW_WORD_PAIN:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.f, true))
+                        DoCast(target, SPELL_SHADOW_WORD_PAIN);
+                    events.Repeat(10s, 20s);
+                    break;
+                case EVENT_MIND_FLAY:
+                    DoCastVictim(SPELL_MIND_FLAY);
+                    events.Repeat(25s, 40s);
+                    break;
+                case EVENT_GREAT_HEAL:
+                    Talk(EMOTE_GREAT_HEAL);
+                    DoCastSelf(SPELL_GREAT_HEAL);
+                    events.Repeat(25s);
+                    break;
+                /// @todo: One Gurubashi Bat Rider should be spawned at -12301.7 -1371.29 145.092 4.74729 or -12298 -1368.51 145.398 4.79965
+                /// They're uninteractible, passive and simply flies on paths, throwing bombs. Despawns at path end
+//              case EVENT_SPAWN_BAT_RIDER:
+//                  events.Repeat(10s);
+//                  break;
+                default:
+                    break;
+            }
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
+        }
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    bool _calledRiders;
 };
 
-// Flying Bat
-class npc_batrider : public CreatureScript
+/// @todo: Intro sequence with movement
+struct npc_frenzied_bloodseeker_bat : public ScriptedAI
 {
-    public:
-        npc_batrider() : CreatureScript("npc_batrider") { }
+    npc_frenzied_bloodseeker_bat(Creature* creature) : ScriptedAI(creature) { }
 
-        struct npc_batriderAI : public ScriptedAI
-        {
-            npc_batriderAI(Creature* creature) : ScriptedAI(creature)
-            {
-                Initialize();
-            }
+    void Reset() override
+    {
+        DoZoneInCombat();
+    }
 
-            void Initialize()
-            {
-                Bomb_Timer = 2000;
-            }
+    void UpdateAI(uint32 /*diff*/) override
+    {
+        if (!UpdateVictim())
+            return;
 
-            uint32 Bomb_Timer;
-
-            void Reset() override
-            {
-                Initialize();
-                me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_SELECTABLE);
-            }
-
-            void EnterCombat(Unit* /*who*/) override { }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                if (Bomb_Timer <= diff)
-                {
-                    if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0))
-                    {
-                        DoCast(target, SPELL_BOMB);
-                        Bomb_Timer = 5000;
-                    }
-                }
-                else
-                    Bomb_Timer -= diff;
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new npc_batriderAI(creature);
-        }
+        DoMeleeAttackIfReady();
+    }
 };
 
 void AddSC_boss_jeklik()
 {
-    new boss_jeklik();
-    new npc_batrider();
+    RegisterZulGurubCreatureAI(boss_jeklik);
+    RegisterZulGurubCreatureAI(npc_frenzied_bloodseeker_bat);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,24 +18,33 @@
 #ifndef DEF_BLACKWING_LAIR_H
 #define DEF_BLACKWING_LAIR_H
 
+#include "CreatureAIImpl.h"
+
 uint32 const EncounterCount     = 8;
 
-#define BRLScriptName "instance_blackwing_lair"
+#define BWLScriptName "instance_blackwing_lair"
 #define DataHeader    "BWL"
 
 enum BWLEncounter
 {
-    BOSS_RAZORGORE              = 0,
-    BOSS_VAELASTRAZ             = 1,
-    BOSS_BROODLORD              = 2,
-    BOSS_FIREMAW                = 3,
-    BOSS_EBONROC                = 4,
-    BOSS_FLAMEGOR               = 5,
-    BOSS_CHROMAGGUS             = 6,
-    BOSS_NEFARIAN               = 7
+    // Encounter States/Boss GUIDs
+    DATA_RAZORGORE_THE_UNTAMED  = 0,
+    DATA_VAELASTRAZ_THE_CORRUPT = 1,
+    DATA_BROODLORD_LASHLAYER    = 2,
+    DATA_FIREMAW                = 3,
+    DATA_EBONROC                = 4,
+    DATA_FLAMEGOR               = 5,
+    DATA_CHROMAGGUS             = 6,
+    DATA_NEFARIAN               = 7,
+
+    // Additional Data
+    DATA_LORD_VICTOR_NEFARIUS   = 8,
+
+    // Doors
+    DATA_GO_CHROMAGGUS_DOOR     = 9
 };
 
-enum CreatureIds
+enum BWLCreatureIds
 {
     NPC_RAZORGORE               = 12435,
     NPC_BLACKWING_DRAGON        = 12422,
@@ -44,7 +53,7 @@ enum CreatureIds
     NPC_BLACKWING_WARLOCK       = 12459,
     NPC_VAELASTRAZ              = 13020,
     NPC_BROODLORD               = 12017,
-    NPC_FIRENAW                 = 11983,
+    NPC_FIREMAW                 = 11983,
     NPC_EBONROC                 = 14601,
     NPC_FLAMEGOR                = 11981,
     NPC_CHROMAGGUS              = 14020,
@@ -52,17 +61,19 @@ enum CreatureIds
     NPC_NEFARIAN                = 11583
 };
 
-enum BWLData64
+enum BWLGameObjectIds
 {
-    DATA_RAZORGORE_THE_UNTAMED = 1,
-    DATA_VAELASTRAZ_THE_CORRUPT,
-    DATA_BROODLORD_LASHLAYER,
-    DATA_FIRENAW,
-    DATA_EBONROC,
-    DATA_FLAMEGOR,
-    DATA_CHROMAGGUS,
-    DATA_LORD_VICTOR_NEFARIUS,
-    DATA_NEFARIAN
+    GO_BLACK_DRAGON_EGG         = 177807,
+    GO_PORTCULLIS_RAZORGORE     = 176965,
+    GO_PORTCULLIS_VAELASTRASZ   = 179364,
+    GO_PORTCULLIS_BROODLORD     = 179365,
+    GO_PORTCULLIS_THREEDRAGONS  = 179115,
+    GO_PORTCULLIS_CHROMAGGUS    = 179117, //Door after you kill him, not the one for his room
+    GO_CHROMAGGUS_LEVER         = 179148,
+    GO_CHROMAGGUS_DOOR          = 179116,
+    GO_PORTCULLIS_NEFARIAN      = 176966,
+    GO_SUPPRESSION_DEVICE       = 179784,
+    GO_DRAKONID_BONES           = 179804
 };
 
 enum BWLEvents
@@ -76,7 +87,17 @@ enum BWLMisc
 {
     // Razorgore Egg Event
     ACTION_PHASE_TWO            = 1,
-    DATA_EGG_EVENT
+    DATA_EGG_EVENT,
+    DATA_DRAKONID_BONES
 };
+
+template <class AI, class T>
+inline AI* GetBlackwingLairAI(T* obj)
+{
+    return GetInstanceAI<AI>(obj, BWLScriptName);
+}
+
+#define RegisterBlackwingLairCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetBlackwingLairAI)
+#define RegisterBlackwingLairGameObjectAI(ai_name) RegisterGameObjectAIWithFactory(ai_name, GetBlackwingLairAI)
 
 #endif

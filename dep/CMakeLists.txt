@@ -1,4 +1,4 @@
-# Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+# This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
 #
 # This file is free software; as a special exception the author gives
 # unlimited permission to copy and/or distribute it, with or without
@@ -8,37 +8,45 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-if( MSVC )
-  add_definitions(/W0)
-else()
-  add_definitions(-w)
-endif()
-
-if(CMAKE_SYSTEM_NAME MATCHES "Linux")
-  if(SERVERS AND NOT NOJEM)
-    add_subdirectory(jemalloc)  
-  endif()
-endif()
-
-if(CMAKE_SYSTEM_NAME MATCHES "Windows")
-  if(TOOLS)
-    add_subdirectory(bzip2)
-  endif()
-  if(SERVERS OR TOOLS)
-    add_subdirectory(zlib)
-  endif()
-endif()
+add_subdirectory(threads)
 
 if(SERVERS OR TOOLS)
+  add_subdirectory(boost)
+  add_subdirectory(zlib)
   add_subdirectory(g3dlite)
   add_subdirectory(recastnavigation)
+  add_subdirectory(fmt)
+  add_subdirectory(SFMT)
+  add_subdirectory(utf8cpp)
+  add_subdirectory(valgrind)
+  add_subdirectory(openssl)
+  if(CMAKE_SYSTEM_NAME MATCHES "Linux" AND NOT NOJEM)
+    add_subdirectory(jemalloc)
+  endif()
+  add_subdirectory(argon2)
+  add_subdirectory(short_alloc)
 endif()
 
 if(SERVERS)
-  add_subdirectory(cppformat)
+  add_subdirectory(mysql)
+  add_subdirectory(readline)
   add_subdirectory(gsoap)
 endif()
 
+if(SERVERS AND BUILD_EFSW)
+  add_subdirectory(efsw)
+endif()
+
 if(TOOLS)
+  add_subdirectory(bzip2)
   add_subdirectory(libmpq)
+endif()
+
+if(BUILD_TESTING)
+  include(FetchContent)
+  FetchContent_Declare(Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG        v2.13.9
+    GIT_SHALLOW    1)
+  FetchContent_MakeAvailable(Catch2)
 endif()

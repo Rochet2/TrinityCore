@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,7 +16,9 @@
  */
 
 #include "ScriptMgr.h"
+#include "GameObject.h"
 #include "InstanceScript.h"
+#include "Map.h"
 #include "Player.h"
 #include "scholomance.h"
 
@@ -25,7 +27,7 @@ Position const GandlingLoc = { 180.7712f, -5.428603f, 75.57024f, 1.291544f };
 class instance_scholomance : public InstanceMapScript
 {
     public:
-        instance_scholomance() : InstanceMapScript("instance_scholomance", 289) { }
+        instance_scholomance() : InstanceMapScript(ScholomanceScriptName, 289) { }
 
         InstanceScript* GetInstanceScript(InstanceMap* map) const override
         {
@@ -34,7 +36,7 @@ class instance_scholomance : public InstanceMapScript
 
         struct instance_scholomance_InstanceMapScript : public InstanceScript
         {
-            instance_scholomance_InstanceMapScript(Map* map) : InstanceScript(map)
+            instance_scholomance_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
             {
                 SetHeaders(DataHeader);
                 SetBossNumber(EncounterCount);
@@ -83,12 +85,12 @@ class instance_scholomance : public InstanceMapScript
 
                 switch (type)
                 {
-                    case DATA_LORDALEXEIBAROV:
-                    case DATA_DOCTORTHEOLENKRASTINOV:
-                    case DATA_THERAVENIAN:
-                    case DATA_LOREKEEPERPOLKELT:
-                    case DATA_INSTRUCTORMALICIA:
-                    case DATA_LADYILLUCIABAROV:
+                    case DATA_LORD_ALEXEI_BAROV:
+                    case DATA_DOCTOR_THEOLEN_KRASTINOV:
+                    case DATA_THE_RAVENIAN:
+                    case DATA_LOREKEEPER_POLKELT:
+                    case DATA_INSTRUCTOR_MALICIA:
+                    case DATA_LADY_ILLUCIA_BAROV:
                         CheckToSpawnGandling();
                         break;
                     default:
@@ -131,20 +133,20 @@ class instance_scholomance : public InstanceMapScript
             {
                 switch (bossId)
                 {
-                    case DATA_DARKMASTERGANDLING:
-                        if (GetBossState(DATA_LORDALEXEIBAROV) != DONE)
+                    case DATA_DARKMASTER_GANDLING:
+                        if (GetBossState(DATA_LORD_ALEXEI_BAROV) != DONE)
                             return false;
-                        if (GetBossState(DATA_DOCTORTHEOLENKRASTINOV) != DONE)
+                        if (GetBossState(DATA_DOCTOR_THEOLEN_KRASTINOV) != DONE)
                             return false;
-                        if (GetBossState(DATA_THERAVENIAN) != DONE)
+                        if (GetBossState(DATA_THE_RAVENIAN) != DONE)
                             return false;
-                        if (GetBossState(DATA_LOREKEEPERPOLKELT) != DONE)
+                        if (GetBossState(DATA_LOREKEEPER_POLKELT) != DONE)
                             return false;
-                        if (GetBossState(DATA_INSTRUCTORMALICIA) != DONE)
+                        if (GetBossState(DATA_INSTRUCTOR_MALICIA) != DONE)
                             return false;
-                        if (GetBossState(DATA_LADYILLUCIABAROV) != DONE)
+                        if (GetBossState(DATA_LADY_ILLUCIA_BAROV) != DONE)
                             return false;
-                        if (GetBossState(DATA_DARKMASTERGANDLING) == DONE)
+                        if (GetBossState(DATA_DARKMASTER_GANDLING) == DONE)
                             return false;
                         break;
                     default:
@@ -156,7 +158,7 @@ class instance_scholomance : public InstanceMapScript
 
             void CheckToSpawnGandling()
             {
-                if (CheckPreBosses(DATA_DARKMASTERGANDLING))
+                if (CheckPreBosses(DATA_DARKMASTER_GANDLING))
                     instance->SummonCreature(NPC_DARKMASTER_GANDLING, GandlingLoc);
             }
 

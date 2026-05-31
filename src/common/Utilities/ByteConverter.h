@@ -1,6 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,14 +23,15 @@
  */
 
 #include "Define.h"
-#include <algorithm>
 
 namespace ByteConverter
 {
     template<size_t T>
     inline void convert(char *val)
     {
-        std::swap(*val, *(val + T - 1));
+        char tmp = *val;
+        *val = *(val + T - 1);
+        *(val + T - 1) = tmp;
         convert<T - 2>(val + 1);
     }
 
@@ -65,4 +65,3 @@ inline void EndianConvertReverse(uint8&) { }
 inline void EndianConvertReverse( int8&) { }
 
 #endif
-

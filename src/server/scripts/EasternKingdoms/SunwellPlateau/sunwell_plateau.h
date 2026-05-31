@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,12 +18,14 @@
 #ifndef SUNWELL_PLATEAU_H
 #define SUNWELL_PLATEAU_H
 
+#include "CreatureAIImpl.h"
+
 #define SunwellPlateauScriptName "instance_sunwell_plateau"
 #define DataHeader "SWP"
 
 uint32 const EncounterCount = 6;
 
-enum DataTypes
+enum SWPDataTypes
 {
     // Encounter States/Boss GUIDs
     DATA_KALECGOS                            = 0,
@@ -37,11 +39,13 @@ enum DataTypes
     DATA_KALECGOS_HUMAN,
     DATA_SATHROVARR,
     DATA_MADRIGOSA,
+    DATA_WORLD_TRIGGER,
     DATA_ALYTHESS,
     DATA_SACROLASH,
     DATA_KILJAEDEN_CONTROLLER,
     DATA_ANVEENA,
     DATA_KALECGOS_KJ,
+    DATA_ENTROPIUS,
 
     // GameObject GUIDs
     DATA_ORB_OF_THE_BLUE_DRAGONFLIGHT_1,
@@ -49,20 +53,25 @@ enum DataTypes
     DATA_ORB_OF_THE_BLUE_DRAGONFLIGHT_3,
     DATA_ORB_OF_THE_BLUE_DRAGONFLIGHT_4,
 
+    DATA_ICE_BARRIER,
+
     // Misc
     DATA_PLAYER_GUID
 };
 
-enum CreatureIds
+enum SWPCreatureIds
 {
     NPC_MURU                                 = 25741,
     NPC_ENTROPIUS                            = 25840,
     NPC_KALECGOS                             = 24850,
-    NPC_KALEC                                = 24891,
+    NPC_KALECGOS_HUMAN                       = 24891,
     NPC_SATHROVARR                           = 24892,
     NPC_BRUTALLUS                            = 24882,
-    NPC_MADRIGOSA                            = 24895,
     NPC_FELMYST                              = 25038,
+
+    // Brutallus
+    NPC_MADRIGOSA                            = 24895,
+    NPC_WORLD_TRIGGER                        = 19871,
 
     NPC_DEAD                                 = 25268,
     NPC_FLIGHT_LEFT                          = 25357,
@@ -91,16 +100,19 @@ enum CreatureIds
     NPC_SPIKE_TARGET2                        = 30614,
     NPC_SINISTER_REFLECTION                  = 25708, // Sinister Relection spawnd on Phase swichtes
 
-    NPC_DARKNESS                             = 25879,
-    NPC_DARK_FIENDS                          = 25744,
-    NPC_BERSERKER                            = 25798,
-    NPC_FURY_MAGE                            = 25799,
+    // M'uru
+    NPC_VOID_SENTINEL_SUMMONER               = 25782,
     NPC_VOID_SENTINEL                        = 25772,
     NPC_VOID_SPAWN                           = 25824,
-    NPC_BLACK_HOLE                           = 25855
+    NPC_DARK_FIEND                           = 25744,
+    NPC_DARKNESS                             = 25879,
+    NPC_SINGULARITY                          = 25855,
+    NPC_BERSERKER                            = 25798,
+    NPC_FURY_MAGE                            = 25799,
+    NPC_MURU_PORTAL_TARGET                   = 25770
 };
 
-enum GameObjectIds
+enum SWPGameObjectIds
 {
     GO_ORB_OF_THE_BLUE_DRAGONFLIGHT          = 188415,
     GO_FORCE_FIELD                           = 188421,
@@ -108,13 +120,17 @@ enum GameObjectIds
     GO_BOSS_COLLISION_2                      = 188524,
     GO_FIRE_BARRIER                          = 188075,
     GO_MURUS_GATE_1                          = 187990,
-    GO_MURUS_GATE_2                          = 188118
+    GO_MURUS_GATE_2                          = 188118,
+    GO_SPECTRAL_RIFT                         = 187055,
+    GO_ICE_BARRIER                           = 188119
 };
 
-template<class AI>
-AI* GetSunwellPlateauAI(Creature* creature)
+template <class AI, class T>
+AI* GetSunwellPlateauAI(T* obj)
 {
-    return GetInstanceAI<AI>(creature, SunwellPlateauScriptName);
+    return GetInstanceAI<AI>(obj, SunwellPlateauScriptName);
 }
+
+#define RegisterSunwellPlateauCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetSunwellPlateauAI)
 
 #endif // SUNWELL_PLATEAU_H

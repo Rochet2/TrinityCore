@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,127 +15,109 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-SDName: boss_mennu_the_betrayer
-SD%Complete: 95%
-SDComment:
-SDCategory: Coilfang Reservoir, The Slave Pens
-EndScriptData */
-
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "the_slave_pens.h"
 
-enum Say
+enum MennuTexts
 {
     SAY_AGGRO                       = 0,
     SAY_SLAY                        = 1,
     SAY_DEATH                       = 2
 };
 
-enum Spells
+enum MennuSpells
 {
-    SPELL_TAINTED_STONESKIN_TOTEM   = 31985, // every 30 sec if health below 100%
-    SPELL_TAINTED_EARTHGRAB_TOTEM   = 31981, // ?
-    SPELL_CORRUPTED_NOVA_TOTEM      = 31991, // ?
-    SPELL_MENNUS_HEALING_WARD       = 34980, // every 14 - 25 sec
-    SPELL_LIGHTNING_BOLT            = 35010  // every 14 - 19 sec
+    SPELL_TAINTED_STONESKIN_TOTEM   = 31985,
+    SPELL_TAINTED_EARTHGRAB_TOTEM   = 31981,
+    SPELL_CORRUPTED_NOVA_TOTEM      = 31991,
+    SPELL_MENNUS_HEALING_WARD       = 34980,
+    SPELL_LIGHTNING_BOLT            = 35010
 };
 
-enum Events
+enum MennuEvents
 {
     EVENT_TAINTED_STONESKIN_TOTEM   = 1,
-    EVENT_TAINTED_EARTHGRAB_TOTEM   = 2,
-    EVENT_CORRUPTED_NOVA_TOTEM      = 3,
-    EVENT_MENNUS_HEALING_WARD       = 4,
-    EVENT_LIGHTNING_BOLT            = 5
+    EVENT_TAINTED_EARTHGRAB_TOTEM,
+    EVENT_CORRUPTED_NOVA_TOTEM,
+    EVENT_MENNUS_HEALING_WARD,
+    EVENT_LIGHTNING_BOLT
 };
 
-class boss_mennu_the_betrayer : public CreatureScript
+// 17941 - Mennu the Betrayer
+struct boss_mennu_the_betrayer : public BossAI
 {
-    public:
-        boss_mennu_the_betrayer() : CreatureScript("boss_mennu_the_betrayer") { }
+    boss_mennu_the_betrayer(Creature* creature) : BossAI(creature, DATA_MENNU_THE_BETRAYER) { }
 
-        struct boss_mennu_the_betrayerAI : public BossAI
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+        events.ScheduleEvent(EVENT_TAINTED_STONESKIN_TOTEM, 30s, 40s);
+        events.ScheduleEvent(EVENT_TAINTED_EARTHGRAB_TOTEM, 20s, 30s);
+        events.ScheduleEvent(EVENT_CORRUPTED_NOVA_TOTEM, 20s, 30s);
+        events.ScheduleEvent(EVENT_MENNUS_HEALING_WARD, 15s, 25s);
+        events.ScheduleEvent(EVENT_LIGHTNING_BOLT, 10s, 20s);
+        Talk(SAY_AGGRO);
+    }
+
+    void KilledUnit(Unit* /*victim*/) override
+    {
+        Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        _JustDied();
+        Talk(SAY_DEATH);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_mennu_the_betrayerAI(Creature* creature) : BossAI(creature, DATA_MENNU_THE_BETRAYER) { }
-
-            void Reset() override
+            switch (eventId)
             {
-                _Reset();
+                case EVENT_TAINTED_STONESKIN_TOTEM:
+                    DoCastSelf(SPELL_TAINTED_STONESKIN_TOTEM);
+                    events.Repeat(35s, 40s);
+                    break;
+                case EVENT_TAINTED_EARTHGRAB_TOTEM:
+                    DoCastSelf(SPELL_TAINTED_EARTHGRAB_TOTEM);
+                    events.Repeat(35s, 40s);
+                    break;
+                case EVENT_CORRUPTED_NOVA_TOTEM:
+                    DoCastSelf(SPELL_CORRUPTED_NOVA_TOTEM);
+                    events.Repeat(35s, 40s);
+                    break;
+                case EVENT_MENNUS_HEALING_WARD:
+                    DoCastSelf(SPELL_MENNUS_HEALING_WARD);
+                    events.Repeat(35s, 40s);
+                    break;
+                case EVENT_LIGHTNING_BOLT:
+                    DoCastVictim(SPELL_LIGHTNING_BOLT);
+                    events.Repeat(15s, 25s);
+                    break;
+                default:
+                    break;
             }
 
-            void JustDied(Unit* /*killer*/) override
-            {
-                _JustDied();
-                Talk(SAY_DEATH);
-            }
-
-            void EnterCombat(Unit* /*who*/) override
-            {
-                _EnterCombat();
-                events.ScheduleEvent(EVENT_TAINTED_STONESKIN_TOTEM, 30000);
-                events.ScheduleEvent(EVENT_TAINTED_EARTHGRAB_TOTEM, 20000);
-                events.ScheduleEvent(EVENT_CORRUPTED_NOVA_TOTEM, 60000);
-                events.ScheduleEvent(EVENT_MENNUS_HEALING_WARD, urand(14000, 25000));
-                events.ScheduleEvent(EVENT_LIGHTNING_BOLT, urand(14000, 19000));
-                Talk(SAY_AGGRO);
-            }
-
-            void KilledUnit(Unit* /*victim*/) override
-            {
-                Talk(SAY_SLAY);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_TAINTED_STONESKIN_TOTEM:
-                            if (HealthBelowPct(100))
-                                DoCast(me, SPELL_TAINTED_STONESKIN_TOTEM);
-                            events.ScheduleEvent(EVENT_TAINTED_STONESKIN_TOTEM, 30000);
-                            break;
-                        case EVENT_TAINTED_EARTHGRAB_TOTEM:
-                            DoCast(me, SPELL_TAINTED_EARTHGRAB_TOTEM);
-                            break;
-                        case EVENT_CORRUPTED_NOVA_TOTEM:
-                            DoCast(me, SPELL_CORRUPTED_NOVA_TOTEM);
-                            break;
-                        case EVENT_MENNUS_HEALING_WARD:
-                            DoCast(me, SPELL_MENNUS_HEALING_WARD);
-                            events.ScheduleEvent(EVENT_MENNUS_HEALING_WARD, urand(14000, 25000));
-                            break;
-                        case EVENT_LIGHTNING_BOLT:
-                            DoCastVictim(SPELL_LIGHTNING_BOLT, true);
-                            events.ScheduleEvent(EVENT_LIGHTNING_BOLT, urand(14000, 25000));
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                DoMeleeAttackIfReady();
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return new boss_mennu_the_betrayerAI(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+
+        DoMeleeAttackIfReady();
+    }
 };
 
 void AddSC_boss_mennu_the_betrayer()
 {
-    new boss_mennu_the_betrayer();
+    RegisterSlavePensCreatureAI(boss_mennu_the_betrayer);
 }
