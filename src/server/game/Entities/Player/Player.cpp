@@ -340,9 +340,9 @@ Player::Player(WorldSession* session): Unit(true)
     m_achievementMgr = new AchievementMgr(this);
     m_reputationMgr = new ReputationMgr(this);
 
-	m_aioInitCd = false;
-	m_aioInitTimer = 0;
-	m_messageIdIndex = 1;
+    m_aioInitCd = false;
+    m_aioInitTimer = 0;
+    m_messageIdIndex = 1;
 }
 
 Player::~Player()
@@ -1247,16 +1247,16 @@ void Player::Update(uint32 p_time)
     if (IsHasDelayedTeleport())
         TeleportTo(m_teleport_dest, m_teleport_options);
 
-	//AIO Init cooldown
-	if (m_aioInitCd)
-	{
-		m_aioInitTimer += p_time;
-		if (m_aioInitTimer >= sWorld->getIntConfig(CONFIG_AIO_INIT_COOLDOWN))
-		{
-			m_aioInitCd = false;
-			m_aioInitTimer = 0;
-		}
-	}
+    // AIO init cooldown
+    if (m_aioInitCd)
+    {
+        m_aioInitTimer += p_time;
+        if (m_aioInitTimer >= sWorld->getIntConfig(CONFIG_AIO_INIT_COOLDOWN))
+        {
+            m_aioInitCd = false;
+            m_aioInitTimer = 0;
+        }
+    }
 }
 
 void Player::Heartbeat()
@@ -20575,66 +20575,66 @@ void Player::Whisper(uint32 textId, Player* target, bool /*isBossWhisper*/)
 
 void Player::AIOMessage(AIOMsg &msg)
 {
-	SendSimpleAIOMessage(msg.dumps());
+    SendSimpleAIOMessage(msg.dumps());
 }
 
 void Player::AIOHandle(const LuaVal &scriptKey, const LuaVal &handlerKey, const LuaVal &a1, const LuaVal &a2, const LuaVal &a3, const LuaVal &a4, const LuaVal &a5, const LuaVal &a6)
 {
-	AIOMsg msg(scriptKey, handlerKey, a1, a2, a3, a4, a5, a6);
-	SendSimpleAIOMessage(msg.dumps());
+    AIOMsg msg(scriptKey, handlerKey, a1, a2, a3, a4, a5, a6);
+    SendSimpleAIOMessage(msg.dumps());
 }
 
 void Player::SendSimpleAIOMessage(std::string const& message)
 {
-	if (message.empty())
-		return;
+    if (message.empty())
+        return;
 
-	std::string const& aioPrefix = sWorld->GetAIOPrefix();
-	uint32 const maxPacketLen = std::min<uint32>(sWorld->getIntConfig(CONFIG_AIO_MSG_MAX_LEN), AIO_MAX_WHISPER_LENGTH);
-	uint32 const shortHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 2; // S + prefix + tab + short id
-	uint32 const longHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 6;  // S + prefix + tab + long meta
+    std::string const& aioPrefix = sWorld->GetAIOPrefix();
+    uint32 const maxPacketLen = std::min<uint32>(sWorld->getIntConfig(CONFIG_AIO_MSG_MAX_LEN), AIO_MAX_WHISPER_LENGTH);
+    uint32 const shortHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 2; // S + prefix + tab + short id
+    uint32 const longHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 6;  // S + prefix + tab + long meta
 
-	if (shortHeaderLen + message.size() <= maxPacketLen)
-	{
-		std::string fullmsg = "S" + aioPrefix + "\t\x1\x1" + message;
-		WorldPackets::Chat::Chat packet;
-		packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
-		SendDirectMessage(packet.Write());
-		return;
-	}
+    if (shortHeaderLen + message.size() <= maxPacketLen)
+    {
+        std::string fullmsg = "S" + aioPrefix + "\t\x1\x1" + message;
+        WorldPackets::Chat::Chat packet;
+        packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
+        SendDirectMessage(packet.Write());
+        return;
+    }
 
-	uint32 const chunkLen = maxPacketLen > longHeaderLen ? maxPacketLen - longHeaderLen : 1;
-	uint16 const parts = uint16(std::ceil(float(message.size()) / float(chunkLen)));
+    uint32 const chunkLen = maxPacketLen > longHeaderLen ? maxPacketLen - longHeaderLen : 1;
+    uint16 const parts = uint16(std::ceil(float(message.size()) / float(chunkLen)));
 
-	uint16 high = uint16(std::floor(float(parts) / 254.0f));
-	std::string partsStr(1, char(high + 1));
-	partsStr += char(parts - high * 254 + 1);
+    uint16 high = uint16(std::floor(float(parts) / 254.0f));
+    std::string partsStr(1, char(high + 1));
+    partsStr += char(parts - high * 254 + 1);
 
-	high = uint16(std::floor(float(m_messageIdIndex) / 254.0f));
-	std::string messageIdStr(1, char(high + 1));
-	messageIdStr += char(m_messageIdIndex - high * 254 + 1);
+    high = uint16(std::floor(float(m_messageIdIndex) / 254.0f));
+    std::string messageIdStr(1, char(high + 1));
+    messageIdStr += char(m_messageIdIndex - high * 254 + 1);
 
-	if (m_messageIdIndex >= 64769) // 2^16 - 767
-		m_messageIdIndex = 1;
-	else
-		++m_messageIdIndex;
+    if (m_messageIdIndex >= 64769) // 2^16 - 767
+        m_messageIdIndex = 1;
+    else
+        ++m_messageIdIndex;
 
-	size_t cursor = 0;
-	for (uint16 partId = 1; partId <= parts; ++partId)
-	{
-		high = uint16(std::floor(float(partId) / 254.0f));
-		std::string partIdStr(1, char(high + 1));
-		partIdStr += char(partId - high * 254 + 1);
+    size_t cursor = 0;
+    for (uint16 partId = 1; partId <= parts; ++partId)
+    {
+        high = uint16(std::floor(float(partId) / 254.0f));
+        std::string partIdStr(1, char(high + 1));
+        partIdStr += char(partId - high * 254 + 1);
 
-		std::string fullmsg = "S" + aioPrefix + "\t" + messageIdStr + partsStr + partIdStr;
-		fullmsg += message.substr(cursor, chunkLen);
+        std::string fullmsg = "S" + aioPrefix + "\t" + messageIdStr + partsStr + partIdStr;
+        fullmsg += message.substr(cursor, chunkLen);
 
-		WorldPackets::Chat::Chat packet;
-		packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
-		SendDirectMessage(packet.Write());
+        WorldPackets::Chat::Chat packet;
+        packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
+        SendDirectMessage(packet.Write());
 
-		cursor += chunkLen;
-	}
+        cursor += chunkLen;
+    }
 }
 
 Item* Player::GetMItem(ObjectGuid::LowType id)

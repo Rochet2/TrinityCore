@@ -1349,18 +1349,18 @@ class TC_GAME_API WorldSession
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;
 
-		//AIO
-		typedef std::map<uint32, std::string> AddonPartStringMap;
-		struct LongMessageBufferInfo
-		{
-			uint32 Parts = 0;
-			uint32 Timer = 0;
-			uint32 BufferedBytes = 0;
-			AddonPartStringMap Map;
-		};
-		typedef std::map<uint16, LongMessageBufferInfo> AddonMessageBufferMap;
-		AddonMessageBufferMap _addonMessageBuffer;
-		uint32 _aioMsgCacheSweepTimer = 0;
+        // AIO
+        typedef std::map<uint32, std::string> AddonPartStringMap;
+        struct LongMessageBufferInfo
+        {
+            uint32 Parts = 0;
+            uint32 Timer = 0;
+            uint32 BufferedBytes = 0;
+            AddonPartStringMap Map;
+        };
+        typedef std::map<uint16, LongMessageBufferInfo> AddonMessageBufferMap;
+        AddonMessageBufferMap _addonMessageBuffer;
+        uint32 _aioMsgCacheSweepTimer = 0;
 };
 #endif
 /// @}

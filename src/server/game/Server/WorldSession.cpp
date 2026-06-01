@@ -318,7 +318,7 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                     }
                     else if (_player->IsInWorld())
                     {
-                        if(AntiDOS.EvaluateOpcode(*packet, currentTime))
+                        if (AntiDOS.EvaluateOpcode(*packet, currentTime))
                         {
                             sScriptMgr->OnPacketReceive(this, *packet);
                             opHandle->Call(this, *packet);
@@ -476,25 +476,25 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
             return false;                                       //Will remove this session from the world session map
     }
 
-	// AIO: drop incomplete long messages (AIO.lua AIO_MSG_CACHE_TIME / AIO_MSG_CACHE_DELAY)
-	if (m_Socket && m_Socket->IsOpen() && !_addonMessageBuffer.empty())
-	{
-		_aioMsgCacheSweepTimer += diff;
-		uint32 const sweepDelay = sWorld->getIntConfig(CONFIG_AIO_MSG_CACHE_DELAY);
-		if (_aioMsgCacheSweepTimer >= sweepDelay)
-		{
-			_aioMsgCacheSweepTimer = 0;
-			uint32 const cacheTime = sWorld->getIntConfig(CONFIG_AIO_MSG_CACHE_TIME);
-			for (AddonMessageBufferMap::iterator itr = _addonMessageBuffer.begin(); itr != _addonMessageBuffer.end();)
-			{
-				itr->second.Timer += sweepDelay;
-				if (itr->second.Timer >= cacheTime)
-					_addonMessageBuffer.erase(itr++);
-				else
-					++itr;
-			}
-		}
-	}
+    // AIO: drop incomplete long messages (AIO.lua AIO_MSG_CACHE_TIME / AIO_MSG_CACHE_DELAY)
+    if (m_Socket && m_Socket->IsOpen() && !_addonMessageBuffer.empty())
+    {
+        _aioMsgCacheSweepTimer += diff;
+        uint32 const sweepDelay = sWorld->getIntConfig(CONFIG_AIO_MSG_CACHE_DELAY);
+        if (_aioMsgCacheSweepTimer >= sweepDelay)
+        {
+            _aioMsgCacheSweepTimer = 0;
+            uint32 const cacheTime = sWorld->getIntConfig(CONFIG_AIO_MSG_CACHE_TIME);
+            for (AddonMessageBufferMap::iterator itr = _addonMessageBuffer.begin(); itr != _addonMessageBuffer.end();)
+            {
+                itr->second.Timer += sweepDelay;
+                if (itr->second.Timer >= cacheTime)
+                    _addonMessageBuffer.erase(itr++);
+                else
+                    ++itr;
+            }
+        }
+    }
 
     return true;
 }
@@ -640,8 +640,8 @@ void WorldSession::LogoutPlayer(bool save)
         CharacterDatabase.Execute(stmt);
     }
 
-	//Clear aio long message buffer
-	_addonMessageBuffer.clear();
+    //Clear aio long message buffer
+    _addonMessageBuffer.clear();
 
     m_playerLogout = false;
     m_playerSave = false;

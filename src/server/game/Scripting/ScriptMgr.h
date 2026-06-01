@@ -830,160 +830,160 @@ class TC_GAME_API GroupScript : public ScriptObject
 // class ExampleAIOScript : public AIOScript
 // {
 // public:
-// 	ExampleAIOScript()
-// 		: AIOScript("ExampleScriptName")
-// 	{
-// 		using namespace std::placeholders;
-// 	
-// 		// Loads addon files to addons list and sends them on AIO client initialization
-// 		// Looks for the file in path config AIO.ClientScriptPath
-// 		AddAddon(World::AIOAddon("ExampleAddon", "example_addon.lua"));
-// 		
-// 		// You can also add addons to be sent to players with specific permission
-// 		AddAddon(World::AIOAddon("AnotherAddon", "example_addon.lua", 192)); //192 refers to admin RBAC permission
+//     ExampleAIOScript()
+//         : AIOScript("ExampleScriptName")
+//     {
+//         using namespace std::placeholders;
+//     
+//         // Loads addon files to addons list and sends them on AIO client initialization
+//         // Looks for the file in path config AIO.ClientScriptPath
+//         AddAddon(World::AIOAddon("ExampleAddon", "example_addon.lua"));
+//         
+//         // You can also add addons to be sent to players with specific permission
+//         AddAddon(World::AIOAddon("AnotherAddon", "example_addon.lua", 192)); //192 refers to admin RBAC permission
 // 
-// 		// Handler function signature: void HandlerFunction(Player *sender, const LuaVal &args)
-// 		AddHandler("Print", std::bind(&ExampleAIOScript::HandlePrint, this, _1, _2));
-// 		AddHandler("Save", std::bind(&ExampleAIOScript::HandleSave, this, _1, _2));
+//         // Handler function signature: void HandlerFunction(Player *sender, const LuaVal &args)
+//         AddHandler("Print", std::bind(&ExampleAIOScript::HandlePrint, this, _1, _2));
+//         AddHandler("Save", std::bind(&ExampleAIOScript::HandleSave, this, _1, _2));
 // 
-// 		// Initialization handler and arguments
-// 		AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleAIOScript::InitArg, this, _1), std::bind(&ExampleAIOScript::InitArg, this, _1));
-// 		//Adds additional argument to send to handler
-// 		AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleAIOScript::InitArg2, this, _1));
-// 		AddInitArgs("AnotherScript", "InitB"); //Arguments are not necessary
-// 	}
+//         // Initialization handler and arguments
+//         AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleAIOScript::InitArg, this, _1), std::bind(&ExampleAIOScript::InitArg, this, _1));
+//         //Adds additional argument to send to handler
+//         AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleAIOScript::InitArg2, this, _1));
+//         AddInitArgs("AnotherScript", "InitB"); //Arguments are not necessary
+//     }
 // 
-// 	void HandlePrint(Player *sender, const LuaVal &args)
-// 	{
-// 	    //LuaVal args in a handler function is always a table
-// 		//Handler arguments index starts from 4
-// 		LuaVal &InputVal = args[4];
-// 		LuaVal &SliderVal = args[5];
+//     void HandlePrint(Player *sender, const LuaVal &args)
+//     {
+//         //LuaVal args in a handler function is always a table
+//         //Handler arguments index starts from 4
+//         LuaVal &InputVal = args[4];
+//         LuaVal &SliderVal = args[5];
 // 
-// 		//MUST check if the value type is valid or else smallfolk_cpp will
-// 		//throw on obtaining that type
-// 		if(!InputVal.isstring() || !SliderVal.isnumber())
-// 		{
-// 			return;
-// 		}
+//         //MUST check if the value type is valid or else smallfolk_cpp will
+//         //throw on obtaining that type
+//         if (!InputVal.isstring() || !SliderVal.isnumber())
+//         {
+//             return;
+//         }
 // 
-// 		sender->GetSession()->SendNotification("HandlePrint -> Stored String: %s, Input: %s, Slider Value: %f",
-// 			storedString.c_str(), InputVal.str().c_str(), SliderVal.num());
-// 	}
+//         sender->GetSession()->SendNotification("HandlePrint -> Stored String: %s, Input: %s, Slider Value: %f",
+//             storedString.c_str(), InputVal.str().c_str(), SliderVal.num());
+//     }
 // 
-// 	void HandleSave(Player *sender, const LuaVal &args)
-// 	{
-// 	    //LuaVal args in a handler function is always a table
-// 		//Handler arguments index starts from 4
-// 		LuaVal &SaveVal = args.get[4];
+//     void HandleSave(Player *sender, const LuaVal &args)
+//     {
+//         //LuaVal args in a handler function is always a table
+//         //Handler arguments index starts from 4
+//         LuaVal &SaveVal = args.get[4];
 // 
-// 		//MUST check if the value type is valid
-// 		if(!SaveVal.isstring())
-// 		{
-// 			return;
-// 		}
+//         //MUST check if the value type is valid
+//         if (!SaveVal.isstring())
+//         {
+//             return;
+//         }
 // 
-// 		storedString = SaveVal.str();
-// 		sender->GetSession()->SendNotification("Saved");
-// 	}
+//         storedString = SaveVal.str();
+//         sender->GetSession()->SendNotification("Saved");
+//     }
 // 
-// 	LuaVal InitArg(Player *sender)
-// 	{
-// 		LuaVal arg = LuaVal(TTABLE);
-// 		arg.set("key", 12.3);
-// 		arg["key2"] = false;
+//     LuaVal InitArg(Player *sender)
+//     {
+//         LuaVal arg = LuaVal(TTABLE);
+//         arg.set("key", 12.3);
+//         arg["key2"] = false;
 // 
-// 		return arg;
-// 	}
+//         return arg;
+//     }
 // 
-// 	LuaVal InitArg2(Player *sender)
-// 	{
-// 		return "LuaVal will implicitly create a string LuaVal for this arg";
-// 	}
+//     LuaVal InitArg2(Player *sender)
+//     {
+//         return "LuaVal will implicitly create a string LuaVal for this arg";
+//     }
 // 
 // private:
-// 	std::string storedString;
+//     std::string storedString;
 // };
 class AIOScript : public ScriptObject
 {
     public:
-		virtual ~AIOScript() { AIOScript::_scriptByKeyMap.erase(GetKey()); }
+        virtual ~AIOScript() { AIOScript::_scriptByKeyMap.erase(GetKey()); }
 
-		// Returns the key of this CAIO script
-		LuaVal GetKey() const { return _key; }
+        // Returns the key of this CAIO script
+        LuaVal GetKey() const { return _key; }
         bool IsDatabaseBound() const { return false; }
 
-		typedef std::function<void(Player*, const LuaVal&)> HandlerFunc;
-		typedef std::function<LuaVal(Player*)> ArgFunc;
+        typedef std::function<void(Player*, const LuaVal&)> HandlerFunc;
+        typedef std::function<LuaVal(Player*)> ArgFunc;
 
-	protected:
-		// Registers an AIO Handler script of scriptName
-		AIOScript(const LuaVal &scriptKey);
+    protected:
+        // Registers an AIO Handler script of scriptName
+        AIOScript(LuaVal const& scriptKey);
 
-		// Registers a handler function to call when handling
-		// handleKey of this script.
-		void AddHandler(const LuaVal &handlerKey, HandlerFunc function) { _handlerMap[handlerKey] = function; }
+        // Registers a handler function to call when handling
+        // handleKey of this script.
+        void AddHandler(const LuaVal &handlerKey, HandlerFunc function) { _handlerMap[handlerKey] = function; }
 
-		// Adds a client side handler to call and adds arguments
-		// to sends with it for AIO client initialization.
-		//
-		// You can add additional arguments to the handler by
-		// calling this function again
-		void AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey,
-			ArgFunc a1 = ArgFunc(), ArgFunc a2 = ArgFunc(), ArgFunc a3 = ArgFunc(),
-			ArgFunc a4 = ArgFunc(), ArgFunc a5 = ArgFunc(), ArgFunc a6 = ArgFunc());
+        // Adds a client side handler to call and adds arguments
+        // to sends with it for AIO client initialization.
+        //
+        // You can add additional arguments to the handler by
+        // calling this function again
+        void AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey,
+            ArgFunc a1 = ArgFunc(), ArgFunc a2 = ArgFunc(), ArgFunc a3 = ArgFunc(),
+            ArgFunc a4 = ArgFunc(), ArgFunc a5 = ArgFunc(), ArgFunc a6 = ArgFunc());
 
-		// Adds a WoW addon file to the list of addons with a unique
-		// addon key to send on AIO client initialization.
-		// Returns true if addon was added, false if addon key is taken.
-		//
-		// It is required to call World::ForceReloadPlayerAddons()
-		// if addons are added after server is fully initialized
-		// for online players to load the added addons.
-		bool AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
+        // Adds a WoW addon file to the list of addons with a unique
+        // addon key to send on AIO client initialization.
+        // Returns true if addon was added, false if addon key is taken.
+        //
+        // It is required to call World::ForceReloadPlayerAddons()
+        // if addons are added after server is fully initialized
+        // for online players to load the added addons.
+        bool AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
 
-		// Returns pointer to an AIO script by its key and typename.
-		// Returns null if scriptName doesn't exist or typename was incorrect.
-		template<class ScriptClass>
-		ScriptClass *GetScript(const LuaVal &key);
+        // Returns pointer to an AIO script by its key and typename.
+        // Returns null if scriptName doesn't exist or typename was incorrect.
+        template<class ScriptClass>
+        ScriptClass *GetScript(const LuaVal &key);
 
-	private:
-		void OnHandle(Player *sender, const LuaVal &handlerKey, const LuaVal &args);
+    private:
+        void OnHandle(Player* sender, LuaVal const& handlerKey, LuaVal const& args);
 
-		LuaVal _key;
+        LuaVal _key;
 
-		typedef std::unordered_map<LuaVal, HandlerFunc, LuaVal::LuaValHasher> HandlerMapType;
-		HandlerMapType _handlerMap;
+        typedef std::unordered_map<LuaVal, HandlerFunc, LuaVal::LuaValHasher> HandlerMapType;
+        HandlerMapType _handlerMap;
 
-		typedef std::unordered_map<LuaVal, AIOScript*, LuaVal::LuaValHasher> AIOScriptByKeyMap;
-		static AIOScriptByKeyMap _scriptByKeyMap;
+        typedef std::unordered_map<LuaVal, AIOScript*, LuaVal::LuaValHasher> AIOScriptByKeyMap;
+        static AIOScriptByKeyMap _scriptByKeyMap;
 
-		friend class ScriptMgr;
+        friend class ScriptMgr;
 };
 
 class AIOHandlers : public AIOScript
 {
-	private:
-		AIOHandlers();
-		void HandleInit(Player *sender, const LuaVal &args);
-		void HandleError(Player *sender, const LuaVal &args);
+    private:
+        AIOHandlers();
+        void HandleInit(Player* sender, LuaVal const& args);
+        void HandleError(Player* sender, LuaVal const& args);
 
-		struct InitHookInfo
-		{
-			LuaVal scriptKey;
-			LuaVal handlerKey;
-			std::list<AIOScript::ArgFunc> argsList;
+        struct InitHookInfo
+        {
+            LuaVal scriptKey;
+            LuaVal handlerKey;
+            std::list<AIOScript::ArgFunc> argsList;
 
-			InitHookInfo(const LuaVal &scriptKey, const LuaVal &handlerKey)
-				: scriptKey(scriptKey), handlerKey(handlerKey)
-			{ }
-		};
+            InitHookInfo(const LuaVal &scriptKey, const LuaVal &handlerKey)
+                : scriptKey(scriptKey), handlerKey(handlerKey)
+            { }
+        };
 
-		typedef std::list<InitHookInfo> HookListType;
-		HookListType _initHookList;
+        typedef std::list<InitHookInfo> HookListType;
+        HookListType _initHookList;
 
-		friend class ScriptMgr;
-		friend class AIOScript;
+        friend class ScriptMgr;
+        friend class AIOScript;
 };
 
 // Placed here due to ScriptRegistry::AddScript dependency.
@@ -1002,7 +1002,7 @@ class AIOHandlers : public AIOScript
 class TC_GAME_API ScriptMgr
 {
     friend class ScriptObject;
-	friend class AIOScript;
+    friend class AIOScript;
 
     private:
         ScriptMgr();

@@ -3607,175 +3607,175 @@ void World::ReloadRBAC()
 
 bool World::AddAddon(AIOAddon const& addon)
 {
-	if(addon.file.empty())
-		return false;
+    if (addon.file.empty())
+        return false;
 
-	//Check if addon already exist
-	for(AddonCodeListType::iterator itr = m_AddonList.begin();
-		itr != m_AddonList.end();
-		++itr)
-	{
-		if(itr->name == addon.name)
-		{
-			return false;
-		}
-	}
-	
-	AIOAddon copy(addon);
-	copy.code = "";
+    // Check if addon already exist
+    for (AddonCodeListType::iterator itr = m_AddonList.begin();
+        itr != m_AddonList.end();
+        ++itr)
+    {
+        if (itr->name == addon.name)
+        {
+            return false;
+        }
+    }
 
-	//Format path
-	std::string path;
-	path = sWorld->GetAIOClientScriptPath();
-	if(path.back() != '/' && path.back() != '\\')
-	{
-		path += '/';
-	}
-	path += copy.file;
+    AIOAddon copy(addon);
+    copy.code = "";
 
-	//Get file
-	std::ifstream in(path, std::ios::in | std::ios::binary);
-	if(in)
-	{
-		in.seekg(0, std::ios::end);
-		copy.code.resize(in.tellg());
-		in.seekg(0, std::ios::beg);
-		in.read(&copy.code[0], copy.code.size());
-		in.close();
-		if(copy.code.empty())
-		{
-			return false;
-		}
-	}
-	else
-	{
-		sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO AddAddon: Couldn't open file %s of addon %s", path.c_str(), copy.name.c_str());
-		return false;
-	}
+    // Format path
+    std::string path;
+    path = sWorld->GetAIOClientScriptPath();
+    if (path.back() != '/' && path.back() != '\\')
+    {
+        path += '/';
+    }
+    path += copy.file;
 
-	//Set crc on original file content
-	boost::crc_32_type crc_result;
-	crc_result.process_bytes(copy.code.data(), copy.code.length());
-	copy.crc = crc_result.checksum();
+    // Get file
+    std::ifstream in(path, std::ios::in | std::ios::binary);
+    if (in)
+    {
+        in.seekg(0, std::ios::end);
+        copy.code.resize(in.tellg());
+        in.seekg(0, std::ios::beg);
+        in.read(&copy.code[0], copy.code.size());
+        in.close();
+        if (copy.code.empty())
+        {
+            return false;
+        }
+    }
+    else
+    {
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO AddAddon: Couldn't open file %s of addon %s", path.c_str(), copy.name.c_str());
+        return false;
+    }
 
-	// Uncompressed addon payload (compression/obfuscation not implemented)
-	copy.code = std::string(1, 'U') + copy.code;
-	m_AddonList.push_back(copy);
+    // Set crc on original file content
+    boost::crc_32_type crc_result;
+    crc_result.process_bytes(copy.code.data(), copy.code.length());
+    copy.crc = crc_result.checksum();
 
-	sLog->outAIOMessage(0, LOG_LEVEL_INFO, "AIO: Loaded addon %s from file %s", copy.name.c_str(), copy.file.c_str());
-	return true;
+    // Uncompressed addon payload (compression/obfuscation not implemented)
+    copy.code = std::string(1, 'U') + copy.code;
+    m_AddonList.push_back(copy);
+
+    sLog->outAIOMessage(0, LOG_LEVEL_INFO, "AIO: Loaded addon %s from file %s", copy.name.c_str(), copy.file.c_str());
+    return true;
 }
 
 bool World::RemoveAddon(std::string const& addonName, uint32* permission)
 {
-	for (AddonCodeListType::iterator itr = m_AddonList.begin(); itr != m_AddonList.end(); ++itr)
-	{
-		if (itr->name == addonName)
-		{
-			if (permission)
-				*permission = itr->permission;
-			m_AddonList.erase(itr);
-			return true;
-		}
-	}
-	return false;
+    for (AddonCodeListType::iterator itr = m_AddonList.begin(); itr != m_AddonList.end(); ++itr)
+    {
+        if (itr->name == addonName)
+        {
+            if (permission)
+                *permission = itr->permission;
+            m_AddonList.erase(itr);
+            return true;
+        }
+    }
+    return false;
 }
 
 bool World::ReloadAddons()
 {
-	sLog->outAIOMessage(0, LOG_LEVEL_INFO, "World::ReloadAddons()");
+    sLog->outAIOMessage(0, LOG_LEVEL_INFO, "World::ReloadAddons()");
 
-	AddonCodeListType prevAddonList;
-	prevAddonList.swap(m_AddonList);
-	try
-	{
-		for(AddonCodeListType::const_iterator itr = prevAddonList.begin();
-			itr != prevAddonList.end();
-			++itr)
-		{
-			AddAddon(*itr);
-		}
-	}
-	catch(std::exception &e)
-	{
-		sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO: Error reloading addons. Exception: %s", e.what());
-		m_AddonList.swap(prevAddonList);
-		return false;
-	}
-	catch(...)
-	{
-		sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO: Error reloading addons");
-		m_AddonList.swap(prevAddonList);
-		return false;
-	}
-	return true;
+    AddonCodeListType prevAddonList;
+    prevAddonList.swap(m_AddonList);
+    try
+    {
+        for (AddonCodeListType::const_iterator itr = prevAddonList.begin();
+            itr != prevAddonList.end();
+            ++itr)
+        {
+            AddAddon(*itr);
+        }
+    }
+    catch (std::exception &e)
+    {
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO: Error reloading addons. Exception: %s", e.what());
+        m_AddonList.swap(prevAddonList);
+        return false;
+    }
+    catch (...)
+    {
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO: Error reloading addons");
+        m_AddonList.swap(prevAddonList);
+        return false;
+    }
+    return true;
 }
 
-size_t World::PrepareClientAddons(const LuaVal &clientData, LuaVal &addonsTable, LuaVal &cacheTable, Player *forPlayer) const
+size_t World::PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const
 {
-	if (!clientData.istable())
-		return 0;
+    if (!clientData.istable())
+        return 0;
 
-	uint32 i = 0;
-	for(AddonCodeListType::const_iterator itr = m_AddonList.begin();
-		itr != m_AddonList.end();
-		++itr)
-	{
-		if(!forPlayer->GetSession()->HasPermission(itr->permission))
-			continue;
+    uint32 i = 0;
+    for (AddonCodeListType::const_iterator itr = m_AddonList.begin();
+        itr != m_AddonList.end();
+        ++itr)
+    {
+        if (!forPlayer->GetSession()->HasPermission(itr->permission))
+            continue;
 
-		LuaVal CRCVal = clientData.get(itr->name);
-		if(CRCVal == itr->crc)
-		{
-			cacheTable[++i] = itr->name;
-		}
-		else
-		{
-			LuaVal addonData(TTABLE);
-			addonData["name"] = itr->name;
-			addonData["crc"] = itr->crc;
-			addonData["code"] = itr->code;
-			addonsTable[++i] = addonData;
-		}
-	}
-	return i;
+        LuaVal CRCVal = clientData.get(itr->name);
+        if (CRCVal == itr->crc)
+        {
+            cacheTable[++i] = itr->name;
+        }
+        else
+        {
+            LuaVal addonData(TTABLE);
+            addonData["name"] = itr->name;
+            addonData["crc"] = itr->crc;
+            addonData["code"] = itr->code;
+            addonsTable[++i] = addonData;
+        }
+    }
+    return i;
 }
 
 void World::ForceReloadPlayerAddons(uint32 permission)
 {
-	for(SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
-	{
-		if(itr->second->GetPlayer() && itr->second->HasPermission(permission))
-			itr->second->GetPlayer()->ForceReloadAddons();
-	}
+    for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
+    {
+        if (itr->second->GetPlayer() && itr->second->HasPermission(permission))
+            itr->second->GetPlayer()->ForceReloadAddons();
+    }
 }
 
 void World::ForceResetPlayerAddons(uint32 permission)
 {
-	for(SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
-	{
-		if(itr->second->GetPlayer() && itr->second->HasPermission(permission))
-			itr->second->GetPlayer()->ForceResetAddons();
-	}
+    for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
+    {
+        if (itr->second->GetPlayer() && itr->second->HasPermission(permission))
+            itr->second->GetPlayer()->ForceResetAddons();
+    }
 }
 
 void World::AIOMessageAll(AIOMsg &msg, uint32 permission)
 {
-	std::string messageStr = msg.dumps();
-	for(SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
-	{
-		if(itr->second->GetPlayer() && itr->second->HasPermission(permission))
-			itr->second->GetPlayer()->SendSimpleAIOMessage(messageStr);
-	}
+    std::string messageStr = msg.dumps();
+    for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
+    {
+        if (itr->second->GetPlayer() && itr->second->HasPermission(permission))
+            itr->second->GetPlayer()->SendSimpleAIOMessage(messageStr);
+    }
 }
 
 void World::SendAllSimpleAIOMessage(const std::string &message, uint32 permission)
 {
-	for(SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
-	{
-		if(itr->second->GetPlayer() && itr->second->HasPermission(permission))
-			itr->second->GetPlayer()->SendSimpleAIOMessage(message);
-	}
+    for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
+    {
+        if (itr->second->GetPlayer() && itr->second->HasPermission(permission))
+            itr->second->GetPlayer()->SendSimpleAIOMessage(message);
+    }
 }
 
 void World::RemoveOldCorpses()
