@@ -152,6 +152,9 @@ foreach(SCRIPT_MODULE ${SCRIPT_MODULE_LIST})
     # Add the module content to the whole static module
     unset(SCRIPT_MODULE_PRIVATE_SOURCES)
     CollectSourceFiles(${SCRIPT_MODULE_PATH} SCRIPT_MODULE_PRIVATE_SOURCES)
+    if(SCRIPT_MODULE STREQUAL "AIO" AND NOT WITH_CAIO_EXAMPLES)
+      list(FILTER SCRIPT_MODULE_PRIVATE_SOURCES EXCLUDE REGEX "[/\\\\]ExampleWindow\\.cpp$")
+    endif()
     # Configure the scriptloader
     ConfigureScriptLoader(${SCRIPT_MODULE} SCRIPT_MODULE_PRIVATE_SCRIPTLOADER ON ${SCRIPT_MODULE})
     GetProjectNameOfScriptModule(${SCRIPT_MODULE} SCRIPT_MODULE_PROJECT_NAME)
@@ -170,6 +173,10 @@ foreach(SCRIPT_MODULE ${SCRIPT_MODULE_LIST})
     target_include_directories(${SCRIPT_MODULE_PROJECT_NAME}
       PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR})
+
+    if(WITH_CAIO_EXAMPLES AND SCRIPT_MODULE STREQUAL "AIO")
+      target_compile_definitions(${SCRIPT_MODULE_PROJECT_NAME} PRIVATE WITH_CAIO_EXAMPLES)
+    endif()
 
     set_target_properties(${SCRIPT_MODULE_PROJECT_NAME}
       PROPERTIES

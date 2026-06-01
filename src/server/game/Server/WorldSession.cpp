@@ -499,6 +499,14 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
     return true;
 }
 
+namespace
+{
+uint32 DecodeAIOByte(char value)
+{
+    return uint32(static_cast<uint8>(value) - 1u);
+}
+}
+
 WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhisper(Player* sender, Player* receiver, std::string const& msg)
 {
     size_t delimPos = msg.find('\t');
@@ -515,7 +523,7 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
     uint16 messageId = 0;
     if ((msg.size() - delimPos - 1) >= size_t(2))
     {
-        messageId = (msg[delimPos + 1] - 1) * 254 + msg[delimPos + 2] - 1;
+        messageId = uint16(DecodeAIOByte(msg[delimPos + 1]) * 254u + DecodeAIOByte(msg[delimPos + 2]));
 
         if (messageId == 0)
         {
@@ -531,7 +539,7 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
         return IncomingAIOWhisperResult::Consumed;
     }
 
-    uint32 parts = (msg[delimPos + 3] - 1) * 254 + msg[delimPos + 4] - 1;
+    uint32 parts = DecodeAIOByte(msg[delimPos + 3]) * 254u + DecodeAIOByte(msg[delimPos + 4]);
     if (parts < 2)
     {
         sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
@@ -548,7 +556,7 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
         return IncomingAIOWhisperResult::DropPacket;
     }
 
-    uint32 partId = (msg[delimPos + 5] - 1) * 254 + msg[delimPos + 6] - 1;
+    uint32 partId = DecodeAIOByte(msg[delimPos + 5]) * 254u + DecodeAIOByte(msg[delimPos + 6]);
     if (partId < 1 || partId > parts)
     {
         sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,

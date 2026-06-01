@@ -829,6 +829,8 @@ class AIOScript : public ScriptObject
         LuaVal GetKey() const { return _key; }
         bool IsDatabaseBound() const { return false; }
 
+        static AIOScript* FindByKey(LuaVal const& scriptKey);
+
         typedef std::function<void(Player*, const LuaVal&)> HandlerFunc;
         typedef std::function<LuaVal(Player*)> ArgFunc;
 
@@ -862,8 +864,6 @@ class AIOScript : public ScriptObject
         // Returns null if scriptName doesn't exist or typename was incorrect.
         template<class ScriptClass>
         ScriptClass *GetScript(const LuaVal &key);
-
-        static AIOScript* FindByKey(LuaVal const& scriptKey);
 
     private:
         void OnHandle(Player* sender, LuaVal const& handlerKey, LuaVal const& args);

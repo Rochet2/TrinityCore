@@ -2752,9 +2752,9 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
         hookBlock[2] = itr->scriptKey;
         hookBlock[3] = itr->handlerKey;
         for (std::list<ArgFunc>::const_iterator it = itr->argsList.begin(); it != itr->argsList.end(); ++it)
-            hookBlock[++index] = (*it)(sender);
+            hookBlock[static_cast<int>(++index)] = (*it)(sender);
 
-        argsToSend[++blockIndex] = hookBlock;
+        argsToSend[static_cast<unsigned int>(++blockIndex)] = hookBlock;
     }
 
     LuaVal AIOInitBlock(TTABLE);
@@ -2762,7 +2762,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
     AIOInitBlock[2] = "AIO";
     AIOInitBlock[3] = "Init";
     AIOInitBlock[4] = AIO_VERSION;
-    AIOInitBlock[5] = nAddons;
+    AIOInitBlock[5] = static_cast<unsigned int>(nAddons);
     AIOInitBlock[6] = addonTable;
     AIOInitBlock[7] = cacheTable;
 
