@@ -834,73 +834,73 @@ class TC_GAME_API GroupScript : public ScriptObject
 //         : AIOScript("ExampleScriptName")
 //     {
 //         using namespace std::placeholders;
-//     
+//
 //         // Loads addon files to addons list and sends them on AIO client initialization
 //         // Looks for the file in path config AIO.ClientScriptPath
 //         AddAddon(World::AIOAddon("ExampleAddon", "example_addon.lua"));
-//         
+//
 //         // You can also add addons to be sent to players with specific permission
 //         AddAddon(World::AIOAddon("AnotherAddon", "example_addon.lua", 192)); //192 refers to admin RBAC permission
-// 
+//
 //         // Handler function signature: void HandlerFunction(Player *sender, const LuaVal &args)
 //         AddHandler("Print", std::bind(&ExampleAIOScript::HandlePrint, this, _1, _2));
 //         AddHandler("Save", std::bind(&ExampleAIOScript::HandleSave, this, _1, _2));
-// 
+//
 //         // Initialization handler and arguments
 //         AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleAIOScript::InitArg, this, _1), std::bind(&ExampleAIOScript::InitArg, this, _1));
 //         //Adds additional argument to send to handler
 //         AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleAIOScript::InitArg2, this, _1));
 //         AddInitArgs("AnotherScript", "InitB"); //Arguments are not necessary
 //     }
-// 
+//
 //     void HandlePrint(Player *sender, const LuaVal &args)
 //     {
 //         //LuaVal args in a handler function is always a table
 //         //Handler arguments index starts from 4
 //         LuaVal &InputVal = args[4];
 //         LuaVal &SliderVal = args[5];
-// 
+//
 //         //MUST check if the value type is valid or else smallfolk_cpp will
 //         //throw on obtaining that type
 //         if (!InputVal.isstring() || !SliderVal.isnumber())
 //         {
 //             return;
 //         }
-// 
+//
 //         sender->GetSession()->SendNotification("HandlePrint -> Stored String: %s, Input: %s, Slider Value: %f",
 //             storedString.c_str(), InputVal.str().c_str(), SliderVal.num());
 //     }
-// 
+//
 //     void HandleSave(Player *sender, const LuaVal &args)
 //     {
 //         //LuaVal args in a handler function is always a table
 //         //Handler arguments index starts from 4
 //         LuaVal &SaveVal = args.get[4];
-// 
+//
 //         //MUST check if the value type is valid
 //         if (!SaveVal.isstring())
 //         {
 //             return;
 //         }
-// 
+//
 //         storedString = SaveVal.str();
 //         sender->GetSession()->SendNotification("Saved");
 //     }
-// 
+//
 //     LuaVal InitArg(Player *sender)
 //     {
 //         LuaVal arg = LuaVal(TTABLE);
 //         arg.set("key", 12.3);
 //         arg["key2"] = false;
-// 
+//
 //         return arg;
 //     }
-// 
+//
 //     LuaVal InitArg2(Player *sender)
 //     {
 //         return "LuaVal will implicitly create a string LuaVal for this arg";
 //     }
-// 
+//
 // private:
 //     std::string storedString;
 // };

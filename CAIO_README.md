@@ -60,79 +60,79 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DSCRIPTS=static -DTOOLS=0
 class ExampleCAIOScript : public AIOScript
 {
 public:
-	ExampleCAIOScript()
-		: AIOScript("ExampleScriptName")
-	{
-		using namespace std::placeholders;
-	
-		// Loads addon files to addons list and sends them on AIO client initialization
-		// Looks for the file in path config AIO.ClientScriptPath
-		AddAddon(World::AIOAddon("ExampleAddon", "example_addon.lua"));
-		
-		// You can also add addons to be sent to players with specific permission
-		AddAddon(World::AIOAddon("AnotherAddon", "example_addon.lua", 192)); //192 refers to gm level 3 RBAC permission
+    ExampleCAIOScript()
+        : AIOScript("ExampleScriptName")
+    {
+        using namespace std::placeholders;
 
-		// Handler function signature: void HandlerFunction(Player *sender, const LuaVal &args)
-		AddHandler("Print", std::bind(&ExampleCAIOScript::HandlePrint, this, _1, _2));
-		AddHandler("Save", std::bind(&ExampleCAIOScript::HandleSave, this, _1, _2));
+        // Loads addon files to addons list and sends them on AIO client initialization
+        // Looks for the file in path config AIO.ClientScriptPath
+        AddAddon(World::AIOAddon("ExampleAddon", "example_addon.lua"));
 
-		// Initialization handler and arguments
-		AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleCAIOScript::InitArg, this, _1), std::bind(&ExampleCAIOScript::InitArg, this, _1));
-		//Adds additional argument to send to handler
-		AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleCAIOScript::InitArg2, this, _1));
-		AddInitArgs("AnotherScript", "InitB"); //Arguments are not necessary
-	}
+        // You can also add addons to be sent to players with specific permission
+        AddAddon(World::AIOAddon("AnotherAddon", "example_addon.lua", 192)); //192 refers to gm level 3 RBAC permission
 
-	void HandlePrint(Player *sender, const LuaVal &args)
-	{
-	    //LuaVal args in a handler function is always a table
-		//Handler arguments index starts from 4
-		LuaVal &InputVal = args[4];
-		LuaVal &SliderVal = args[5];
+        // Handler function signature: void HandlerFunction(Player *sender, const LuaVal &args)
+        AddHandler("Print", std::bind(&ExampleCAIOScript::HandlePrint, this, _1, _2));
+        AddHandler("Save", std::bind(&ExampleCAIOScript::HandleSave, this, _1, _2));
 
-		//MUST check if the value type is valid or else smallfolk_cpp will
-		//throw on obtaining that type
-		if(!InputVal.isstring() || !SliderVal.isnumber())
-		{
-			return;
-		}
+        // Initialization handler and arguments
+        AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleCAIOScript::InitArg, this, _1), std::bind(&ExampleCAIOScript::InitArg, this, _1));
+        //Adds additional argument to send to handler
+        AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleCAIOScript::InitArg2, this, _1));
+        AddInitArgs("AnotherScript", "InitB"); //Arguments are not necessary
+    }
 
-		sender->GetSession()->SendNotification("HandlePrint -> Stored String: %s, Input: %s, Slider Value: %f",
-			storedString.c_str(), InputVal.str().c_str(), SliderVal.num());
-	}
+    void HandlePrint(Player *sender, const LuaVal &args)
+    {
+        //LuaVal args in a handler function is always a table
+        //Handler arguments index starts from 4
+        LuaVal &InputVal = args[4];
+        LuaVal &SliderVal = args[5];
 
-	void HandleSave(Player *sender, const LuaVal &args)
-	{
-	    //LuaVal args in a handler function is always a table
-		//Handler arguments index starts from 4
-		LuaVal &SaveVal = args[4];
+        //MUST check if the value type is valid or else smallfolk_cpp will
+        //throw on obtaining that type
+        if(!InputVal.isstring() || !SliderVal.isnumber())
+        {
+            return;
+        }
 
-		//MUST check if the value type is valid
-		if(!SaveVal.isstring())
-		{
-			return;
-		}
+        sender->GetSession()->SendNotification("HandlePrint -> Stored String: %s, Input: %s, Slider Value: %f",
+            storedString.c_str(), InputVal.str().c_str(), SliderVal.num());
+    }
 
-		storedString = SaveVal.str();
-		sender->GetSession()->SendNotification("Saved");
-	}
+    void HandleSave(Player *sender, const LuaVal &args)
+    {
+        //LuaVal args in a handler function is always a table
+        //Handler arguments index starts from 4
+        LuaVal &SaveVal = args[4];
 
-	LuaVal InitArg(Player *sender)
-	{
-		LuaVal arg = LuaVal(TTABLE);
-		arg.set("key", 12.3);
-		arg["key2"] = false;
+        //MUST check if the value type is valid
+        if(!SaveVal.isstring())
+        {
+            return;
+        }
 
-		return arg;
-	}
+        storedString = SaveVal.str();
+        sender->GetSession()->SendNotification("Saved");
+    }
 
-	LuaVal InitArg2(Player *sender)
-	{
-		return "LuaVal will implicitly create a string LuaVal for this arg";
-	}
+    LuaVal InitArg(Player *sender)
+    {
+        LuaVal arg = LuaVal(TTABLE);
+        arg.set("key", 12.3);
+        arg["key2"] = false;
+
+        return arg;
+    }
+
+    LuaVal InitArg2(Player *sender)
+    {
+        return "LuaVal will implicitly create a string LuaVal for this arg";
+    }
 
 private:
-	std::string storedString;
+    std::string storedString;
 };
 ```
 
@@ -150,41 +150,41 @@ Use `LuaVal::nil` (not `LuaVal::nil()`) for default optional arguments. Type tag
 class AIOScript : public ScriptObject
 {
 public:
-	virtual ~AIOScript();
-	
-	// Returns the key of this CAIO script
-	LuaVal GetKey() const;
+    virtual ~AIOScript();
+
+    // Returns the key of this CAIO script
+    LuaVal GetKey() const;
 
 protected:
-	// Registers an AIO Handler script of scriptName
-	AIOScript(const LuaVal &scriptKey);
+    // Registers an AIO Handler script of scriptName
+    AIOScript(const LuaVal &scriptKey);
 
-	// Registers a handler function to call when handling
-	// handleKey of this script.
-	void AddHandler(const LuaVal &handlerKey, HandlerFunc function);
+    // Registers a handler function to call when handling
+    // handleKey of this script.
+    void AddHandler(const LuaVal &handlerKey, HandlerFunc function);
 
-	// Adds a client side handler to call and adds arguments
-	// to sends with it for AIO client initialization.
-	//
-	// You can add additional arguments to the handler by
-	// calling this function again
-	void AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey,
-		ArgFunc a1 = ArgFunc(), ArgFunc a2 = ArgFunc(), ArgFunc a3 = ArgFunc(),
-		ArgFunc a4 = ArgFunc(), ArgFunc a5 = ArgFunc(), ArgFunc a6 = ArgFunc());
+    // Adds a client side handler to call and adds arguments
+    // to sends with it for AIO client initialization.
+    //
+    // You can add additional arguments to the handler by
+    // calling this function again
+    void AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey,
+        ArgFunc a1 = ArgFunc(), ArgFunc a2 = ArgFunc(), ArgFunc a3 = ArgFunc(),
+        ArgFunc a4 = ArgFunc(), ArgFunc a5 = ArgFunc(), ArgFunc a6 = ArgFunc());
 
-	// Adds a WoW addon file to the list of addons with a unique
-	// addon key to send on AIO client initialization.
-	// Returns true if addon was added, false if addon key is taken.
-	//
-	// It is required to call World::ForceReloadPlayerAddons()
-	// if addons are added after server is fully initialized
-	// for online players to load the added addons.
-	bool AddAddon(const World::AIOAddon &addon);
+    // Adds a WoW addon file to the list of addons with a unique
+    // addon key to send on AIO client initialization.
+    // Returns true if addon was added, false if addon key is taken.
+    //
+    // It is required to call World::ForceReloadPlayerAddons()
+    // if addons are added after server is fully initialized
+    // for online players to load the added addons.
+    bool AddAddon(const World::AIOAddon &addon);
 
-	// Returns pointer to an AIO script by its key and typename.
-	// Returns null if scriptName doesn't exist or typename was incorrect.
-	template<class ScriptClass>
-	ScriptClass *GetScript(const LuaVal &key);
+    // Returns pointer to an AIO script by its key and typename.
+    // Returns null if scriptName doesn't exist or typename was incorrect.
+    template<class ScriptClass>
+    ScriptClass *GetScript(const LuaVal &key);
 }
 ```
 
@@ -194,27 +194,27 @@ protected:
 class AIOMsg
 {
 public:
-	//Creates an empty AIOMsg
-	AIOMsg();
+    //Creates an empty AIOMsg
+    AIOMsg();
 
-	//Creates a AIO message and adds one block
-	AIOMsg(const LuaVal &scriptKey, const LuaVal &handlerKey,
-		const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
-		const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
+    //Creates a AIO message and adds one block
+    AIOMsg(const LuaVal &scriptKey, const LuaVal &handlerKey,
+        const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
+        const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
 
-	//Adds another block
-	//Another block will call another handler in one message
-	AIOMsg &Add(cconst LuaVal &scriptKey, const LuaVal &handlerKey,
-		const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
-		const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
+    //Adds another block
+    //Another block will call another handler in one message
+    AIOMsg &Add(cconst LuaVal &scriptKey, const LuaVal &handlerKey,
+        const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
+        const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
 
-	//Appends the last block
-	//You can add additional arguments to the last block
-	AIOMsg &AppendLast(const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
-		const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
+    //Appends the last block
+    //You can add additional arguments to the last block
+    AIOMsg &AppendLast(const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
+        const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
 
-	//Returns smallfolk dump of the AIO message
-	std::string dumps() const;
+    //Returns smallfolk dump of the AIO message
+    std::string dumps() const;
 ```
 
 **Player.h**
@@ -223,36 +223,36 @@ public:
 class Player
 {
 public:
-	// Sends an AIO message to the player
-	// See: class AIOMsg
-	void AIOMessage(AIOMsg &msg);
+    // Sends an AIO message to the player
+    // See: class AIOMsg
+    void AIOMessage(AIOMsg &msg);
 
-	// Triggers an AIO handler on the client
-	// To trigger multiple handlers in one message or to send more
-	// arguments use Player::AIOMessage
-	void AIOHandle(const LuaVal &scriptKey, const LuaVal &handlerKey,
-		const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
-		const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
+    // Triggers an AIO handler on the client
+    // To trigger multiple handlers in one message or to send more
+    // arguments use Player::AIOMessage
+    void AIOHandle(const LuaVal &scriptKey, const LuaVal &handlerKey,
+        const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
+        const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
 
-	// AIO can only understand smallfolk LuaVal::dumps() format
-	// Handler functions are called by creating a table as below
-	// {
-	//     {n, ScriptName, HandlerName(optional), Arg1..N(optional) },
-	//     {n, AnotherScriptName, AnotherHandlerName(optional), Arg1..N(optional) }
-	// }
-	// Where n is number of arguments including handler name as an argument
-	void SendSimpleAIOMessage(const std::string &message);
+    // AIO can only understand smallfolk LuaVal::dumps() format
+    // Handler functions are called by creating a table as below
+    // {
+    //     {n, ScriptName, HandlerName(optional), Arg1..N(optional) },
+    //     {n, AnotherScriptName, AnotherHandlerName(optional), Arg1..N(optional) }
+    // }
+    // Where n is number of arguments including handler name as an argument
+    void SendSimpleAIOMessage(const std::string &message);
 
-	// Forces reload on the player AIO addons
-	// Syncs player AIO addons with server
-	void ForceReloadAddons();
+    // Forces reload on the player AIO addons
+    // Syncs player AIO addons with server
+    void ForceReloadAddons();
 
-	// Force reset on the player AIO addons
-	// Player AIO addons and addon data is deleted and downloaded again
-	void ForceResetAddons();
+    // Force reset on the player AIO addons
+    // Player AIO addons and addon data is deleted and downloaded again
+    void ForceResetAddons();
 
-	bool isAIOInitOnCooldown() const;
-	void setAIOIntOnCooldown(bool cd);
+    bool isAIOInitOnCooldown() const;
+    void setAIOIntOnCooldown(bool cd);
 }
 ```
 
@@ -339,5 +339,5 @@ Issues can be reported via the [Github issue tracker](https://github.com/SaiFi01
 + Saif
   + CAIO
 + Rochet2
-  + [AIO](https://github.com/Rochet2/AIO) 
+  + [AIO](https://github.com/Rochet2/AIO)
   + [smallfolk_cpp](https://github.com/Rochet2/smallfolk_cpp) to handle and transmit Lua data in C++
