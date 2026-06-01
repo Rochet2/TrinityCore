@@ -2609,8 +2609,8 @@ void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
         if (nArgsVal.num() > 15.0)
         {
             sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
-                "AIO: Block from '%s' has over 15 arguments (n=%.0f). Sender: %s", scriptKeyVal.tostring().c_str(),
-                nArgsVal.num(), sender->GetName().c_str());
+                "AIO: Block from '%s' has over 15 arguments (n=%.0f). Sender: %s",
+                scriptKeyVal.tostring().c_str(), nArgsVal.num(), sender->GetName().c_str());
             continue;
         }
 
