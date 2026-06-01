@@ -61,7 +61,7 @@ AIOMsg& AIOMsg::AppendLast(LuaVal const& a1, LuaVal const& a2, LuaVal const& a3,
     if (!nArgsVal.isnumber())
         return *this;
 
-    unsigned int nArgs = nArgsVal.num();
+    unsigned int nArgs = static_cast<unsigned int>(nArgsVal.num());
     if (!a1.isnil())
     {
         block.insert(a1);

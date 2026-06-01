@@ -25,9 +25,8 @@
 #include <memory>
 #include <vector>
 
+#include "AIO.h"
 #include "smallfolk.h"
-
-#include "World.h"
 
 class AccountMgr;
 class AuctionHouseObject;

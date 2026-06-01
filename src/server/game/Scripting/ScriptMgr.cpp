@@ -2594,7 +2594,7 @@ void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
         return;
 
     // Call handlers from all blocks in order
-    for (size_t i = 1; i <= mainTable.len(); ++i)
+    for (unsigned int i = 1; i <= mainTable.len(); ++i)
     {
         LuaVal block = mainTable.get(static_cast<int>(i));
         if (!block.istable())
@@ -2729,7 +2729,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
 
     LuaVal addonTable(TTABLE);
     LuaVal cacheTable(TTABLE);
-    uint32 nAddons = sWorld->PrepareClientAddons(clientDataVal, addonTable, cacheTable, sender);
+    size_t const nAddons = sWorld->PrepareClientAddons(clientDataVal, addonTable, cacheTable, sender);
 
     LuaVal argsToSend(TTABLE);
 
@@ -2739,7 +2739,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
         uint32 index = 3;
         LuaVal hookBlock(TTABLE);
 
-        hookBlock[1] = uint32(itr->argsList.size() + 1);
+        hookBlock[1] = static_cast<uint32>(itr->argsList.size() + 1);
         hookBlock[2] = itr->scriptKey;
         hookBlock[3] = itr->handlerKey;
         for (std::list<ArgFunc>::const_iterator it = itr->argsList.begin(); it != itr->argsList.end(); ++it)
@@ -2753,7 +2753,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
     AIOInitBlock[2] = "AIO";
     AIOInitBlock[3] = "Init";
     AIOInitBlock[4] = AIO_VERSION;
-    AIOInitBlock[5] = nAddons;
+    AIOInitBlock[5] = static_cast<uint32>(nAddons);
     AIOInitBlock[6] = addonTable;
     AIOInitBlock[7] = cacheTable;
 

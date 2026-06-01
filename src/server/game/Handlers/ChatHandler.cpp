@@ -361,7 +361,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
 
                             messagePartsItr->second.Map[partId] = std::move(partPayload);
 
-                            bool haveAllParts = messagePartsItr->second.Map.size() >= messagePartsItr->second.Parts;
+                            bool haveAllParts = messagePartsItr->second.Map.size() >= static_cast<size_t>(messagePartsItr->second.Parts);
                             if (haveAllParts)
                             {
                                 for (uint32 expectedPart = 1; expectedPart <= parts; ++expectedPart)
