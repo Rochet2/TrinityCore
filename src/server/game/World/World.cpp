@@ -3611,9 +3611,7 @@ bool World::AddAddon(AIOAddon const& addon)
         return false;
 
     // Check if addon already exist
-    for (AddonCodeListType::iterator itr = m_AddonList.begin();
-        itr != m_AddonList.end();
-        ++itr)
+    for (AddonCodeListType::iterator itr = m_AddonList.begin(); itr != m_AddonList.end(); ++itr)
     {
         if (itr->name == addon.name)
         {
@@ -3689,9 +3687,7 @@ bool World::ReloadAddons()
     prevAddonList.swap(m_AddonList);
     try
     {
-        for (AddonCodeListType::const_iterator itr = prevAddonList.begin();
-            itr != prevAddonList.end();
-            ++itr)
+        for (AddonCodeListType::const_iterator itr = prevAddonList.begin(); itr != prevAddonList.end(); ++itr)
         {
             AddAddon(*itr);
         }
@@ -3717,9 +3713,7 @@ size_t World::PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable,
         return 0;
 
     uint32 i = 0;
-    for (AddonCodeListType::const_iterator itr = m_AddonList.begin();
-        itr != m_AddonList.end();
-        ++itr)
+    for (AddonCodeListType::const_iterator itr = m_AddonList.begin(); itr != m_AddonList.end(); ++itr)
     {
         if (!forPlayer->GetSession()->HasPermission(itr->permission))
             continue;
@@ -3759,7 +3753,7 @@ void World::ForceResetPlayerAddons(uint32 permission)
     }
 }
 
-void World::AIOMessageAll(AIOMsg &msg, uint32 permission)
+void World::AIOMessageAll(AIOMsg& msg, uint32 permission)
 {
     std::string messageStr = msg.dumps();
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)

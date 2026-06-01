@@ -5,7 +5,7 @@ AIOMsg::AIOMsg()
     : _val(TTABLE)
 { }
 
-AIOMsg &AIOMsg::Add(const LuaVal &scriptKey, const LuaVal &handlerKey, const LuaVal &a1, const LuaVal &a2, const LuaVal &a3, const LuaVal &a4, const LuaVal &a5, const LuaVal &a6)
+AIOMsg& AIOMsg::Add(LuaVal const& scriptKey, LuaVal const& handlerKey, LuaVal const& a1, LuaVal const& a2, LuaVal const& a3, LuaVal const& a4, LuaVal const& a5, LuaVal const& a6)
 {
     LuaVal block(TTABLE);
     uint32 nArgs = 1;
@@ -50,7 +50,7 @@ AIOMsg &AIOMsg::Add(const LuaVal &scriptKey, const LuaVal &handlerKey, const Lua
     return *this;
 }
 
-AIOMsg &AIOMsg::AppendLast(const LuaVal &a1, const LuaVal &a2, const LuaVal &a3, const LuaVal &a4, const LuaVal &a5, const LuaVal &a6)
+AIOMsg& AIOMsg::AppendLast(LuaVal const& a1, LuaVal const& a2, LuaVal const& a3, LuaVal const& a4, LuaVal const& a5, LuaVal const& a6)
 {
     unsigned int lastBlock = _val.len();
     if (!lastBlock)

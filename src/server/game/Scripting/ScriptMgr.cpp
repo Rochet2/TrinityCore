@@ -2609,8 +2609,8 @@ void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
         if (nArgsVal.num() > 15.0)
         {
             sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
-                "AIO: Block from '%s' has over 15 arguments (n=%.0f). Sender: %s",
-                scriptKeyVal.tostring().c_str(), nArgsVal.num(), sender->GetName().c_str());
+                "AIO: Block from '%s' has over 15 arguments (n=%.0f). Sender: %s", scriptKeyVal.tostring().c_str(),
+                nArgsVal.num(), sender->GetName().c_str());
             continue;
         }
 
@@ -2633,15 +2633,13 @@ AIOScript::AIOScript(LuaVal const& scriptKey)
 
 void AIOScript::AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey, ArgFunc a1, ArgFunc a2, ArgFunc a3, ArgFunc a4, ArgFunc a5, ArgFunc a6)
 {
-    AIOHandlers *handler = sScriptMgr->_aioHandlers;
+    AIOHandlers* handler = sScriptMgr->_aioHandlers;
     if (!handler)
         return;
 
     // Look for hook
     std::list<ArgFunc>* list = nullptr;
-    for (AIOHandlers::HookListType::iterator itr = handler->_initHookList.begin();
-        itr != handler->_initHookList.end();
-        ++itr)
+    for (AIOHandlers::HookListType::iterator itr = handler->_initHookList.begin(); itr != handler->_initHookList.end(); ++itr)
     {
         if (itr->scriptKey == scriptKey && itr->handlerKey == handlerKey)
         {
@@ -2736,9 +2734,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
     LuaVal argsToSend(TTABLE);
 
     uint32 blockIndex = 1;
-    for (HookListType::const_iterator itr = _initHookList.begin();
-        itr != _initHookList.end();
-        ++itr)
+    for (HookListType::const_iterator itr = _initHookList.begin(); itr != _initHookList.end(); ++itr)
     {
         uint32 index = 3;
         LuaVal hookBlock(TTABLE);

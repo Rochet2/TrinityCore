@@ -1073,7 +1073,7 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 
         // Sends an AIO message to the player
         // See: class AIOMsg
-        void AIOMessage(AIOMsg &msg);
+        void AIOMessage(AIOMsg& msg);
 
         // Triggers an AIO handler on the client
         // To trigger multiple handlers in one message or to send more

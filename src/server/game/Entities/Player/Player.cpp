@@ -20573,7 +20573,7 @@ void Player::Whisper(uint32 textId, Player* target, bool /*isBossWhisper*/)
     target->SendDirectMessage(packet.Write());
 }
 
-void Player::AIOMessage(AIOMsg &msg)
+void Player::AIOMessage(AIOMsg& msg)
 {
     SendSimpleAIOMessage(msg.dumps());
 }
