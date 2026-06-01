@@ -1578,7 +1578,7 @@ void World::LoadConfigSettings(bool reload)
     m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE] = sConfigMgr->GetIntDefault("AIO.MaxBufferSize", 1048576);
     m_aioclientpath = sConfigMgr->GetStringDefault("AIO.ClientScriptPath", "lua_client_scripts");
     m_aioprefix = sConfigMgr->GetStringDefault("AIO.Prefix", "AIO");
-    if (m_aioprefix.size() > 15)
+    if (m_aioprefix.size() > 15u)
         m_aioprefix = m_aioprefix.substr(0, 15);
 
     // HotSwap
@@ -3707,7 +3707,7 @@ bool World::ReloadAddons()
     return true;
 }
 
-size_t World::PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const
+uint32 World::PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const
 {
     if (!clientData.istable())
         return 0;

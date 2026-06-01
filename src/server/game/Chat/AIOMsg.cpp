@@ -56,7 +56,7 @@ AIOMsg& AIOMsg::AppendLast(LuaVal const& a1, LuaVal const& a2, LuaVal const& a3,
     if (!lastBlock)
         return *this;
 
-    LuaVal &block = _val[lastBlock];
+    LuaVal& block = _val.at(static_cast<int>(lastBlock));
     LuaVal nArgsVal = block.get(1);
     if (!nArgsVal.isnumber())
         return *this;

@@ -179,7 +179,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
         return;
     }
 
-    if (msg.size() > 255)
+    if (msg.size() > 255u)
         return;
 
     // Our Warden module also uses SendAddonMessage as a way to communicate Lua check results to the server, see if this is that
@@ -306,7 +306,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
                             return;
 
                         uint16 messageId = 0;
-                        if ((msg.size() - delimPos - 1) >= 2)
+                        if ((msg.size() - delimPos - 1) >= size_t(2))
                         {
                             messageId = (msg[delimPos + 1] - 1) * 254 + msg[delimPos + 2] - 1;
 
@@ -317,7 +317,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
                             }
                         }
 
-                        if ((msg.size() - delimPos - 1) >= 6)
+                        if ((msg.size() - delimPos - 1) >= size_t(6))
                         {
                             uint32 parts = (msg[delimPos + 3] - 1) * 254 + msg[delimPos + 4] - 1;
                             if (parts < 2)

@@ -804,7 +804,7 @@ class TC_GAME_API World
         bool ReloadAddons();
         bool AddAddon(AIOAddon const& addon);
         bool RemoveAddon(std::string const& addonName, uint32* permission = nullptr);
-        size_t PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const;
+        uint32 PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const;
 
         void RemoveOldCorpses();
         void TriggerGuidWarning();

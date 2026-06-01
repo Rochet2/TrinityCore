@@ -2624,7 +2624,7 @@ AIOScript::AIOScript(LuaVal const& scriptKey)
 {
     if (AIOScript::_scriptByKeyMap.find(scriptKey) != AIOScript::_scriptByKeyMap.end())
     {
-        sLog->outAIOMessage(0, LOG_LEVEL_FATAL, "AIO scriptKey '%s' of type tag '%i' already exist. Use another key.", scriptKey.tostring().c_str(), scriptKey.typetag());
+        sLog->outAIOMessage(0, LOG_LEVEL_FATAL, "AIO scriptKey '%s' of type tag '%i' already exist. Use another key.", scriptKey.tostring().c_str(), static_cast<int>(scriptKey.typetag()));
         ASSERT(false);
     }
     ScriptRegistry<AIOScript>::Instance()->AddScript(this);
@@ -2729,7 +2729,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
 
     LuaVal addonTable(TTABLE);
     LuaVal cacheTable(TTABLE);
-    size_t const nAddons = sWorld->PrepareClientAddons(clientDataVal, addonTable, cacheTable, sender);
+    uint32 const nAddons = sWorld->PrepareClientAddons(clientDataVal, addonTable, cacheTable, sender);
 
     LuaVal argsToSend(TTABLE);
 
@@ -2739,7 +2739,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
         uint32 index = 3;
         LuaVal hookBlock(TTABLE);
 
-        hookBlock[1] = static_cast<uint32>(itr->argsList.size() + 1);
+        hookBlock[1] = static_cast<unsigned int>(itr->argsList.size() + 1);
         hookBlock[2] = itr->scriptKey;
         hookBlock[3] = itr->handlerKey;
         for (std::list<ArgFunc>::const_iterator it = itr->argsList.begin(); it != itr->argsList.end(); ++it)
@@ -2753,7 +2753,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
     AIOInitBlock[2] = "AIO";
     AIOInitBlock[3] = "Init";
     AIOInitBlock[4] = AIO_VERSION;
-    AIOInitBlock[5] = static_cast<uint32>(nAddons);
+    AIOInitBlock[5] = nAddons;
     AIOInitBlock[6] = addonTable;
     AIOInitBlock[7] = cacheTable;
 
