@@ -1572,7 +1572,9 @@ void World::LoadConfigSettings(bool reload)
     m_int_configs[CONFIG_AIO_MAXPARTS] = sConfigMgr->GetIntDefault("AIO.MaxParts", 64);
     m_int_configs[CONFIG_AIO_MSG_MAX_LEN] = std::min<uint32>(sConfigMgr->GetIntDefault("AIO.MsgMaxLen", AIO_MAX_WHISPER_LENGTH), AIO_MAX_WHISPER_LENGTH);
     m_int_configs[CONFIG_AIO_INIT_COOLDOWN] = sConfigMgr->GetIntDefault("AIO.InitCooldown", 5000);
-    m_int_configs[CONFIG_AIO_BUFFER_TIMEOUT] = sConfigMgr->GetIntDefault("AIO.BufferTimeout", 30000);
+    // Matches AIO.lua AIO_MSG_CACHE_TIME / AIO_MSG_CACHE_DELAY (server-side reassembly)
+    m_int_configs[CONFIG_AIO_MSG_CACHE_TIME] = sConfigMgr->GetIntDefault("AIO.MsgCacheTime", 15000);
+    m_int_configs[CONFIG_AIO_MSG_CACHE_DELAY] = sConfigMgr->GetIntDefault("AIO.MsgCacheDelay", 5000);
     m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE] = sConfigMgr->GetIntDefault("AIO.MaxBufferSize", 1048576);
     m_aioclientpath = sConfigMgr->GetStringDefault("AIO.ClientScriptPath", "lua_client_scripts");
     m_aioprefix = sConfigMgr->GetStringDefault("AIO.Prefix", "AIO");

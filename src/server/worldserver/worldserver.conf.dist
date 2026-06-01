@@ -4119,9 +4119,15 @@ PacketSpoof.BanDuration = 86400
 #        Milliseconds before a player can call AIO Init again after a successful init.
 #        Default: 5000
 #
-#    AIO.BufferTimeout
+#    AIO.MsgCacheTime
 #        Milliseconds before incomplete incoming long AIO messages are discarded.
-#        Default: 30000
+#        Matches AIO.lua AIO_MSG_CACHE_TIME on the stock server.
+#        Default: 15000
+#
+#    AIO.MsgCacheDelay
+#        Milliseconds between sweeps of incomplete long AIO message buffers.
+#        Matches AIO.lua AIO_MSG_CACHE_DELAY on the stock server.
+#        Default: 5000
 #
 #    AIO.MaxBufferSize
 #        Maximum total bytes buffered per long AIO message while reassembling parts.
@@ -4136,7 +4142,8 @@ AIO.Prefix = "AIO"
 AIO.MaxParts = 64
 AIO.MsgMaxLen = 255
 AIO.InitCooldown = 5000
-AIO.BufferTimeout = 30000
+AIO.MsgCacheTime = 15000
+AIO.MsgCacheDelay = 5000
 AIO.MaxBufferSize = 1048576
 AIO.ClientScriptPath = "lua_client_scripts"
 

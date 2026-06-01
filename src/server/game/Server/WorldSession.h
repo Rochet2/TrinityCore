@@ -1360,6 +1360,7 @@ class TC_GAME_API WorldSession
 		};
 		typedef std::map<uint16, LongMessageBufferInfo> AddonMessageBufferMap;
 		AddonMessageBufferMap _addonMessageBuffer;
+		uint32 _aioMsgCacheSweepTimer = 0;
 };
 #endif
 /// @}
