@@ -1282,6 +1282,15 @@ class TC_GAME_API WorldSession
             return _legitCharacters.find(lowGUID) != _legitCharacters.end();
         }
 
+        enum class IncomingAIOWhisperResult : uint8
+        {
+            NotAIO,
+            Consumed,
+            DropPacket
+        };
+
+        IncomingAIOWhisperResult HandleIncomingAIOClientWhisper(Player* sender, Player* receiver, std::string const& msg);
+
         // Movement helpers
         Unit* ValidateAndGetUnitBeingMoved(ObjectGuid guid, OpcodeClient opcode, bool forStatusAck) const;
 

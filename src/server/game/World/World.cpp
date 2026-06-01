@@ -20,7 +20,6 @@
 */
 
 #include "World.h"
-#include <algorithm>
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AddonMgr.h"
@@ -1589,11 +1588,22 @@ void World::LoadConfigSettings(bool reload)
     m_bool_configs[CONFIG_HOTSWAP_INSTALL_ENABLED] = sConfigMgr->GetBoolDefault("HotSwap.EnableInstall", true);
     m_bool_configs[CONFIG_HOTSWAP_PREFIX_CORRECTION_ENABLED] = sConfigMgr->GetBoolDefault("HotSwap.EnablePrefixCorrection", true);
 
+    // prevent character rename on character customization
     m_bool_configs[CONFIG_PREVENT_RENAME_CUSTOMIZATION] = sConfigMgr->GetBoolDefault("PreventRenameCharacterOnCustomization", false);
+
+    // Allow 5-man parties to use raid warnings
     m_bool_configs[CONFIG_CHAT_PARTY_RAID_WARNINGS] = sConfigMgr->GetBoolDefault("PartyRaidWarnings", false);
+
+    // Allow to cache data queries
     m_bool_configs[CONFIG_CACHE_DATA_QUERIES] = sConfigMgr->GetBoolDefault("CacheDataQueries", true);
+
+    // Whether to use LoS from game objects
     m_bool_configs[CONFIG_CHECK_GOBJECT_LOS] = sConfigMgr->GetBoolDefault("CheckGameObjectLoS", true);
+
+    // Anti movement cheat measure. Time each client have to acknowledge a movement change until they are kicked
     m_int_configs[CONFIG_PENDING_MOVE_CHANGES_TIMEOUT] = sConfigMgr->GetIntDefault("AntiCheat.PendingMoveChangesTimeoutTime", 0);
+
+    // Specifies if IP addresses can be logged to the database
     m_bool_configs[CONFIG_ALLOW_LOGGING_IP_ADDRESSES_IN_DATABASE] = sConfigMgr->GetBoolDefault("AllowLoggingIPAddressesInDatabase", true, true);
 
     // call ScriptMgr if we're reloading the configuration
@@ -3647,7 +3657,7 @@ bool World::AddAddon(AIOAddon const& addon)
     }
     else
     {
-        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO AddAddon: Couldn't open file %s of addon %s", path.c_str(), copy.name.c_str());
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO AddAddon: Couldn't open file {} of addon {}", path, copy.name);
         return false;
     }
 
@@ -3660,7 +3670,7 @@ bool World::AddAddon(AIOAddon const& addon)
     copy.code = std::string(1, 'U') + copy.code;
     m_AddonList.push_back(copy);
 
-    sLog->outAIOMessage(0, LOG_LEVEL_INFO, "AIO: Loaded addon %s from file %s", copy.name.c_str(), copy.file.c_str());
+    sLog->outAIOMessage(0, LOG_LEVEL_INFO, "AIO: Loaded addon {} from file {}", copy.name, copy.file);
     return true;
 }
 
@@ -3694,7 +3704,7 @@ bool World::ReloadAddons()
     }
     catch (std::exception &e)
     {
-        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO: Error reloading addons. Exception: %s", e.what());
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO: Error reloading addons. Exception: {}", e.what());
         m_AddonList.swap(prevAddonList);
         return false;
     }

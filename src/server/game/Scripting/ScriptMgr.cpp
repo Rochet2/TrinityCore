@@ -2590,8 +2590,12 @@ void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
         return;
 
     LuaVal mainTable = LuaVal::loads(message);
-    if (!mainTable.istable()) // Unable to parse or incorrect format
+    if (!mainTable.istable())
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_DEBUG,
+            "AIO: Ignoring non-table addon payload from {} ({} bytes)", sender->GetName(), message.size());
         return;
+    }
 
     // Call handlers from all blocks in order
     for (unsigned int i = 1; i <= mainTable.len(); ++i)
@@ -2609,12 +2613,12 @@ void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
         if (nArgsVal.num() > 15.0)
         {
             sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
-                "AIO: Block from '%s' has over 15 arguments (n=%.0f). Sender: %s",
-                scriptKeyVal.tostring().c_str(), nArgsVal.num(), sender->GetName().c_str());
+                "AIO: Block from '{}' has over 15 arguments (n={:.0f}). Sender: {}",
+                scriptKeyVal.tostring(), nArgsVal.num(), sender->GetName());
             continue;
         }
 
-        if (AIOScript* aioScript = _aioHandlers->GetScript<AIOScript>(scriptKeyVal))
+        if (AIOScript* aioScript = AIOScript::FindByKey(scriptKeyVal))
             aioScript->OnHandle(sender, handlerKeyVal, block);
     }
 }
@@ -2624,7 +2628,7 @@ AIOScript::AIOScript(LuaVal const& scriptKey)
 {
     if (AIOScript::_scriptByKeyMap.find(scriptKey) != AIOScript::_scriptByKeyMap.end())
     {
-        sLog->outAIOMessage(0, LOG_LEVEL_FATAL, "AIO scriptKey '%s' of type tag '%i' already exist. Use another key.", scriptKey.tostring().c_str(), static_cast<int>(scriptKey.typetag()));
+        sLog->outAIOMessage(0, LOG_LEVEL_FATAL, "AIO scriptKey '{}' of type tag '{}' already exist. Use another key.", scriptKey.tostring(), static_cast<int>(scriptKey.typetag()));
         ASSERT(false);
     }
     ScriptRegistry<AIOScript>::Instance()->AddScript(this);
@@ -2670,14 +2674,19 @@ void AIOScript::AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey, A
         list->push_back(a6);
 }
 
+AIOScript* AIOScript::FindByKey(LuaVal const& scriptKey)
+{
+    AIOScriptByKeyMap::const_iterator itr = _scriptByKeyMap.find(scriptKey);
+    if (itr == _scriptByKeyMap.end())
+        return nullptr;
+
+    return itr->second;
+}
+
 template<class ScriptClass>
 ScriptClass *AIOScript::GetScript(const LuaVal &scriptKey)
 {
-    AIOScriptByKeyMap::const_iterator itr = AIOScript::_scriptByKeyMap.find(scriptKey);
-    if (itr == AIOScript::_scriptByKeyMap.end())
-        return nullptr;
-
-    return dynamic_cast<ScriptClass*>(itr->second);
+    return dynamic_cast<ScriptClass*>(FindByKey(scriptKey));
 }
 
 bool AIOScript::AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission)
@@ -2694,8 +2703,8 @@ void AIOScript::OnHandle(Player* sender, LuaVal const& handlerKey, LuaVal const&
         return;
     }
 
-    sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "AIO: No handler '%s' on script '%s'. Sender: %s",
-        handlerKey.tostring().c_str(), _key.tostring().c_str(), sender->GetName().c_str());
+    sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "AIO: No handler '{}' on script '{}'. Sender: {}",
+        handlerKey.tostring(), _key.tostring(), sender->GetName());
 }
 
 AIOHandlers::AIOHandlers()
@@ -2715,7 +2724,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
     LuaVal clientDataVal = args.get(5);
     if (!versionVal.isnumber() || !clientDataVal.istable())
     {
-        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "AIOHandlers::HandleInit: Invalid version value or clientData value. Sender: %s, Args: %s", sender->GetName().c_str(), args.dumps().c_str());
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "AIOHandlers::HandleInit: Invalid version value or clientData value. Sender: {}, Args: {}", sender->GetName(), args.dumps());
         return;
     }
 
@@ -2767,7 +2776,7 @@ void AIOHandlers::HandleError(Player* sender, LuaVal const& args)
     if (!msgVal.isstring())
         return;
 
-    sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "%s Received client addon error: %s", sender->GetSession()->GetPlayerInfo().c_str(), msgVal.str().c_str());
+    sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "{} Received client addon error: {}", sender->GetSession()->GetPlayerInfo(), msgVal.str());
 }
 
 void PlayerScript::OnPVPKill(Player* /*killer*/, Player* /*killed*/)

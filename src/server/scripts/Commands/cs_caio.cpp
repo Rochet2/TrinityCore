@@ -5,171 +5,121 @@ Comment : All AIO related server side commands
 Category : commandscripts
 EndScriptData */
 
+#include "ScriptMgr.h"
+#include "AIO.h"
 #include "Chat.h"
+#include "ChatCommand.h"
 #include "Language.h"
 #include "Player.h"
 #include "RBAC.h"
-#include "ScriptMgr.h"
 #include "World.h"
 #include "smallfolk.h"
+
+using namespace Trinity::ChatCommands;
 
 class caio_commandscript : public CommandScript
 {
 public:
     caio_commandscript() : CommandScript("caio_commandscript") { }
 
-    std::vector<ChatCommand> GetCommands() const override
+    ChatCommandTable GetCommands() const override
     {
-        static std::vector<ChatCommand> caioCommandTable =
+        static ChatCommandTable caioCommandTable =
         {
-            { "version",        rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleVersionCommand,        "" },
-            { "send",           rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleSendCommand,           "" },
-            { "forcereload",    rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleReloadCommand,         "" },
-            { "forcereset",     rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleResetCommand,          "" },
-            { "sendall",        rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleSendAllCommand,        "" },
-            { "forcereloadall", rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleReloadAllCommand,      "" },
-            { "forceresetall",  rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleResetAllCommand,       "" },
-            { "reloadaddons",   rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleReloadAddonsCommand,   "" },
-            { "addaddon",       rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleAddAddonCommand,       "" },
-            { "removeaddon",    rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleRemoveAddonCommand,    "" },
+            { "version",        HandleVersionCommand,        rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
+            { "send",           HandleSendCommand,           rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
+            { "forcereload",    HandleReloadCommand,         rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
+            { "forcereset",     HandleResetCommand,          rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
+            { "sendall",        HandleSendAllCommand,        rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
+            { "forcereloadall", HandleReloadAllCommand,      rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
+            { "forceresetall",  HandleResetAllCommand,       rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
+            { "reloadaddons",   HandleReloadAddonsCommand,   rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
+            { "addaddon",       HandleAddAddonCommand,       rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
+            { "removeaddon",    HandleRemoveAddonCommand,    rbac::RBAC_PERM_COMMAND_CAIO, Console::Yes },
         };
 
-        static std::vector<ChatCommand> commandTable =
+        static ChatCommandTable commandTable =
         {
-            { "caio", rbac::RBAC_PERM_COMMAND_CAIO, true, nullptr, "", caioCommandTable },
+            { "caio", caioCommandTable },
         };
 
         return commandTable;
     }
 
-    static bool HandleVersionCommand(ChatHandler* handler, char const* /*args*/)
+    static bool HandleVersionCommand(ChatHandler* handler)
     {
-        handler->PSendSysMessage("AIO version %s (protocol %.2f).", AIO_VERSION_STRING, AIO_VERSION);
+        handler->PSendSysMessage("AIO version {} (protocol {:.2f}).", AIO_VERSION_STRING, AIO_VERSION);
         return true;
     }
 
-    static bool HandleSendCommand(ChatHandler* handler, char const* args)
+    static bool HandleSendCommand(ChatHandler* handler, PlayerIdentifier const& target, QuotedString message)
     {
-        Player* target = nullptr;
-        if (!handler->extractPlayerTarget((char*)args, &target))
-            return false;
-
-        char* tailStr = strtok(nullptr, "");
-        if (!tailStr)
-            return false;
-
-        char* msg = handler->extractQuotedArg(tailStr);
-        if (!msg)
-            return false;
-
-        if (!LuaVal::loads(msg).istable())
+        if (!LuaVal::loads(message).istable())
         {
             handler->SendSysMessage("CAIO: message must be smallfolk-serialized table data (use AIOMsg or AIO.Msg on the server).");
             return false;
         }
 
-        target->SendSimpleAIOMessage(msg);
-        handler->PSendSysMessage(LANG_SENDMESSAGE, target->GetName().c_str(), msg);
+        Player* player = target.GetConnectedPlayer();
+        if (!player)
+            return false;
+
+        player->SendSimpleAIOMessage(message);
+        handler->PSendSysMessage(LANG_SENDMESSAGE, target.GetName().c_str(), message.c_str());
         return true;
     }
 
-    static bool HandleReloadCommand(ChatHandler* handler, char const* args)
+    static bool HandleReloadCommand(ChatHandler* handler, PlayerIdentifier const& target)
     {
-        Player* target = nullptr;
-        if (!handler->extractPlayerTarget((char*)args, &target, nullptr, nullptr))
+        Player* player = target.GetConnectedPlayer();
+        if (!player)
             return false;
 
-        target->ForceReloadAddons();
-        handler->PSendSysMessage(LANG_CAIO_FORCERELOAD_SENT, target->GetName().c_str());
+        player->ForceReloadAddons();
+        handler->PSendSysMessage(LANG_CAIO_FORCERELOAD_SENT, target.GetName().c_str());
         return true;
     }
 
-    static bool HandleResetCommand(ChatHandler* handler, char const* args)
+    static bool HandleResetCommand(ChatHandler* handler, PlayerIdentifier const& target)
     {
-        Player* target = nullptr;
-        if (!handler->extractPlayerTarget((char*)args, &target, nullptr, nullptr))
+        Player* player = target.GetConnectedPlayer();
+        if (!player)
             return false;
 
-        target->ForceResetAddons();
-        handler->PSendSysMessage(LANG_CAIO_FORCERESET_SENT, target->GetName().c_str());
+        player->ForceResetAddons();
+        handler->PSendSysMessage(LANG_CAIO_FORCERESET_SENT, target.GetName().c_str());
         return true;
     }
 
-    static bool HandleSendAllCommand(ChatHandler* handler, char const* args)
+    static bool HandleSendAllCommand(ChatHandler* handler, QuotedString message, Optional<uint32> permission)
     {
-        if (!*args)
-            return false;
-
-        char* msg = handler->extractQuotedArg((char*)args);
-        if (!msg)
-            return false;
-
-        if (!LuaVal::loads(msg).istable())
+        if (!LuaVal::loads(message).istable())
         {
             handler->SendSysMessage("CAIO: message must be smallfolk-serialized table data (use AIOMsg or AIO.Msg on the server).");
             return false;
         }
 
-        char* permission = strtok(nullptr, "");
-        uint32 perm = AIO_DEFAULT_ADDON_PERMISSION;
-        if (permission)
-        {
-            try
-            {
-                perm = std::stoi(permission);
-            }
-            catch (std::exception&)
-            {
-                return false;
-            }
-        }
-
-        sWorld->SendAllSimpleAIOMessage(msg, perm);
-        handler->PSendSysMessage(LANG_SENDMESSAGE, "all players", msg);
+        uint32 perm = permission.value_or(AIO_DEFAULT_ADDON_PERMISSION);
+        sWorld->SendAllSimpleAIOMessage(message, perm);
+        handler->PSendSysMessage(LANG_SENDMESSAGE, "all players", message.c_str());
         return true;
     }
 
-    static bool HandleReloadAllCommand(ChatHandler* handler, char const* args)
+    static bool HandleReloadAllCommand(ChatHandler* handler, Optional<uint32> permission)
     {
-        uint32 perm = AIO_DEFAULT_ADDON_PERMISSION;
-        if (args && *args)
-        {
-            try
-            {
-                perm = std::stoi(args);
-            }
-            catch (std::exception&)
-            {
-                return false;
-            }
-        }
-
-        sWorld->ForceReloadPlayerAddons(perm);
+        sWorld->ForceReloadPlayerAddons(permission.value_or(AIO_DEFAULT_ADDON_PERMISSION));
         handler->PSendSysMessage(LANG_CAIO_FORCERELOAD_SENT, "all players");
         return true;
     }
 
-    static bool HandleResetAllCommand(ChatHandler* handler, char const* args)
+    static bool HandleResetAllCommand(ChatHandler* handler, Optional<uint32> permission)
     {
-        uint32 perm = AIO_DEFAULT_ADDON_PERMISSION;
-        if (args && *args)
-        {
-            try
-            {
-                perm = std::stoi(args);
-            }
-            catch (std::exception&)
-            {
-                return false;
-            }
-        }
-
-        sWorld->ForceResetPlayerAddons(perm);
+        sWorld->ForceResetPlayerAddons(permission.value_or(AIO_DEFAULT_ADDON_PERMISSION));
         handler->PSendSysMessage(LANG_CAIO_FORCERESET_SENT, "all players");
         return true;
     }
 
-    static bool HandleReloadAddonsCommand(ChatHandler* handler, char const* /*args*/)
+    static bool HandleReloadAddonsCommand(ChatHandler* handler)
     {
         if (sWorld->ReloadAddons())
             sWorld->ForceReloadPlayerAddons();
@@ -179,53 +129,25 @@ public:
         return true;
     }
 
-    static bool HandleAddAddonCommand(ChatHandler* handler, char const* args)
+    static bool HandleAddAddonCommand(ChatHandler* handler, std::string addonName, QuotedString addonFile, Optional<uint32> permission)
     {
-        if (!*args)
-            return false;
-
-        char* addonName = strtok((char*)args, " ");
-        if (!addonName || addonName[0] == '"')
-            return false;
-
-        char* tailStr = strtok(nullptr, "");
-        char* addonFile = handler->extractQuotedArg(tailStr);
-        if (!addonFile)
-            return false;
-
-        char* permission = strtok(nullptr, "");
-        uint32 perm = AIO_DEFAULT_ADDON_PERMISSION;
-        if (permission)
-        {
-            try
-            {
-                perm = std::stoi(permission);
-            }
-            catch (std::exception&)
-            {
-                return false;
-            }
-        }
-
+        uint32 perm = permission.value_or(AIO_DEFAULT_ADDON_PERMISSION);
         World::AIOAddon newAddon(addonName, addonFile, perm);
         if (sWorld->AddAddon(newAddon))
             sWorld->ForceReloadPlayerAddons(perm);
         else
-            handler->PSendSysMessage(LANG_CAIO_ADDADDON_ERROR, addonName);
+            handler->PSendSysMessage(LANG_CAIO_ADDADDON_ERROR, addonName.c_str());
 
         return true;
     }
 
-    static bool HandleRemoveAddonCommand(ChatHandler* handler, char const* args)
+    static bool HandleRemoveAddonCommand(ChatHandler* handler, std::string addonName)
     {
-        if (!*args)
-            return false;
-
         uint32 perm = AIO_DEFAULT_ADDON_PERMISSION;
-        if (sWorld->RemoveAddon(args, &perm))
+        if (sWorld->RemoveAddon(addonName, &perm))
             sWorld->ForceReloadPlayerAddons(perm);
         else
-            handler->PSendSysMessage(LANG_CAIO_REMOVEADDON_ERROR, args);
+            handler->PSendSysMessage(LANG_CAIO_REMOVEADDON_ERROR, addonName.c_str());
 
         return true;
     }

@@ -112,7 +112,6 @@
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include "AIOMsg.h"
-#include "GameObjectAI.h"
 #include "WorldStatePackets.h"
 
 #define ZONE_UPDATE_INTERVAL (1*IN_MILLISECONDS)
@@ -20555,7 +20554,7 @@ void Player::Whisper(std::string_view text, Language language, Player* target, b
         ChatHandler(GetSession()).PSendSysMessage(LANG_PLAYER_DND, target->GetName().c_str(), target->autoReplyMsg.c_str());
 }
 
-void Player::Whisper(uint32 textId, Player* target, bool /*isBossWhisper*/)
+void Player::Whisper(uint32 textId, Player* target, bool /*isBossWhisper = false*/)
 {
     if (!target)
         return;

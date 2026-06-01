@@ -30,7 +30,7 @@ On TrinityCore, AIO uses **`CHAT_MSG_WHISPER` with `LANG_ADDON`** (not a separat
 
 ## Version handshake
 
-On init, client sends `AIO` / `Init` with protocol version **1.75**. Server defines `AIO_VERSION` / `AIO_VERSION_STRING` in `World.h`.
+On init, client sends `AIO` / `Init` with protocol version **1.75**. Server defines `AIO_VERSION` / `AIO_VERSION_STRING` in `src/server/game/AIO/AIO.h`.
 
 ## Compression / obfuscation
 
