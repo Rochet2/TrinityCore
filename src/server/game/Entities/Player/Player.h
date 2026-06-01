@@ -1071,9 +1071,6 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void Whisper(uint32 textId, Player* target, bool isBossWhisper = false) override;
         void WhisperAddon(std::string const& text, Player* receiver);
 
-		bool AIOInitialized() const { return m_aioInitialized; }
-        void SetAIOInitialized(bool initialized) { m_aioInitialized = initialized; }
-
 		// Sends an AIO message to the player
 		// See: class AIOMsg
 		void AIOMessage(AIOMsg &msg);
@@ -2591,7 +2588,6 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 
         uint32 _activeCheats;
 
-        bool m_aioInitialized;
         bool m_aioInitCd;
         uint32 m_aioInitTimer;
         uint16 m_messageIdIndex;
