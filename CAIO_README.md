@@ -37,9 +37,17 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DSCRIPTS=static -DTOOLS=0
   -DBoost_DIR="C:/local/boost_1_81_0/lib64-msvc-14.3/cmake/Boost-1.81.0"
 ```
 
+## Stock AIO server parity (C++ vs `AIO.lua` with `AIO_SERVER = true`)
+
++ **Transport:** `LANG_ADDON` whispers with `S`/`C` prefix are required on 3.3.5; the client receives them as `CHAT_MSG_ADDON` (same as stock Eluna server). Not a CAIO gap.
++ **Init hooks:** C++ `AddInitArgs` appends extra handler blocks to the init reply. For full init-message rewriting (stock `AIO.AddOnInit`), see Todo below.
++ **Pre-init gating:** Stock server does **not** queue pre-init blocks (`AIO_INITED` is client-only). CAIO matches that.
++ **Block arg limit:** Server rejects blocks with `n > 15` (same as stock server Lua).
++ **Message cache:** `AIO.MsgCacheTime` / `AIO.MsgCacheDelay` match `AIO_MSG_CACHE_TIME` / `AIO_MSG_CACHE_DELAY` in `AIO.lua`.
+
 ## Todo
 
-+ Add CAIO error time-out configuration (distinct from `AIO.BufferTimeout` reassembly timeout)
++ **`AIO.AddOnInit` parity (future):** Stock Lua server (`AIO_SERVER = true`) allows `AIO.AddOnInit(func)` where `func(initmsg, player)` receives the full outgoing init message and may replace or rewrite it before send. C++ only has `AddInitArgs`, which appends separate handler blocks and does not mutate the core `AIO`/`Init` block (version, addon table, cache table). A future C++ API would need an init-message hook with read/write access to the assembled init payload.
 + Implement obfuscation (optional, deferred)
 + Implement compression (optional, deferred)
 + Add individual RBAC permissions per `.caio` subcommand (optional; all subcommands use `RBAC_PERM_COMMAND_CAIO` today)
@@ -215,9 +223,6 @@ public:
 class Player
 {
 public:
-	//Returns whether AIO client has been initialized
-	bool AIOInitialized() const;
-
 	// Sends an AIO message to the player
 	// See: class AIOMsg
 	void AIOMessage(AIOMsg &msg);
