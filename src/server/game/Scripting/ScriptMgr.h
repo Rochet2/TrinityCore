@@ -831,7 +831,7 @@ class AIOScript : public ScriptObject
 
         static AIOScript* FindByKey(LuaVal const& scriptKey);
 
-        void HandleAddonBlock(Player* sender, LuaVal const& handlerKey, LuaVal const& args) { OnHandle(sender, handlerKey, args); }
+        void HandleAddonBlock(Player* sender, LuaVal const& handlerKey, LuaVal const& args);
 
         typedef std::function<void(Player*, const LuaVal&)> HandlerFunc;
         typedef std::function<LuaVal(Player*)> ArgFunc;

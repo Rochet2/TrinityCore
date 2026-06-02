@@ -2683,6 +2683,11 @@ AIOScript* AIOScript::FindByKey(LuaVal const& scriptKey)
     return itr->second;
 }
 
+void AIOScript::HandleAddonBlock(Player* sender, LuaVal const& handlerKey, LuaVal const& args)
+{
+    OnHandle(sender, handlerKey, args);
+}
+
 template<class ScriptClass>
 ScriptClass *AIOScript::GetScript(const LuaVal &scriptKey)
 {
