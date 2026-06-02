@@ -1022,7 +1022,7 @@ std::string const& ScriptObject::GetName() const
 }
 
 ScriptMgr::ScriptMgr()
-    : _scriptCount(0), _script_loader_callback(nullptr), _scheduledScripts(0), _aioHandlers(nullptr)
+    : _scriptCount(0), _scheduledScripts(0), _aioHandlers(nullptr), _script_loader_callback(nullptr)
 {
 }
 
