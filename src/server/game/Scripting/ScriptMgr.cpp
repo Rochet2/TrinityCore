@@ -2619,7 +2619,7 @@ void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
         }
 
         if (AIOScript* aioScript = AIOScript::FindByKey(scriptKeyVal))
-            aioScript->OnHandle(sender, handlerKeyVal, block);
+            aioScript->HandleAddonBlock(sender, handlerKeyVal, block);
     }
 }
 
@@ -2748,7 +2748,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
         uint32 index = 3;
         LuaVal hookBlock(TTABLE);
 
-        hookBlock[1] = static_cast<unsigned int>(itr->argsList.size() + 1);
+        hookBlock[1] = static_cast<unsigned int>(itr->argsList.size()) + 1u;
         hookBlock[2] = itr->scriptKey;
         hookBlock[3] = itr->handlerKey;
         for (std::list<ArgFunc>::const_iterator it = itr->argsList.begin(); it != itr->argsList.end(); ++it)

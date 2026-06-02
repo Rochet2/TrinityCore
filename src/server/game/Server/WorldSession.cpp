@@ -520,10 +520,10 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
     if (receiver != sender)
         return IncomingAIOWhisperResult::DropPacket;
 
-    uint16 messageId = 0;
+    uint32 messageId = 0;
     if ((msg.size() - delimPos - 1) >= size_t(2))
     {
-        messageId = uint16(DecodeAIOByte(msg[delimPos + 1]) * 254u + DecodeAIOByte(msg[delimPos + 2]));
+        messageId = DecodeAIOByte(msg[delimPos + 1]) * 254u + DecodeAIOByte(msg[delimPos + 2]);
 
         if (messageId == 0)
         {
