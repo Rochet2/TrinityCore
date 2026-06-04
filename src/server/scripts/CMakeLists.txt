@@ -225,6 +225,10 @@ target_include_directories(scripts
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
 
+if(WITH_CAIO_EXAMPLES)
+  target_compile_definitions(scripts PRIVATE WITH_CAIO_EXAMPLES)
+endif()
+
 set_target_properties(scripts
   PROPERTIES
     COMPILE_WARNING_AS_ERROR ${WITH_WARNINGS_AS_ERRORS}

@@ -821,7 +821,6 @@ class TC_GAME_API GroupScript : public ScriptObject
 class TC_GAME_API ScriptMgr
 {
     friend class ScriptObject;
-    friend class AIOScript;
 
     private:
         ScriptMgr();
@@ -1090,6 +1089,10 @@ class TC_GAME_API ScriptMgr
     public: /* AIOScript */
 
         void OnAddonMessage(Player* sender, std::string const& message);
+        void RegisterAIOInitHook(AIOScript::InitMessageFunc func);
+        void RegisterAIOInitArgs(LuaVal const& scriptKey, LuaVal const& handlerKey,
+            AIOScript::ArgFunc a1, AIOScript::ArgFunc a2, AIOScript::ArgFunc a3,
+            AIOScript::ArgFunc a4, AIOScript::ArgFunc a5, AIOScript::ArgFunc a6);
 
     private:
         uint32 _scriptCount;

@@ -31,17 +31,17 @@ TEST_CASE("AIO codec byte decoding", "[AIO]")
 
 TEST_CASE("AIO client prefix detection", "[AIO]")
 {
-    SECTION("matches configured prefix")
+    SECTION("matches configured wire prefix")
     {
         size_t delimPos = 0;
-        REQUIRE(IsClientPrefix("AIO", "CAIO\tpayload", delimPos));
-        REQUIRE(delimPos == 3);
+        REQUIRE(IsClientPrefix("CAIO", "CAIO\tpayload", delimPos));
+        REQUIRE(delimPos == 4);
     }
 
     SECTION("rejects server prefix")
     {
         size_t delimPos = 0;
-        REQUIRE_FALSE(IsClientPrefix("AIO", "SAIO\tpayload", delimPos));
+        REQUIRE_FALSE(IsClientPrefix("CAIO", "SAIO\tpayload", delimPos));
     }
 
     SECTION("rejects missing tab")

@@ -30,8 +30,9 @@
 #include "MapManager.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
+#include "AIOUtil.h"
 #include "Player.h"
-#include "PlayerAIO.h"
+#include "WorldSession.h"
 #include "ScriptReloadMgr.h"
 #include "ScriptSystem.h"
 #include "SmartAI.h"
@@ -1047,7 +1048,7 @@ void ScriptMgr::Initialize()
     TC_LOG_INFO("server.loading", "Loading C++ scripts");
 
     FillSpellSummary();
-    _aioHandlers = new AIOHandlers();
+    _aioHandlers = CreateAIOHandlers();
 
     // Load core scripts
     SetScriptContext(GetNameOfStaticContext());
@@ -1134,8 +1135,7 @@ void ScriptMgr::Unload()
 {
     sScriptRegistryCompositum->Unload();
     AIOScript::_scriptByKeyMap.clear();
-    delete _aioHandlers;
-    _aioHandlers = nullptr;
+    DestroyAIOHandlers(_aioHandlers);
 
     delete[] SpellSummary;
     delete[] UnitAI::AISpellInfo;
@@ -2583,22 +2583,17 @@ PlayerScript::PlayerScript(char const* name)
     ScriptRegistry<PlayerScript>::Instance()->AddScript(this);
 }
 
-AIOScript::AIOScriptByKeyMap AIOScript::_scriptByKeyMap = AIOScript::AIOScriptByKeyMap();
-
-AIOScript::~AIOScript()
+void ScriptMgr::RegisterAIOInitHook(AIOScript::InitMessageFunc func)
 {
-    _scriptByKeyMap.erase(_key);
+    RegisterAIOInitHookOnHandlers(_aioHandlers, std::move(func));
 }
 
-void AIOScript::AddOnInit(InitMessageFunc func)
+void ScriptMgr::RegisterAIOInitArgs(LuaVal const& scriptKey, LuaVal const& handlerKey,
+    AIOScript::ArgFunc a1, AIOScript::ArgFunc a2, AIOScript::ArgFunc a3,
+    AIOScript::ArgFunc a4, AIOScript::ArgFunc a5, AIOScript::ArgFunc a6)
 {
-    if (AIOHandlers* handler = sScriptMgr->_aioHandlers)
-        handler->RegisterInitMessageHook(std::move(func));
-}
-
-void AIOHandlers::RegisterInitMessageHook(AIOScript::InitMessageFunc func)
-{
-    _initMessageHooks.push_back(std::move(func));
+    RegisterAIOInitArgsOnHandlers(_aioHandlers, scriptKey, handlerKey,
+        std::move(a1), std::move(a2), std::move(a3), std::move(a4), std::move(a5), std::move(a6));
 }
 
 void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
@@ -2607,204 +2602,32 @@ void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
         return;
 
     uint32 const maxIncoming = sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING);
-    if (message.size() > maxIncoming)
+    uint32 const maxBlocks = sWorld->getIntConfig(CONFIG_AIO_MAX_BLOCKS);
+    Trinity::AIO::LoadMessageOutcome const outcome = Trinity::AIO::TryLoadIncomingMessage(message, maxIncoming, maxBlocks);
+
+    switch (outcome.result)
     {
-        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
-            "AIO: Incoming message size {} exceeds limit {}. Sender: {}", message.size(), maxIncoming, sender->GetName());
-        return;
-    }
-
-    LuaVal mainTable = LuaVal::loads(message);
-    if (!mainTable.istable())
-    {
-        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_DEBUG,
-            "AIO: Ignoring non-table addon payload from {} ({} bytes)", sender->GetName(), message.size());
-        return;
-    }
-
-    // Call handlers from all blocks in order
-    for (unsigned int i = 1; i <= mainTable.len(); ++i)
-    {
-        LuaVal block = mainTable.get(static_cast<int>(i));
-        if (!block.istable())
-            continue;
-
-        LuaVal nArgsVal = block.get(1);
-        LuaVal scriptKeyVal = block.get(2);
-        LuaVal handlerKeyVal = block.get(3);
-        if (!nArgsVal.isnumber() || scriptKeyVal.isnil() || handlerKeyVal.isnil())
-            continue;
-
-        if (nArgsVal.num() > 15.0)
-        {
+        case Trinity::AIO::LoadMessageResult::Oversize:
             sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
-                "AIO: Block from '{}' has over 15 arguments (n={:.0f}). Sender: {}",
-                scriptKeyVal.tostring(), nArgsVal.num(), sender->GetName());
-            continue;
-        }
-
-        if (AIOScript* aioScript = AIOScript::FindByKey(scriptKeyVal))
-            aioScript->HandleAddonBlock(sender, handlerKeyVal, block);
-    }
-}
-
-AIOScript::AIOScript(LuaVal const& scriptKey)
-    : ScriptObject(scriptKey.tostring().c_str()), _key(scriptKey)
-{
-    if (AIOScript::_scriptByKeyMap.find(scriptKey) != AIOScript::_scriptByKeyMap.end())
-    {
-        sLog->outAIOMessage(0, LOG_LEVEL_FATAL, "AIO scriptKey '{}' of type tag '{}' already exist. Use another key.", scriptKey.tostring(), static_cast<int>(scriptKey.typetag()));
-        ASSERT(false);
-    }
-    ScriptRegistry<AIOScript>::Instance()->AddScript(this);
-    AIOScript::_scriptByKeyMap[scriptKey] = this;
-}
-
-void AIOScript::AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey, ArgFunc a1, ArgFunc a2, ArgFunc a3, ArgFunc a4, ArgFunc a5, ArgFunc a6)
-{
-    AIOHandlers* handler = sScriptMgr->_aioHandlers;
-    if (!handler)
-        return;
-
-    // Look for hook
-    std::list<ArgFunc>* list = nullptr;
-    for (AIOHandlers::HookListType::iterator itr = handler->_initHookList.begin(); itr != handler->_initHookList.end(); ++itr)
-    {
-        if (itr->scriptKey == scriptKey && itr->handlerKey == handlerKey)
-        {
-            list = &itr->argsList;
+                "AIO: Incoming message size {} exceeds limit {}. Sender: {}", message.size(), maxIncoming, sender->GetName());
+            return;
+        case Trinity::AIO::LoadMessageResult::ParseError:
+            if (WorldSession* session = sender->GetSession())
+                session->NotifyAIOIncomingParseFailure(sender);
+            return;
+        case Trinity::AIO::LoadMessageResult::NotTable:
+            sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_DEBUG,
+                "AIO: Ignoring non-table addon payload from {} ({} bytes)", sender->GetName(), message.size());
+            return;
+        case Trinity::AIO::LoadMessageResult::TooManyBlocks:
+            sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+                "AIO: Incoming message has {} blocks (limit {}). Sender: {}", outcome.table.len(), maxBlocks, sender->GetName());
+            return;
+        case Trinity::AIO::LoadMessageResult::Ok:
             break;
-        }
     }
 
-    // Add hook
-    if (!list)
-    {
-        handler->_initHookList.push_back(AIOHandlers::InitHookInfo(scriptKey, handlerKey));
-        list = &handler->_initHookList.back().argsList;
-    }
-
-    // Add args
-    if (a1)
-        list->push_back(a1);
-    if (a2)
-        list->push_back(a2);
-    if (a3)
-        list->push_back(a3);
-    if (a4)
-        list->push_back(a4);
-    if (a5)
-        list->push_back(a5);
-    if (a6)
-        list->push_back(a6);
-}
-
-AIOScript* AIOScript::FindByKey(LuaVal const& scriptKey)
-{
-    AIOScriptByKeyMap::const_iterator itr = _scriptByKeyMap.find(scriptKey);
-    if (itr == _scriptByKeyMap.end())
-        return nullptr;
-
-    return itr->second;
-}
-
-void AIOScript::HandleAddonBlock(Player* sender, LuaVal const& handlerKey, LuaVal const& args)
-{
-    OnHandle(sender, handlerKey, args);
-}
-
-bool AIOScript::AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission)
-{
-    return sWorld->AddAddon(World::AIOAddon(addonName, addonFile, permission));
-}
-
-void AIOScript::OnHandle(Player* sender, LuaVal const& handlerKey, LuaVal const& args)
-{
-    HandlerMapType::const_iterator itr = _handlerMap.find(handlerKey);
-    if (itr != _handlerMap.end())
-    {
-        itr->second(sender, args);
-        return;
-    }
-
-    sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "AIO: No handler '{}' on script '{}'. Sender: {}",
-        handlerKey.tostring(), _key.tostring(), sender->GetName());
-}
-
-AIOHandlers::AIOHandlers()
-    : AIOScript("AIO")
-{
-    AddHandler("Init", std::bind(&AIOHandlers::HandleInit, this, std::placeholders::_1, std::placeholders::_2));
-    AddHandler("Error", std::bind(&AIOHandlers::HandleError, this, std::placeholders::_1, std::placeholders::_2));
-}
-
-void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
-{
-    // Init hasn't cooled down
-    if (sender->isAIOInitOnCooldown())
-        return;
-
-    LuaVal versionVal = args.get(4);
-    LuaVal clientDataVal = args.get(5);
-    if (!versionVal.isnumber() || !clientDataVal.istable())
-    {
-        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "AIOHandlers::HandleInit: Invalid version value or clientData value. Sender: {}, Args: {}", sender->GetName(), args.dumps());
-        return;
-    }
-
-    if (std::abs(versionVal.num() - AIO_VERSION) > 0.01)
-    {
-        Trinity::AIO::Handle(sender, "AIO", "Init", AIO_VERSION);
-        return;
-    }
-
-    sender->setAIOIntOnCooldown(true);
-
-    LuaVal addonTable(TTABLE);
-    LuaVal cacheTable(TTABLE);
-    uint32 const nAddons = sWorld->PrepareClientAddons(clientDataVal, addonTable, cacheTable, sender);
-
-    LuaVal argsToSend(TTABLE);
-
-    uint32 blockIndex = 1;
-    for (HookListType::const_iterator itr = _initHookList.begin(); itr != _initHookList.end(); ++itr)
-    {
-        uint32 index = 3;
-        LuaVal hookBlock(TTABLE);
-
-        hookBlock[1] = static_cast<unsigned int>(itr->argsList.size()) + 1u;
-        hookBlock[2] = itr->scriptKey;
-        hookBlock[3] = itr->handlerKey;
-        for (std::list<ArgFunc>::const_iterator it = itr->argsList.begin(); it != itr->argsList.end(); ++it)
-            hookBlock[static_cast<int>(++index)] = (*it)(sender);
-
-        argsToSend[static_cast<unsigned int>(++blockIndex)] = hookBlock;
-    }
-
-    LuaVal AIOInitBlock(TTABLE);
-    AIOInitBlock[1] = 5;
-    AIOInitBlock[2] = "AIO";
-    AIOInitBlock[3] = "Init";
-    AIOInitBlock[4] = AIO_VERSION;
-    AIOInitBlock[5] = static_cast<unsigned int>(nAddons);
-    AIOInitBlock[6] = addonTable;
-    AIOInitBlock[7] = cacheTable;
-
-    argsToSend[1] = AIOInitBlock;
-
-    for (AIOScript::InitMessageFunc const& hook : _initMessageHooks)
-        hook(sender, argsToSend);
-
-    sender->SendSimpleAIOMessage(argsToSend.dumps());
-}
-
-void AIOHandlers::HandleError(Player* sender, LuaVal const& args)
-{
-    LuaVal msgVal = args.get(4);
-    if (!msgVal.isstring())
-        return;
-
-    sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "{} Received client addon error: {}", sender->GetSession()->GetPlayerInfo(), msgVal.str());
+    AIOScript::DispatchIncomingBlocks(sender, outcome.table);
 }
 
 void PlayerScript::OnPVPKill(Player* /*killer*/, Player* /*killed*/)

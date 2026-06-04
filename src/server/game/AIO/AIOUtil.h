@@ -15,34 +15,35 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_AIO_CODEC_H
-#define TRINITY_AIO_CODEC_H
+#ifndef TRINITY_AIO_UTIL_H
+#define TRINITY_AIO_UTIL_H
 
 #include "Define.h"
-#include <cstddef>
-#include <cstdint>
+#include "smallfolk.h"
 #include <string>
 
-namespace Trinity::AIO::Codec
+namespace Trinity::AIO
 {
-    inline uint32 DecodeByte(char value)
-    {
-        return uint32(static_cast<uint8>(value) - 1u);
-    }
+    constexpr uint32 MAX_BLOCK_ARGS = 15;
 
-    inline uint32 DecodePair(char high, char low)
-    {
-        return DecodeByte(high) * 254u + DecodeByte(low);
-    }
+    TC_GAME_API bool IsSafeAddonRelativePath(std::string const& path);
 
-    inline bool IsClientPrefix(std::string const& clientWirePrefix, std::string const& msg, size_t& delimPosOut)
+    enum class LoadMessageResult : uint8
     {
-        delimPosOut = msg.find('\t');
-        if (delimPosOut == std::string::npos)
-            return false;
+        Ok,
+        Oversize,
+        ParseError,
+        NotTable,
+        TooManyBlocks
+    };
 
-        return delimPosOut == clientWirePrefix.size() && msg.compare(0, delimPosOut, clientWirePrefix) == 0;
-    }
+    struct LoadMessageOutcome
+    {
+        LoadMessageResult result = LoadMessageResult::ParseError;
+        LuaVal table;
+    };
+
+    TC_GAME_API LoadMessageOutcome TryLoadIncomingMessage(std::string const& message, uint32 maxBytes, uint32 maxBlocks);
 }
 
 #endif

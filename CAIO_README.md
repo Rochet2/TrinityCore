@@ -12,14 +12,14 @@ AIO version **1.75** — must match `AIO_VERSION` in your server and client `AIO
 ## Install
 
 + Clone this repository/branch or merge with your own TrinityCore 3.3.5 branch
-+ `git submodule update --init --recursive` (required for `dep/smallfolk_cpp/smallfolk_cpp`, tracks [smallfolk_cpp](https://github.com/Rochet2/smallfolk_cpp) **master**, currently v2.x)
++ `git submodule update --init --recursive` (required for `dep/smallfolk_cpp/smallfolk_cpp` — [smallfolk_cpp](https://github.com/Rochet2/smallfolk_cpp); pin the submodule commit in production, e.g. `git -C dep/smallfolk_cpp/smallfolk_cpp checkout <sha>` after init)
 + Build/Install TrinityCore
 + [Install(Add) (C)AIO scripts](#api-reference) — see also `doc/CAIO_SCRIPT_EXAMPLE.md`
 + Run SQL files from `TrinityCore_Installation_Dir/sql/CAIO` (`Auth.sql` on auth DB, `World.sql` on world DB)
 + Copy `AIO_Client` from your AIO tree to `WoW_Installation_Dir/Interface/AddOns/AIO_Client` (use the same AIO repo/commit as the server expects)
 + Copy server-side client addon sources into `TrinityCore_Installation_Dir/lua_client_scripts` (one folder per addon, e.g. `lua_client_scripts/ExampleWindow/ExampleWindow.lua`)
 + Set `AIO.MsgMaxLen` to **255** in `worldserver.conf` (WoW addon whisper limit; matches client `AIO.lua` when `AIO_SERVER` is false)
-+ Optional: build with `-DWITH_CAIO_EXAMPLES=ON` to include the `ExampleWindow` test script
++ Optional: build with `-DWITH_CAIO_EXAMPLES=ON` to include the `ExampleWindow` test script (ships `worldserver/lua_client_scripts/ExampleWindow/ExampleWindow.lua` for install)
 
 ## Build notes (TrinityCore 3.3.5 + CAIO)
 

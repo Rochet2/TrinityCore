@@ -49,6 +49,7 @@
 #include "PacketUtilities.h"
 #include "Player.h"
 #include "Realm.h"
+#include "AIO.h"
 #include "AIOCodec.h"
 #include "ScriptMgr.h"
 #include "SocialMgr.h"
@@ -500,28 +501,64 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
     return true;
 }
 
-bool WorldSession::AllowNextAIOIncomingMessage(Player* sender)
+WorldSession::AIOIncomingGateResult WorldSession::CheckAIOIncomingGate(Player* sender, size_t payloadBytes)
 {
     uint32 const minInterval = sWorld->getIntConfig(CONFIG_AIO_MSG_RATE_MS);
     if (!minInterval)
-        return true;
+        return AIOIncomingGateResult::Allow;
 
     uint32 const now = getMSTime();
     if (_aioLastCompleteMessageMs && (now - _aioLastCompleteMessageMs) < minInterval)
     {
-        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_DEBUG,
-            "AIO: Rate limited incoming message from {} ({} ms since last)", sender->GetName(), now - _aioLastCompleteMessageMs);
-        return false;
+        ++_aioRateLimitedCount;
+        if (_aioRateLimitedCount == 1 || (_aioRateLimitedCount % 25) == 0)
+        {
+            sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_WARN,
+                "AIO: Rate limited {} incoming message(s) from {} (latest {} bytes, {} ms since last accepted)",
+                _aioRateLimitedCount, sender->GetName(), payloadBytes, now - _aioLastCompleteMessageMs);
+        }
+        return AIOIncomingGateResult::RateLimited;
     }
 
     _aioLastCompleteMessageMs = now;
-    return true;
+    _aioRateLimitedCount = 0;
+    return AIOIncomingGateResult::Allow;
+}
+
+void WorldSession::NotifyAIOIncomingParseFailure(Player* sender)
+{
+    ++_aioParseFailureCount;
+    uint32 const maxFailures = sWorld->getIntConfig(CONFIG_AIO_MAX_PARSE_FAILURES);
+
+    if (_aioParseFailureCount == 1 || (_aioParseFailureCount % 5) == 0)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_WARN,
+            "AIO: Failed to parse incoming smallfolk payload from {} (failures: {})",
+            sender->GetName(), _aioParseFailureCount);
+    }
+
+    if (maxFailures && _aioParseFailureCount >= maxFailures)
+    {
+        RecordAIOIncomingAbuse(sender, "parse failure threshold");
+        _aioParseFailureCount = 0;
+    }
+}
+
+void WorldSession::RecordAIOIncomingAbuse(Player* sender, char const* reason)
+{
+    if (!_addonMessageBuffer.empty())
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_WARN,
+            "AIO: Cleared {} reassembly buffer(s) for {} ({})",
+            uint32(_addonMessageBuffer.size()), sender->GetName(), reason);
+        _addonMessageBuffer.clear();
+    }
 }
 
 WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhisper(Player* sender, Player* receiver, std::string const& msg)
 {
     size_t delimPos = 0;
-    if (!Trinity::AIO::Codec::IsClientPrefix(sWorld->GetAIOPrefix(), msg, delimPos))
+    if (!Trinity::AIO::Codec::IsClientPrefix(sWorld->GetAIOClientWirePrefix(), msg, delimPos))
         return IncomingAIOWhisperResult::NotAIO;
 
     if (receiver != sender)
@@ -534,8 +571,20 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
 
         if (messageId == 0)
         {
-            if (AllowNextAIOIncomingMessage(sender))
-                sScriptMgr->OnAddonMessage(sender, msg.substr(delimPos + 3));
+            std::string const& payload = msg.substr(delimPos + 3);
+            if (payload.size() > sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING))
+            {
+                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+                    "AIO: Short message size {} exceeds limit {}. Sender: {}",
+                    payload.size(), sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING), sender->GetName());
+                return IncomingAIOWhisperResult::Consumed;
+            }
+
+            if (CheckAIOIncomingGate(sender, payload.size()) == AIOIncomingGateResult::Allow)
+                sScriptMgr->OnAddonMessage(sender, payload);
+            else
+                RecordAIOIncomingAbuse(sender, "rate limit");
+
             return IncomingAIOWhisperResult::Consumed;
         }
     }
@@ -561,6 +610,7 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
         sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
             "HandleIncomingAIOClientWhisper: Received AIO addon message with too many parts: {} (> {}). Message Id: {}, Sender: {}",
             parts, maxparts, messageId, sender->GetName());
+        RecordAIOIncomingAbuse(sender, "too many parts");
         return IncomingAIOWhisperResult::DropPacket;
     }
 
@@ -575,10 +625,28 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
 
     std::string const partPayload = msg.substr(delimPos + 7);
     uint32 const maxBufferSize = sWorld->getIntConfig(CONFIG_AIO_MAX_BUFFER_SIZE);
+    uint32 const maxPacketLen = std::min<uint32>(sWorld->getIntConfig(CONFIG_AIO_MSG_MAX_LEN), AIO_MAX_WHISPER_LENGTH);
+    uint32 const longHeaderLen = uint32(sWorld->GetAIOClientWirePrefix().size()) + 1u + 6u;
+    uint32 const maxPartPayload = maxPacketLen > longHeaderLen ? maxPacketLen - longHeaderLen : 1u;
+    if (partPayload.size() > maxPartPayload)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "HandleIncomingAIOClientWhisper: AIO part payload {} bytes exceeds per-part limit {}. Message Id: {}, Sender: {}",
+            partPayload.size(), maxPartPayload, messageId, sender->GetName());
+        RecordAIOIncomingAbuse(sender, "oversized part");
+        return IncomingAIOWhisperResult::DropPacket;
+    }
 
     AddonMessageBufferMap::iterator messagePartsItr = _addonMessageBuffer.find(messageId);
     if (messagePartsItr == _addonMessageBuffer.end())
+    {
+        if (_addonMessageBuffer.size() >= maxparts)
+        {
+            RecordAIOIncomingAbuse(sender, "too many concurrent reassemblies");
+            return IncomingAIOWhisperResult::DropPacket;
+        }
         messagePartsItr = _addonMessageBuffer.insert(std::make_pair(messageId, LongMessageBufferInfo())).first;
+    }
     else if (parts != messagePartsItr->second.Parts)
         messagePartsItr->second = LongMessageBufferInfo();
 
@@ -586,7 +654,7 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
     {
         sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
             "HandleIncomingAIOClientWhisper: Duplicate part {} for message id {}. Sender: {}", partId, messageId, sender->GetName());
-        _addonMessageBuffer.erase(messagePartsItr);
+        RecordAIOIncomingAbuse(sender, "duplicate part");
         return IncomingAIOWhisperResult::DropPacket;
     }
 
@@ -598,7 +666,7 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
         sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
             "HandleIncomingAIOClientWhisper: AIO reassembly buffer exceeded {} bytes. Message Id: {}, Sender: {}",
             maxBufferSize, messageId, sender->GetName());
-        _addonMessageBuffer.erase(messagePartsItr);
+        RecordAIOIncomingAbuse(sender, "reassembly buffer exceeded");
         return IncomingAIOWhisperResult::DropPacket;
     }
 
@@ -625,8 +693,20 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
     for (uint32 expectedPart = 1; expectedPart <= parts; ++expectedPart)
         actualAIOMessage += messagePartsItr->second.Map.find(expectedPart)->second;
 
-    if (AllowNextAIOIncomingMessage(sender))
+    if (actualAIOMessage.size() > sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING))
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "AIO: Reassembled message size {} exceeds limit {}. Sender: {}",
+            actualAIOMessage.size(), sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING), sender->GetName());
+        _addonMessageBuffer.erase(messagePartsItr);
+        return IncomingAIOWhisperResult::Consumed;
+    }
+
+    if (CheckAIOIncomingGate(sender, actualAIOMessage.size()) == AIOIncomingGateResult::Allow)
         sScriptMgr->OnAddonMessage(sender, actualAIOMessage);
+    else
+        RecordAIOIncomingAbuse(sender, "rate limit");
+
     _addonMessageBuffer.erase(messagePartsItr);
     return IncomingAIOWhisperResult::Consumed;
 }

@@ -92,7 +92,9 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/crc.hpp>
 #include <boost/filesystem.hpp>
+#include "AIOUtil.h"
 #include "AIOMsg.h"
+#include "WorldAIO.h"
 #include "smallfolk.h"
 
 TC_GAME_API std::atomic<bool> World::m_stopEvent(false);
@@ -1578,10 +1580,13 @@ void World::LoadConfigSettings(bool reload)
     m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE] = sConfigMgr->GetIntDefault("AIO.MaxBufferSize", 1048576);
     m_int_configs[CONFIG_AIO_MAX_INCOMING] = sConfigMgr->GetIntDefault("AIO.MaxIncomingMessageSize", 262144);
     m_int_configs[CONFIG_AIO_MSG_RATE_MS] = sConfigMgr->GetIntDefault("AIO.MsgRateLimitMs", 50);
+    m_int_configs[CONFIG_AIO_MAX_BLOCKS] = sConfigMgr->GetIntDefault("AIO.MaxBlocks", 32);
+    m_int_configs[CONFIG_AIO_MAX_PARSE_FAILURES] = sConfigMgr->GetIntDefault("AIO.MaxParseFailures", 16);
     m_aioclientpath = sConfigMgr->GetStringDefault("AIO.ClientScriptPath", "lua_client_scripts");
     m_aioprefix = sConfigMgr->GetStringDefault("AIO.Prefix", "AIO");
     if (m_aioprefix.size() > 15u)
         m_aioprefix = m_aioprefix.substr(0, 15);
+    m_aioClientWirePrefix = "C" + m_aioprefix;
 
     if (m_int_configs[CONFIG_AIO_MAX_INCOMING] > m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE])
         m_int_configs[CONFIG_AIO_MAX_INCOMING] = m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE];
@@ -3627,6 +3632,12 @@ bool World::AddAddon(AIOAddon const& addon)
     if (addon.file.empty())
         return false;
 
+    if (!Trinity::AIO::IsSafeAddonRelativePath(addon.file))
+    {
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO AddAddon: rejected unsafe path '{}' for addon {}", addon.file, addon.name);
+        return false;
+    }
+
     // Check if addon already exist
     for (AddonCodeListType::iterator itr = m_AddonList.begin(); itr != m_AddonList.end(); ++itr)
     {
@@ -3701,8 +3712,12 @@ void World::ValidateAIOSettings()
     if (m_aioprefix.empty())
         TC_LOG_ERROR("server.loading", "AIO.Prefix must not be empty.");
 
-    if (m_int_configs[CONFIG_AIO_MSG_MAX_LEN] != 255)
-        TC_LOG_WARN("server.loading", "AIO.MsgMaxLen is {} but 255 is required for 3.3.5 addon whispers.", m_int_configs[CONFIG_AIO_MSG_MAX_LEN]);
+    if (m_int_configs[CONFIG_AIO_MSG_MAX_LEN] != AIO_MAX_WHISPER_LENGTH)
+    {
+        TC_LOG_WARN("server.loading", "AIO.MsgMaxLen is {} but {} is required for 3.3.5 addon whispers; clamping.",
+            m_int_configs[CONFIG_AIO_MSG_MAX_LEN], AIO_MAX_WHISPER_LENGTH);
+        m_int_configs[CONFIG_AIO_MSG_MAX_LEN] = AIO_MAX_WHISPER_LENGTH;
+    }
 
     boost::filesystem::path clientPath(m_aioclientpath);
     if (!boost::filesystem::exists(clientPath))
@@ -3710,8 +3725,9 @@ void World::ValidateAIOSettings()
     else if (!boost::filesystem::is_directory(clientPath))
         TC_LOG_ERROR("server.loading", "AIO.ClientScriptPath '{}' is not a directory.", m_aioclientpath);
 
-    TC_LOG_INFO("server.loading", "AIO: prefix '{}', client scripts '{}', max incoming {} bytes, rate limit {} ms.",
-        m_aioprefix, m_aioclientpath, m_int_configs[CONFIG_AIO_MAX_INCOMING], m_int_configs[CONFIG_AIO_MSG_RATE_MS]);
+    TC_LOG_INFO("server.loading", "AIO: wire prefix '{}', client scripts '{}', max incoming {} bytes, max blocks {}, rate limit {} ms, parse failure limit {}.",
+        m_aioClientWirePrefix, m_aioclientpath, m_int_configs[CONFIG_AIO_MAX_INCOMING], m_int_configs[CONFIG_AIO_MAX_BLOCKS],
+        m_int_configs[CONFIG_AIO_MSG_RATE_MS], m_int_configs[CONFIG_AIO_MAX_PARSE_FAILURES]);
 }
 
 bool World::ReloadAddons()
@@ -3790,21 +3806,12 @@ void World::ForceResetPlayerAddons(uint32 permission)
 
 void World::AIOMessageAll(AIOMsg& msg, uint32 permission)
 {
-    std::string messageStr = msg.dumps();
-    for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
-    {
-        if (itr->second->GetPlayer() && itr->second->HasPermission(permission))
-            itr->second->GetPlayer()->SendSimpleAIOMessage(messageStr);
-    }
+    Trinity::AIO::MessageAll(this, msg, permission);
 }
 
-void World::SendAllSimpleAIOMessage(const std::string &message, uint32 permission)
+void World::SendAllSimpleAIOMessage(std::string const& message, uint32 permission)
 {
-    for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
-    {
-        if (itr->second->GetPlayer() && itr->second->HasPermission(permission))
-            itr->second->GetPlayer()->SendSimpleAIOMessage(message);
-    }
+    Trinity::AIO::SendAllSimple(this, message, permission);
 }
 
 void World::RemoveOldCorpses()

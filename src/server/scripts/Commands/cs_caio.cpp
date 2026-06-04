@@ -7,6 +7,7 @@ EndScriptData */
 
 #include "ScriptMgr.h"
 #include "AIO.h"
+#include "AIOUtil.h"
 #include "Chat.h"
 #include "ChatCommand.h"
 #include "Language.h"
@@ -16,20 +17,6 @@ EndScriptData */
 #include "smallfolk.h"
 
 using namespace Trinity::ChatCommands;
-
-namespace
-{
-bool IsSafeAddonRelativePath(std::string const& path)
-{
-    if (path.empty() || path.front() == '/' || path.front() == '\\')
-        return false;
-
-    if (path.find("..") != std::string::npos)
-        return false;
-
-    return path.find_first_of(":*?\"<>|") == std::string::npos;
-}
-}
 
 class caio_commandscript : public CommandScript
 {
@@ -68,7 +55,8 @@ public:
 
     static bool HandleSendCommand(ChatHandler* handler, PlayerIdentifier const& target, QuotedString message)
     {
-        if (!LuaVal::loads(message).istable())
+        Trinity::AIO::LoadMessageOutcome const outcome = Trinity::AIO::TryLoadIncomingMessage(message, sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING), sWorld->getIntConfig(CONFIG_AIO_MAX_BLOCKS));
+        if (outcome.result != Trinity::AIO::LoadMessageResult::Ok)
         {
             handler->SendSysMessage("CAIO: message must be smallfolk-serialized table data (use AIOMsg or AIO.Msg on the server).");
             return false;
@@ -107,7 +95,8 @@ public:
 
     static bool HandleSendAllCommand(ChatHandler* handler, QuotedString message, Optional<uint32> permission)
     {
-        if (!LuaVal::loads(message).istable())
+        Trinity::AIO::LoadMessageOutcome const outcome = Trinity::AIO::TryLoadIncomingMessage(message, sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING), sWorld->getIntConfig(CONFIG_AIO_MAX_BLOCKS));
+        if (outcome.result != Trinity::AIO::LoadMessageResult::Ok)
         {
             handler->SendSysMessage("CAIO: message must be smallfolk-serialized table data (use AIOMsg or AIO.Msg on the server).");
             return false;
@@ -145,7 +134,7 @@ public:
 
     static bool HandleAddAddonCommand(ChatHandler* handler, std::string addonName, QuotedString addonFile, Optional<uint32> permission)
     {
-        if (!IsSafeAddonRelativePath(addonFile))
+        if (!Trinity::AIO::IsSafeAddonRelativePath(addonFile))
         {
             handler->SendSysMessage("CAIO: addon file path must be relative to AIO.ClientScriptPath and must not contain '..'.");
             return false;

@@ -1371,8 +1371,18 @@ class TC_GAME_API WorldSession
         AddonMessageBufferMap _addonMessageBuffer;
         uint32 _aioMsgCacheSweepTimer = 0;
         uint32 _aioLastCompleteMessageMs = 0;
+        uint32 _aioRateLimitedCount = 0;
+        uint32 _aioParseFailureCount = 0;
 
-        bool AllowNextAIOIncomingMessage(Player* sender);
+        enum class AIOIncomingGateResult : uint8
+        {
+            Allow,
+            RateLimited
+        };
+
+        AIOIncomingGateResult CheckAIOIncomingGate(Player* sender, size_t payloadBytes);
+        void NotifyAIOIncomingParseFailure(Player* sender);
+        void RecordAIOIncomingAbuse(Player* sender, char const* reason);
 };
 #endif
 /// @}

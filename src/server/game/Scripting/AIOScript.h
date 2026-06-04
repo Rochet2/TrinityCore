@@ -23,11 +23,9 @@
 #include "Define.h"
 #include "smallfolk.h"
 #include <functional>
-#include <list>
 #include <unordered_map>
 
 class Player;
-class ScriptMgr;
 
 // Inherit AIOScript for server-side AIO handlers (LuaVal / smallfolk_cpp).
 // Full example: doc/CAIO_SCRIPT_EXAMPLE.md
@@ -42,6 +40,7 @@ class TC_GAME_API AIOScript : public ScriptObject
         static AIOScript* FindByKey(LuaVal const& scriptKey);
 
         void HandleAddonBlock(Player* sender, LuaVal const& handlerKey, LuaVal const& args);
+        static void DispatchIncomingBlocks(Player* sender, LuaVal const& mainTable);
 
         using HandlerFunc = std::function<void(Player*, LuaVal const&)>;
         using ArgFunc = std::function<LuaVal(Player*)>;
@@ -56,7 +55,6 @@ class TC_GAME_API AIOScript : public ScriptObject
             ArgFunc a1 = ArgFunc(), ArgFunc a2 = ArgFunc(), ArgFunc a3 = ArgFunc(),
             ArgFunc a4 = ArgFunc(), ArgFunc a5 = ArgFunc(), ArgFunc a6 = ArgFunc());
 
-        // Stock AIO.AddOnInit parity: mutate or replace the full outgoing init message table before send.
         void AddOnInit(InitMessageFunc func);
 
         bool AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
@@ -74,39 +72,6 @@ class TC_GAME_API AIOScript : public ScriptObject
 
         using AIOScriptByKeyMap = std::unordered_map<LuaVal, AIOScript*, LuaVal::LuaValHasher>;
         static AIOScriptByKeyMap _scriptByKeyMap;
-
-        friend class ScriptMgr;
-        friend class AIOHandlers;
-};
-
-class TC_GAME_API AIOHandlers : public AIOScript
-{
-    public:
-        struct InitHookInfo
-        {
-            LuaVal scriptKey;
-            LuaVal handlerKey;
-            std::list<AIOScript::ArgFunc> argsList;
-
-            InitHookInfo(LuaVal const& scriptKey, LuaVal const& handlerKey)
-                : scriptKey(scriptKey), handlerKey(handlerKey)
-            { }
-        };
-
-        using HookListType = std::list<InitHookInfo>;
-
-        void RegisterInitMessageHook(AIOScript::InitMessageFunc func);
-
-    private:
-        AIOHandlers();
-        void HandleInit(Player* sender, LuaVal const& args);
-        void HandleError(Player* sender, LuaVal const& args);
-
-        HookListType _initHookList;
-        std::list<AIOScript::InitMessageFunc> _initMessageHooks;
-
-        friend class ScriptMgr;
-        friend class AIOScript;
 };
 
 template<class ScriptClass>
@@ -114,5 +79,14 @@ ScriptClass* AIOScript::GetScript(LuaVal const& scriptKey)
 {
     return dynamic_cast<ScriptClass*>(FindByKey(scriptKey));
 }
+
+class AIOHandlers;
+
+TC_GAME_API AIOHandlers* CreateAIOHandlers();
+TC_GAME_API void DestroyAIOHandlers(AIOHandlers* handlers);
+TC_GAME_API void RegisterAIOInitHookOnHandlers(AIOHandlers* handlers, AIOScript::InitMessageFunc func);
+TC_GAME_API void RegisterAIOInitArgsOnHandlers(AIOHandlers* handlers, LuaVal const& scriptKey, LuaVal const& handlerKey,
+    AIOScript::ArgFunc a1, AIOScript::ArgFunc a2, AIOScript::ArgFunc a3,
+    AIOScript::ArgFunc a4, AIOScript::ArgFunc a5, AIOScript::ArgFunc a6);
 
 #endif

@@ -4141,6 +4141,14 @@ PacketSpoof.BanDuration = 86400
 #        Minimum milliseconds between completed incoming AIO messages per session (0 = disabled).
 #        Default: 50
 #
+#    AIO.MaxBlocks
+#        Maximum number of handler blocks per incoming AIO message.
+#        Default: 32
+#
+#    AIO.MaxParseFailures
+#        Parse failures per session before reassembly buffers are cleared (0 = no threshold).
+#        Default: 16
+#
 #    AIO.ClientScriptPath
 #        Path to client lua scripts to send to the client
 #        Default: "lua_client_scripts"
@@ -4155,6 +4163,8 @@ AIO.MsgCacheDelay = 5000
 AIO.MaxBufferSize = 1048576
 AIO.MaxIncomingMessageSize = 262144
 AIO.MsgRateLimitMs = 50
+AIO.MaxBlocks = 32
+AIO.MaxParseFailures = 16
 AIO.ClientScriptPath = "lua_client_scripts"
 
 #
