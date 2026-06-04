@@ -91,6 +91,7 @@
 #include <fstream>
 #include <boost/asio/ip/address.hpp>
 #include <boost/crc.hpp>
+#include <boost/filesystem.hpp>
 #include "AIOMsg.h"
 #include "smallfolk.h"
 
@@ -1575,10 +1576,15 @@ void World::LoadConfigSettings(bool reload)
     m_int_configs[CONFIG_AIO_MSG_CACHE_TIME] = sConfigMgr->GetIntDefault("AIO.MsgCacheTime", 15000);
     m_int_configs[CONFIG_AIO_MSG_CACHE_DELAY] = sConfigMgr->GetIntDefault("AIO.MsgCacheDelay", 5000);
     m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE] = sConfigMgr->GetIntDefault("AIO.MaxBufferSize", 1048576);
+    m_int_configs[CONFIG_AIO_MAX_INCOMING] = sConfigMgr->GetIntDefault("AIO.MaxIncomingMessageSize", 262144);
+    m_int_configs[CONFIG_AIO_MSG_RATE_MS] = sConfigMgr->GetIntDefault("AIO.MsgRateLimitMs", 50);
     m_aioclientpath = sConfigMgr->GetStringDefault("AIO.ClientScriptPath", "lua_client_scripts");
     m_aioprefix = sConfigMgr->GetStringDefault("AIO.Prefix", "AIO");
     if (m_aioprefix.size() > 15u)
         m_aioprefix = m_aioprefix.substr(0, 15);
+
+    if (m_int_configs[CONFIG_AIO_MAX_INCOMING] > m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE])
+        m_int_configs[CONFIG_AIO_MAX_INCOMING] = m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE];
 
     // HotSwap
     m_bool_configs[CONFIG_HOTSWAP_ENABLED] = sConfigMgr->GetBoolDefault("HotSwap.Enabled", true);
@@ -1633,6 +1639,7 @@ void World::SetInitialWorldSettings()
 
     ///- Initialize config settings
     LoadConfigSettings();
+    ValidateAIOSettings();
 
     ///- Initialize Allowed Security Level
     LoadDBAllowedSecurityLevel();
@@ -3687,6 +3694,24 @@ bool World::RemoveAddon(std::string const& addonName, uint32* permission)
         }
     }
     return false;
+}
+
+void World::ValidateAIOSettings()
+{
+    if (m_aioprefix.empty())
+        TC_LOG_ERROR("server.loading", "AIO.Prefix must not be empty.");
+
+    if (m_int_configs[CONFIG_AIO_MSG_MAX_LEN] != 255)
+        TC_LOG_WARN("server.loading", "AIO.MsgMaxLen is {} but 255 is required for 3.3.5 addon whispers.", m_int_configs[CONFIG_AIO_MSG_MAX_LEN]);
+
+    boost::filesystem::path clientPath(m_aioclientpath);
+    if (!boost::filesystem::exists(clientPath))
+        TC_LOG_WARN("server.loading", "AIO.ClientScriptPath '{}' does not exist (create it or fix the config).", m_aioclientpath);
+    else if (!boost::filesystem::is_directory(clientPath))
+        TC_LOG_ERROR("server.loading", "AIO.ClientScriptPath '{}' is not a directory.", m_aioclientpath);
+
+    TC_LOG_INFO("server.loading", "AIO: prefix '{}', client scripts '{}', max incoming {} bytes, rate limit {} ms.",
+        m_aioprefix, m_aioclientpath, m_int_configs[CONFIG_AIO_MAX_INCOMING], m_int_configs[CONFIG_AIO_MSG_RATE_MS]);
 }
 
 bool World::ReloadAddons()

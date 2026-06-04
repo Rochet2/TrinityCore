@@ -25,9 +25,6 @@
 #include <memory>
 #include <vector>
 
-#include "AIO.h"
-#include "smallfolk.h"
-
 class AccountMgr;
 class AuctionHouseObject;
 class Aura;
@@ -818,105 +815,7 @@ class TC_GAME_API GroupScript : public ScriptObject
         virtual void OnDisband(Group* group);
 };
 
-// Inherit AIOScript for server-side AIO handlers (LuaVal / smallfolk_cpp).
-// Full example: doc/CAIO_SCRIPT_EXAMPLE.md
-class AIOScript : public ScriptObject
-{
-    public:
-        virtual ~AIOScript() { AIOScript::_scriptByKeyMap.erase(GetKey()); }
-
-        // Returns the key of this CAIO script
-        LuaVal GetKey() const { return _key; }
-        bool IsDatabaseBound() const { return false; }
-
-        static AIOScript* FindByKey(LuaVal const& scriptKey);
-
-        void HandleAddonBlock(Player* sender, LuaVal const& handlerKey, LuaVal const& args);
-
-        typedef std::function<void(Player*, const LuaVal&)> HandlerFunc;
-        typedef std::function<LuaVal(Player*)> ArgFunc;
-
-    protected:
-        // Registers an AIO Handler script of scriptName
-        AIOScript(LuaVal const& scriptKey);
-
-        // Registers a handler function to call when handling
-        // handleKey of this script.
-        void AddHandler(const LuaVal &handlerKey, HandlerFunc function) { _handlerMap[handlerKey] = function; }
-
-        // Adds a client side handler to call and adds arguments
-        // to sends with it for AIO client initialization.
-        //
-        // You can add additional arguments to the handler by
-        // calling this function again
-        void AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey,
-            ArgFunc a1 = ArgFunc(), ArgFunc a2 = ArgFunc(), ArgFunc a3 = ArgFunc(),
-            ArgFunc a4 = ArgFunc(), ArgFunc a5 = ArgFunc(), ArgFunc a6 = ArgFunc());
-
-        // Adds a WoW addon file to the list of addons with a unique
-        // addon key to send on AIO client initialization.
-        // Returns true if addon was added, false if addon key is taken.
-        //
-        // It is required to call World::ForceReloadPlayerAddons()
-        // if addons are added after server is fully initialized
-        // for online players to load the added addons.
-        bool AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
-
-        // Returns pointer to an AIO script by its key and typename.
-        // Returns null if scriptName doesn't exist or typename was incorrect.
-        template<class ScriptClass>
-        ScriptClass *GetScript(const LuaVal &key);
-
-    private:
-        void OnHandle(Player* sender, LuaVal const& handlerKey, LuaVal const& args);
-
-        LuaVal _key;
-
-        typedef std::unordered_map<LuaVal, HandlerFunc, LuaVal::LuaValHasher> HandlerMapType;
-        HandlerMapType _handlerMap;
-
-        typedef std::unordered_map<LuaVal, AIOScript*, LuaVal::LuaValHasher> AIOScriptByKeyMap;
-        static AIOScriptByKeyMap _scriptByKeyMap;
-
-        friend class ScriptMgr;
-};
-
-class AIOHandlers : public AIOScript
-{
-    private:
-        AIOHandlers();
-        void HandleInit(Player* sender, LuaVal const& args);
-        void HandleError(Player* sender, LuaVal const& args);
-
-        struct InitHookInfo
-        {
-            LuaVal scriptKey;
-            LuaVal handlerKey;
-            std::list<AIOScript::ArgFunc> argsList;
-
-            InitHookInfo(LuaVal const& scriptKey, LuaVal const& handlerKey)
-                : scriptKey(scriptKey), handlerKey(handlerKey)
-            { }
-        };
-
-        typedef std::list<InitHookInfo> HookListType;
-        HookListType _initHookList;
-
-        friend class ScriptMgr;
-        friend class AIOScript;
-};
-
-// Placed here due to ScriptRegistry::AddScript dependency.
-#define sScriptMgr ScriptMgr::instance()
-
-// namespace
-// {
-    typedef std::vector<ScriptObject*> UnusedScriptContainer;
-    typedef std::list<std::string> UnusedScriptNamesContainer;
-
-    extern UnusedScriptContainer UnusedScripts;
-    extern UnusedScriptNamesContainer UnusedScriptNames;
-// }
+#include "AIOScript.h"
 
 // Manages registration, loading, and execution of scripts.
 class TC_GAME_API ScriptMgr

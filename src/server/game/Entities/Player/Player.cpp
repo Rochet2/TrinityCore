@@ -112,6 +112,7 @@
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include "AIOMsg.h"
+#include "PlayerAIO.h"
 #include "WorldStatePackets.h"
 
 #define ZONE_UPDATE_INTERVAL (1*IN_MILLISECONDS)
@@ -20572,15 +20573,14 @@ void Player::Whisper(uint32 textId, Player* target, bool /*isBossWhisper = false
     target->SendDirectMessage(packet.Write());
 }
 
-void Player::AIOMessage(AIOMsg& msg)
+void Player::ForceReloadAddons()
 {
-    SendSimpleAIOMessage(msg.dumps());
+    Trinity::AIO::Handle(this, "AIO", "ForceReload");
 }
 
-void Player::AIOHandle(const LuaVal &scriptKey, const LuaVal &handlerKey, const LuaVal &a1, const LuaVal &a2, const LuaVal &a3, const LuaVal &a4, const LuaVal &a5, const LuaVal &a6)
+void Player::ForceResetAddons()
 {
-    AIOMsg msg(scriptKey, handlerKey, a1, a2, a3, a4, a5, a6);
-    SendSimpleAIOMessage(msg.dumps());
+    Trinity::AIO::Handle(this, "AIO", "ForceReset");
 }
 
 void Player::SendSimpleAIOMessage(std::string const& message)

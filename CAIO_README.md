@@ -40,14 +40,13 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DSCRIPTS=static -DTOOLS=0
 ## Stock AIO server parity (C++ vs `AIO.lua` with `AIO_SERVER = true`)
 
 + **Transport:** `LANG_ADDON` whispers with `S`/`C` prefix are required on 3.3.5; the client receives them as `CHAT_MSG_ADDON` (same as stock Eluna server). Not a CAIO gap.
-+ **Init hooks:** C++ `AddInitArgs` appends extra handler blocks to the init reply. For full init-message rewriting (stock `AIO.AddOnInit`), see Todo below.
++ **Init hooks:** C++ `AddInitArgs` appends extra handler blocks to the init reply. `AddOnInit` on `AIOScript` mutates the full outgoing init table before send (stock `AIO.AddOnInit` parity).
 + **Pre-init gating:** Stock server does **not** queue pre-init blocks (`AIO_INITED` is client-only). CAIO matches that.
 + **Block arg limit:** Server rejects blocks with `n > 15` (same as stock server Lua).
 + **Message cache:** `AIO.MsgCacheTime` / `AIO.MsgCacheDelay` match `AIO_MSG_CACHE_TIME` / `AIO_MSG_CACHE_DELAY` in `AIO.lua`.
 
 ## Todo
 
-+ **`AIO.AddOnInit` parity (future):** Stock Lua server (`AIO_SERVER = true`) allows `AIO.AddOnInit(func)` where `func(initmsg, player)` receives the full outgoing init message and may replace or rewrite it before send. C++ only has `AddInitArgs`, which appends separate handler blocks and does not mutate the core `AIO`/`Init` block (version, addon table, cache table). A future C++ API would need an init-message hook with read/write access to the assembled init payload.
 + Implement obfuscation (optional, deferred)
 + Implement compression (optional, deferred)
 + Add individual RBAC permissions per `.caio` subcommand (optional; all subcommands use `RBAC_PERM_COMMAND_CAIO` today)
@@ -93,25 +92,17 @@ Use `LuaVal::nil` (not `LuaVal::nil()`) for default optional arguments. Type tag
 
 ### CAIO reference and functions
 
-**ScriptMgr.h**
+**AIOScript.h** (included from `ScriptMgr.h`)
 
 ```cpp
 class AIOScript : public ScriptObject
 {
-    public:
-        virtual ~AIOScript();
-        LuaVal GetKey() const;
-
     protected:
         AIOScript(LuaVal const& scriptKey);
         void AddHandler(LuaVal const& handlerKey, HandlerFunc function);
-        void AddInitArgs(LuaVal const& scriptKey, LuaVal const& handlerKey,
-            ArgFunc a1 = ArgFunc(), ArgFunc a2 = ArgFunc(), ArgFunc a3 = ArgFunc(),
-            ArgFunc a4 = ArgFunc(), ArgFunc a5 = ArgFunc(), ArgFunc a6 = ArgFunc());
+        void AddInitArgs(LuaVal const& scriptKey, LuaVal const& handlerKey, ...);
+        void AddOnInit(InitMessageFunc func); // mutates full init reply (AIO.AddOnInit parity)
         bool AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
-
-        template<class ScriptClass>
-        ScriptClass* GetScript(LuaVal const& key);
 };
 ```
 
@@ -134,20 +125,20 @@ class AIOMsg
 };
 ```
 
-**Player.h**
+**Player.h** / **PlayerAIO.h**
 
 ```cpp
-class Player
-{
-    public:
-        void AIOMessage(AIOMsg& msg);
-        void AIOHandle(LuaVal const& scriptKey, LuaVal const& handlerKey,
-            LuaVal const& a1 = LuaVal::nil, LuaVal const& a2 = LuaVal::nil, LuaVal const& a3 = LuaVal::nil,
-            LuaVal const& a4 = LuaVal::nil, LuaVal const& a5 = LuaVal::nil, LuaVal const& a6 = LuaVal::nil);
-        void SendSimpleAIOMessage(std::string const& message);
-        void ForceReloadAddons();
-        void ForceResetAddons();
-};
+// Player.h — no LuaVal in the public player API
+void Player::SendSimpleAIOMessage(std::string const& message);
+void Player::ForceReloadAddons();
+void Player::ForceResetAddons();
+
+// PlayerAIO.h — use from CAIO scripts
+namespace Trinity::AIO {
+    void Message(Player* player, AIOMsg& msg);
+    void Handle(Player* player, LuaVal const& scriptKey, LuaVal const& handlerKey, ...);
+    void Handle(Player* player, char const* scriptKey, char const* handlerKey, ...);
+}
 ```
 
 **World.h**

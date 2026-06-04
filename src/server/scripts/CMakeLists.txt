@@ -174,10 +174,6 @@ foreach(SCRIPT_MODULE ${SCRIPT_MODULE_LIST})
       PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR})
 
-    if(WITH_CAIO_EXAMPLES)
-      target_compile_definitions(${SCRIPT_MODULE_PROJECT_NAME} PRIVATE WITH_CAIO_EXAMPLES)
-    endif()
-
     set_target_properties(${SCRIPT_MODULE_PROJECT_NAME}
       PROPERTIES
         COMPILE_WARNING_AS_ERROR ${WITH_WARNINGS_AS_ERRORS}
@@ -229,10 +225,6 @@ target_include_directories(scripts
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
 
-if(WITH_CAIO_EXAMPLES)
-  target_compile_definitions(scripts PRIVATE WITH_CAIO_EXAMPLES)
-endif()
-
 set_target_properties(scripts
   PROPERTIES
     COMPILE_WARNING_AS_ERROR ${WITH_WARNINGS_AS_ERRORS}
@@ -240,8 +232,14 @@ set_target_properties(scripts
 
 # Generate precompiled header
 if(USE_SCRIPTPCH)
+  set(SCRIPT_PCH_REUSE_PROJECTS ${DYNAMIC_SCRIPT_MODULE_PROJECTS})
+  if(WITH_CAIO_EXAMPLES)
+    GetProjectNameOfScriptModule("AIO" SCRIPT_AIO_PROJECT_NAME)
+    target_compile_definitions(${SCRIPT_AIO_PROJECT_NAME} PRIVATE WITH_CAIO_EXAMPLES)
+    list(REMOVE_ITEM SCRIPT_PCH_REUSE_PROJECTS ${SCRIPT_AIO_PROJECT_NAME})
+  endif()
   add_cxx_pch("scripts" ${PRIVATE_PCH_HEADER} ${DYNAMIC_SCRIPT_MODULE_PROJECTS})
-  reuse_cxx_pch("${DYNAMIC_SCRIPT_MODULE_PROJECTS}" scripts)
+  reuse_cxx_pch("${SCRIPT_PCH_REUSE_PROJECTS}" scripts)
 endif()
 
 # Remove all shared libraries in the installl directory which

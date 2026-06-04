@@ -31,6 +31,7 @@
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
 #include "Player.h"
+#include "PlayerAIO.h"
 #include "ScriptReloadMgr.h"
 #include "ScriptSystem.h"
 #include "SmartAI.h"
@@ -2584,10 +2585,34 @@ PlayerScript::PlayerScript(char const* name)
 
 AIOScript::AIOScriptByKeyMap AIOScript::_scriptByKeyMap = AIOScript::AIOScriptByKeyMap();
 
+AIOScript::~AIOScript()
+{
+    _scriptByKeyMap.erase(_key);
+}
+
+void AIOScript::AddOnInit(InitMessageFunc func)
+{
+    if (AIOHandlers* handler = sScriptMgr->_aioHandlers)
+        handler->RegisterInitMessageHook(std::move(func));
+}
+
+void AIOHandlers::RegisterInitMessageHook(AIOScript::InitMessageFunc func)
+{
+    _initMessageHooks.push_back(std::move(func));
+}
+
 void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
 {
     if (!sender)
         return;
+
+    uint32 const maxIncoming = sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING);
+    if (message.size() > maxIncoming)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "AIO: Incoming message size {} exceeds limit {}. Sender: {}", message.size(), maxIncoming, sender->GetName());
+        return;
+    }
 
     LuaVal mainTable = LuaVal::loads(message);
     if (!mainTable.istable())
@@ -2688,12 +2713,6 @@ void AIOScript::HandleAddonBlock(Player* sender, LuaVal const& handlerKey, LuaVa
     OnHandle(sender, handlerKey, args);
 }
 
-template<class ScriptClass>
-ScriptClass *AIOScript::GetScript(const LuaVal &scriptKey)
-{
-    return dynamic_cast<ScriptClass*>(FindByKey(scriptKey));
-}
-
 bool AIOScript::AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission)
 {
     return sWorld->AddAddon(World::AIOAddon(addonName, addonFile, permission));
@@ -2735,7 +2754,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
 
     if (std::abs(versionVal.num() - AIO_VERSION) > 0.01)
     {
-        sender->AIOHandle("AIO", "Init", AIO_VERSION);
+        Trinity::AIO::Handle(sender, "AIO", "Init", AIO_VERSION);
         return;
     }
 
@@ -2772,6 +2791,10 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
     AIOInitBlock[7] = cacheTable;
 
     argsToSend[1] = AIOInitBlock;
+
+    for (AIOScript::InitMessageFunc const& hook : _initMessageHooks)
+        hook(sender, argsToSend);
+
     sender->SendSimpleAIOMessage(argsToSend.dumps());
 }
 

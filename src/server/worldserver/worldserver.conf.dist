@@ -4133,6 +4133,14 @@ PacketSpoof.BanDuration = 86400
 #        Maximum total bytes buffered per long AIO message while reassembling parts.
 #        Default: 1048576
 #
+#    AIO.MaxIncomingMessageSize
+#        Maximum size (bytes) of a fully reassembled client-to-server AIO payload.
+#        Default: 262144 (cannot exceed AIO.MaxBufferSize)
+#
+#    AIO.MsgRateLimitMs
+#        Minimum milliseconds between completed incoming AIO messages per session (0 = disabled).
+#        Default: 50
+#
 #    AIO.ClientScriptPath
 #        Path to client lua scripts to send to the client
 #        Default: "lua_client_scripts"
@@ -4145,6 +4153,8 @@ AIO.InitCooldown = 5000
 AIO.MsgCacheTime = 15000
 AIO.MsgCacheDelay = 5000
 AIO.MaxBufferSize = 1048576
+AIO.MaxIncomingMessageSize = 262144
+AIO.MsgRateLimitMs = 50
 AIO.ClientScriptPath = "lua_client_scripts"
 
 #

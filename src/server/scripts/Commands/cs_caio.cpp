@@ -17,6 +17,20 @@ EndScriptData */
 
 using namespace Trinity::ChatCommands;
 
+namespace
+{
+bool IsSafeAddonRelativePath(std::string const& path)
+{
+    if (path.empty() || path.front() == '/' || path.front() == '\\')
+        return false;
+
+    if (path.find("..") != std::string::npos)
+        return false;
+
+    return path.find_first_of(":*?\"<>|") == std::string::npos;
+}
+}
+
 class caio_commandscript : public CommandScript
 {
 public:
@@ -65,7 +79,7 @@ public:
             return false;
 
         player->SendSimpleAIOMessage(message);
-        handler->PSendSysMessage(LANG_SENDMESSAGE, target.GetName().c_str(), message.c_str());
+        handler->PSendSysMessage("CAIO: sent %zu bytes to %s.", message.size(), target.GetName().c_str());
         return true;
     }
 
@@ -101,7 +115,7 @@ public:
 
         uint32 perm = permission.value_or(AIO_DEFAULT_ADDON_PERMISSION);
         sWorld->SendAllSimpleAIOMessage(message, perm);
-        handler->PSendSysMessage(LANG_SENDMESSAGE, "all players", message.c_str());
+        handler->PSendSysMessage("CAIO: sent %zu bytes to all players.", message.size());
         return true;
     }
 
@@ -131,6 +145,12 @@ public:
 
     static bool HandleAddAddonCommand(ChatHandler* handler, std::string addonName, QuotedString addonFile, Optional<uint32> permission)
     {
+        if (!IsSafeAddonRelativePath(addonFile))
+        {
+            handler->SendSysMessage("CAIO: addon file path must be relative to AIO.ClientScriptPath and must not contain '..'.");
+            return false;
+        }
+
         uint32 perm = permission.value_or(AIO_DEFAULT_ADDON_PERMISSION);
         World::AIOAddon newAddon(addonName, addonFile, perm);
         if (sWorld->AddAddon(newAddon))

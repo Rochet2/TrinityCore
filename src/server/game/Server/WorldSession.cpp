@@ -49,6 +49,7 @@
 #include "PacketUtilities.h"
 #include "Player.h"
 #include "Realm.h"
+#include "AIOCodec.h"
 #include "ScriptMgr.h"
 #include "SocialMgr.h"
 #include "QueryHolder.h"
@@ -499,22 +500,28 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
     return true;
 }
 
-namespace
+bool WorldSession::AllowNextAIOIncomingMessage(Player* sender)
 {
-uint32 DecodeAIOByte(char value)
-{
-    return uint32(static_cast<uint8>(value) - 1u);
-}
+    uint32 const minInterval = sWorld->getIntConfig(CONFIG_AIO_MSG_RATE_MS);
+    if (!minInterval)
+        return true;
+
+    uint32 const now = getMSTime();
+    if (_aioLastCompleteMessageMs && (now - _aioLastCompleteMessageMs) < minInterval)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_DEBUG,
+            "AIO: Rate limited incoming message from {} ({} ms since last)", sender->GetName(), now - _aioLastCompleteMessageMs);
+        return false;
+    }
+
+    _aioLastCompleteMessageMs = now;
+    return true;
 }
 
 WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhisper(Player* sender, Player* receiver, std::string const& msg)
 {
-    size_t delimPos = msg.find('\t');
-    if (delimPos == std::string::npos)
-        return IncomingAIOWhisperResult::NotAIO;
-
-    std::string prefix = msg.substr(0, delimPos);
-    if (prefix != "C" + sWorld->GetAIOPrefix())
+    size_t delimPos = 0;
+    if (!Trinity::AIO::Codec::IsClientPrefix(sWorld->GetAIOPrefix(), msg, delimPos))
         return IncomingAIOWhisperResult::NotAIO;
 
     if (receiver != sender)
@@ -523,11 +530,12 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
     uint32 messageId = 0;
     if ((msg.size() - delimPos - 1) >= size_t(2))
     {
-        messageId = DecodeAIOByte(msg[delimPos + 1]) * 254u + DecodeAIOByte(msg[delimPos + 2]);
+        messageId = Trinity::AIO::Codec::DecodePair(msg[delimPos + 1], msg[delimPos + 2]);
 
         if (messageId == 0)
         {
-            sScriptMgr->OnAddonMessage(sender, msg.substr(delimPos + 3));
+            if (AllowNextAIOIncomingMessage(sender))
+                sScriptMgr->OnAddonMessage(sender, msg.substr(delimPos + 3));
             return IncomingAIOWhisperResult::Consumed;
         }
     }
@@ -539,7 +547,7 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
         return IncomingAIOWhisperResult::Consumed;
     }
 
-    uint32 parts = DecodeAIOByte(msg[delimPos + 3]) * 254u + DecodeAIOByte(msg[delimPos + 4]);
+    uint32 parts = Trinity::AIO::Codec::DecodePair(msg[delimPos + 3], msg[delimPos + 4]);
     if (parts < 2)
     {
         sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
@@ -556,7 +564,7 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
         return IncomingAIOWhisperResult::DropPacket;
     }
 
-    uint32 partId = DecodeAIOByte(msg[delimPos + 5]) * 254u + DecodeAIOByte(msg[delimPos + 6]);
+    uint32 partId = Trinity::AIO::Codec::DecodePair(msg[delimPos + 5], msg[delimPos + 6]);
     if (partId < 1 || partId > parts)
     {
         sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
@@ -617,7 +625,8 @@ WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhis
     for (uint32 expectedPart = 1; expectedPart <= parts; ++expectedPart)
         actualAIOMessage += messagePartsItr->second.Map.find(expectedPart)->second;
 
-    sScriptMgr->OnAddonMessage(sender, actualAIOMessage);
+    if (AllowNextAIOIncomingMessage(sender))
+        sScriptMgr->OnAddonMessage(sender, actualAIOMessage);
     _addonMessageBuffer.erase(messagePartsItr);
     return IncomingAIOWhisperResult::Consumed;
 }

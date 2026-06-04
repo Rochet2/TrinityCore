@@ -400,6 +400,8 @@ enum WorldIntConfigs : uint32
     CONFIG_AIO_MSG_CACHE_TIME,
     CONFIG_AIO_MSG_CACHE_DELAY,
     CONFIG_AIO_MAX_BUFFER_SIZE,
+    CONFIG_AIO_MAX_INCOMING,
+    CONFIG_AIO_MSG_RATE_MS,
     CONFIG_AUCTION_GETALL_DELAY,
     CONFIG_AUCTION_SEARCH_DELAY,
     CONFIG_TALENTS_INSPECTING,
@@ -805,6 +807,8 @@ class TC_GAME_API World
         bool AddAddon(AIOAddon const& addon);
         bool RemoveAddon(std::string const& addonName, uint32* permission = nullptr);
         uint32 PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const;
+
+        void ValidateAIOSettings();
 
         void RemoveOldCorpses();
         void TriggerGuidWarning();
