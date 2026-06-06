@@ -57,6 +57,12 @@ LoadMessageOutcome TryLoadIncomingMessage(std::string const& message, uint32 max
         return outcome;
     }
 
+    if (outcome.table.isnil())
+    {
+        outcome.result = LoadMessageResult::ParseError;
+        return outcome;
+    }
+
     if (!outcome.table.istable())
     {
         outcome.result = LoadMessageResult::NotTable;
