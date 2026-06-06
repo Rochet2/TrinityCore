@@ -81,6 +81,7 @@ class AIOHandlers : public AIOScript
         }
 
     private:
+        friend AIOHandlers* CreateAIOHandlers();
         AIOHandlers();
         void HandleInit(Player* sender, LuaVal const& args);
         void HandleError(Player* sender, LuaVal const& args);
