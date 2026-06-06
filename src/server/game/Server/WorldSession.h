@@ -1237,6 +1237,7 @@ class TC_GAME_API WorldSession
         AsyncCallbackProcessor<SQLQueryHolderCallback> _queryHolderProcessor;
 
     friend class World;
+    friend class ScriptMgr;
     protected:
         class DosProtection
         {

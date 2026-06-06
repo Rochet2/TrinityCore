@@ -151,11 +151,11 @@ void AIOScript::DispatchIncomingBlocks(Player* sender, LuaVal const& mainTable)
         if (!nArgsVal.isnumber() || scriptKeyVal.isnil() || handlerKeyVal.isnil())
             continue;
 
-        if (nArgsVal.num() > double(MAX_BLOCK_ARGS))
+        if (nArgsVal.num() > double(Trinity::AIO::MAX_BLOCK_ARGS))
         {
             sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
                 "AIO: Block from '{}' has over {} arguments (n={:.0f}). Sender: {}",
-                scriptKeyVal.tostring(), MAX_BLOCK_ARGS, nArgsVal.num(), sender->GetName());
+                scriptKeyVal.tostring(), Trinity::AIO::MAX_BLOCK_ARGS, nArgsVal.num(), sender->GetName());
             continue;
         }
 
