@@ -38,6 +38,7 @@ class TC_GAME_API AIOScript : public ScriptObject
         bool IsDatabaseBound() const { return false; }
 
         static AIOScript* FindByKey(LuaVal const& scriptKey);
+        static void ClearScriptByKeyMap();
 
         void HandleAddonBlock(Player* sender, LuaVal const& handlerKey, LuaVal const& args);
         static void DispatchIncomingBlocks(Player* sender, LuaVal const& mainTable);

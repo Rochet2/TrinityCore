@@ -1134,7 +1134,7 @@ std::shared_ptr<ModuleReference>
 void ScriptMgr::Unload()
 {
     sScriptRegistryCompositum->Unload();
-    AIOScript::_scriptByKeyMap.clear();
+    AIOScript::ClearScriptByKeyMap();
     DestroyAIOHandlers(_aioHandlers);
 
     delete[] SpellSummary;
@@ -2581,6 +2581,11 @@ PlayerScript::PlayerScript(char const* name)
     : ScriptObject(name)
 {
     ScriptRegistry<PlayerScript>::Instance()->AddScript(this);
+}
+
+void ScriptMgr::RegisterAIOScript(AIOScript* script)
+{
+    ScriptRegistry<AIOScript>::Instance()->AddScript(script);
 }
 
 void ScriptMgr::RegisterAIOInitHook(AIOScript::InitMessageFunc func)

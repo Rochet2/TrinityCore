@@ -114,8 +114,13 @@ AIOScript::AIOScript(LuaVal const& scriptKey)
         sLog->outAIOMessage(0, LOG_LEVEL_FATAL, "AIO scriptKey '{}' of type tag '{}' already exist. Use another key.", scriptKey.tostring(), static_cast<int>(scriptKey.typetag()));
         ASSERT(false);
     }
-    ScriptRegistry<AIOScript>::Instance()->AddScript(this);
+    sScriptMgr->RegisterAIOScript(this);
     AIOScript::_scriptByKeyMap[scriptKey] = this;
+}
+
+void AIOScript::ClearScriptByKeyMap()
+{
+    _scriptByKeyMap.clear();
 }
 
 AIOScript* AIOScript::FindByKey(LuaVal const& scriptKey)
