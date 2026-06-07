@@ -9252,6 +9252,8 @@ void Unit::AtExitCombat()
 
     RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags::LeavingCombat);
 
+    GetSpellHistory()->AtExitCombat();
+
     if (!IsInteractionAllowedInCombat())
         UpdateNearbyPlayersInteractions();
 }
@@ -9953,7 +9955,7 @@ float Unit::GetWeaponDamageRange(WeaponAttackType attType, WeaponDamageRange typ
 bool Unit::CanFreeMove() const
 {
     return !HasUnitState(UNIT_STATE_CONFUSED | UNIT_STATE_FLEEING | UNIT_STATE_IN_FLIGHT |
-        UNIT_STATE_ROOT | UNIT_STATE_STUNNED | UNIT_STATE_DISTRACTED) && GetOwnerGUID().IsEmpty();
+        UNIT_STATE_ROOT | UNIT_STATE_STUNNED | UNIT_STATE_DISTRACTED);
 }
 
 void Unit::SetLevel(uint8 lvl, bool sendUpdate/* = true*/)
@@ -12437,7 +12439,8 @@ float Unit::MeleeSpellMissChance(Unit const* victim, WeaponAttackType attType, S
     float missChance = victim->GetUnitMissChance();
 
     // melee attacks while dual wielding have +19% chance to miss
-    if (!spellInfo && haveOffhandWeapon() && !IsInFeralForm() && !HasAuraType(SPELL_AURA_IGNORE_DUAL_WIELD_HIT_PENALTY))
+    if (!spellInfo && haveOffhandWeapon() && attType != RANGED_ATTACK && !m_currentSpells[CURRENT_MELEE_SPELL]
+        && !IsInFeralForm() && !HasAuraType(SPELL_AURA_IGNORE_DUAL_WIELD_HIT_PENALTY))
         missChance += 19.0f;
 
     // Spellmod from SpellModOp::HitChance

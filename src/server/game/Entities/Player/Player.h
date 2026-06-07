@@ -2077,9 +2077,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SendSpellModifiers() const;
 
         void RemoveArenaSpellCooldowns(bool removeActivePetCooldowns = false);
-        uint32 GetLastPotionId() const { return m_lastPotionId; }
-        void SetLastPotionId(uint32 item_id) { m_lastPotionId = item_id; }
-        void UpdatePotionCooldown(Spell* spell = nullptr);
 
         float GetEmpowerMinHoldStagePercent() const { return m_empowerMinHoldStagePercent; }
         void SetEmpowerMinHoldStagePercent(float empowerMinHoldStagePercent) { m_empowerMinHoldStagePercent = empowerMinHoldStagePercent; }
@@ -2694,6 +2691,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         uint16 m_homebindAreaId;
 
         uint8 GetStartLevel(uint8 race, uint8 playerClass, Optional<int32> characterTemplateId) const;
+        static uint64 GetStartMoney(uint8 race, uint8 playerClass);
 
         // currently visible objects at player client
         GuidUnorderedSet m_clientGUIDs;
@@ -3236,7 +3234,6 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         PlayerMails m_mail;
         PlayerSpellMap m_spells;
         std::unordered_map<uint32 /*overridenSpellId*/, std::unordered_set<uint32> /*newSpellId*/> m_overrideSpells;
-        uint32 m_lastPotionId;                              // last used health/mana potion in combat, that block next potion use
         std::unordered_map<uint32, StoredAuraTeleportLocation> m_storedAuraTeleportLocations;
         float m_empowerMinHoldStagePercent;
 
