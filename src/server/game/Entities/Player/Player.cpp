@@ -8455,7 +8455,7 @@ void Player::SendLoot(ObjectGuid guid, LootType loot_type)
 
         WorldPackets::Loot::LootResponse packet;
         packet.Owner = guid;
-        packet.AcquireReason = loot->loot_type;
+        packet.AcquireReason = GetLootTypeForClient(loot->loot_type);
         loot->BuildLootResponse(packet, this, permission);
         SendDirectMessage(packet.Write());
 
