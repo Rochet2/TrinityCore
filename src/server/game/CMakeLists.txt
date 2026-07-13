@@ -37,7 +37,8 @@ target_include_directories(game-interface
 target_link_libraries(game-interface
   INTERFACE
     shared
-    Detour)
+    Detour
+    smallfolk_cpp::smallfolk)
 
 add_library(game
   ${PRIVATE_SOURCES})

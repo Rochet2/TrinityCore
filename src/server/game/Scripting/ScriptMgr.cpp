@@ -30,7 +30,9 @@
 #include "MapManager.h"
 #include "ObjectMgr.h"
 #include "OutdoorPvPMgr.h"
+#include "AIOUtil.h"
 #include "Player.h"
+#include "WorldSession.h"
 #include "ScriptReloadMgr.h"
 #include "ScriptSystem.h"
 #include "SmartAI.h"
@@ -40,8 +42,12 @@
 #include "Transport.h"
 #include "Vehicle.h"
 #include "Weather.h"
+#include "World.h"
+
+#include <cmath>
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include "smallfolk.h"
 
 // Trait which indicates whether this script type
 // must be assigned in the database.
@@ -1018,7 +1024,7 @@ std::string const& ScriptObject::GetName() const
 }
 
 ScriptMgr::ScriptMgr()
-    : _scriptCount(0), _script_loader_callback(nullptr)
+    : _scriptCount(0), _scheduledScripts(0), _aioHandlers(nullptr), _script_loader_callback(nullptr)
 {
 }
 
@@ -1042,6 +1048,7 @@ void ScriptMgr::Initialize()
     TC_LOG_INFO("server.loading", "Loading C++ scripts");
 
     FillSpellSummary();
+    _aioHandlers = CreateAIOHandlers();
 
     // Load core scripts
     SetScriptContext(GetNameOfStaticContext());
@@ -1127,6 +1134,8 @@ std::shared_ptr<ModuleReference>
 void ScriptMgr::Unload()
 {
     sScriptRegistryCompositum->Unload();
+    AIOScript::ClearScriptByKeyMap();
+    DestroyAIOHandlers(_aioHandlers);
 
     delete[] SpellSummary;
     delete[] UnitAI::AISpellInfo;
@@ -2574,6 +2583,58 @@ PlayerScript::PlayerScript(char const* name)
     ScriptRegistry<PlayerScript>::Instance()->AddScript(this);
 }
 
+void ScriptMgr::RegisterAIOScript(AIOScript* script)
+{
+    ScriptRegistry<AIOScript>::Instance()->AddScript(script);
+}
+
+void ScriptMgr::RegisterAIOInitHook(AIOScript::InitMessageFunc func)
+{
+    RegisterAIOInitHookOnHandlers(_aioHandlers, std::move(func));
+}
+
+void ScriptMgr::RegisterAIOInitArgs(LuaVal const& scriptKey, LuaVal const& handlerKey,
+    AIOScript::ArgFunc a1, AIOScript::ArgFunc a2, AIOScript::ArgFunc a3,
+    AIOScript::ArgFunc a4, AIOScript::ArgFunc a5, AIOScript::ArgFunc a6)
+{
+    RegisterAIOInitArgsOnHandlers(_aioHandlers, scriptKey, handlerKey,
+        std::move(a1), std::move(a2), std::move(a3), std::move(a4), std::move(a5), std::move(a6));
+}
+
+void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
+{
+    if (!sender)
+        return;
+
+    uint32 const maxIncoming = sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING);
+    uint32 const maxBlocks = sWorld->getIntConfig(CONFIG_AIO_MAX_BLOCKS);
+    Trinity::AIO::LoadMessageOutcome const outcome = Trinity::AIO::TryLoadIncomingMessage(message, maxIncoming, maxBlocks);
+
+    switch (outcome.result)
+    {
+        case Trinity::AIO::LoadMessageResult::Oversize:
+            sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+                "AIO: Incoming message size {} exceeds limit {}. Sender: {}", message.size(), maxIncoming, sender->GetName());
+            return;
+        case Trinity::AIO::LoadMessageResult::ParseError:
+            if (WorldSession* session = sender->GetSession())
+                session->NotifyAIOIncomingParseFailure(sender);
+            return;
+        case Trinity::AIO::LoadMessageResult::NotTable:
+            sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_DEBUG,
+                "AIO: Ignoring non-table addon payload from {} ({} bytes)", sender->GetName(), message.size());
+            return;
+        case Trinity::AIO::LoadMessageResult::TooManyBlocks:
+            sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+                "AIO: Incoming message has {} blocks (limit {}). Sender: {}", outcome.table.len(), maxBlocks, sender->GetName());
+            return;
+        case Trinity::AIO::LoadMessageResult::Ok:
+            break;
+    }
+
+    AIOScript::DispatchIncomingBlocks(sender, outcome.table);
+}
+
 void PlayerScript::OnPVPKill(Player* /*killer*/, Player* /*killed*/)
 {
 }
@@ -2842,3 +2903,4 @@ template class TC_GAME_API ScriptRegistry<GuildScript>;
 template class TC_GAME_API ScriptRegistry<GroupScript>;
 template class TC_GAME_API ScriptRegistry<UnitScript>;
 template class TC_GAME_API ScriptRegistry<AccountScript>;
+template class TC_GAME_API ScriptRegistry<AIOScript>;

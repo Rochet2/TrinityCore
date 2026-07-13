@@ -3952,6 +3952,7 @@ Appender.Console=1,3,0
 Appender.Server=2,2,0,Server.log,w
 Appender.GM=2,2,1,GM.log
 Appender.DBErrors=2,2,0,DBErrors.log
+Appender.AIO=2,3,3,AIO/AIO_%s.log
 
 #  Logger config values: Given a logger "name"
 #    Logger.name
@@ -3977,6 +3978,7 @@ Logger.commands.gm=3,Console GM
 Logger.scripts.hotswap=3,Console Server
 Logger.sql.sql=5,Console DBErrors
 Logger.sql.updates=3,Console Server
+Logger.AIO=3,Console AIO
 Logger.mmaps=3,Server
 
 #Logger.achievement=3,Console Server
@@ -4092,6 +4094,78 @@ PacketSpoof.BanMode = 0
 #
 
 PacketSpoof.BanDuration = 86400
+
+#
+###################################################################################################
+
+###################################################################################################
+#
+# AIO settings
+#
+#    AIO.Prefix
+#        Prefix string used for AIO addon messages
+#        Default: "AIO"
+#
+#    AIO.MaxParts
+#        Maximum number of parts a client can send to server
+#        Default: 64 (large init payloads may need many 255-byte parts)
+#
+#    AIO.MsgMaxLen
+#        Maximum size (bytes) of a single addon whisper packet (entire payload including AIO headers).
+#        Must be 255 or less to match the WoW client addon message limit used by AIO.lua.
+#        Default: 255
+#
+#    AIO.InitCooldown
+#        Milliseconds before a player can call AIO Init again after a successful init.
+#        Default: 5000
+#
+#    AIO.MsgCacheTime
+#        Milliseconds before incomplete incoming long AIO messages are discarded.
+#        Matches AIO.lua AIO_MSG_CACHE_TIME on the stock server.
+#        Default: 15000
+#
+#    AIO.MsgCacheDelay
+#        Milliseconds between sweeps of incomplete long AIO message buffers.
+#        Matches AIO.lua AIO_MSG_CACHE_DELAY on the stock server.
+#        Default: 5000
+#
+#    AIO.MaxBufferSize
+#        Maximum total bytes buffered per long AIO message while reassembling parts.
+#        Default: 1048576
+#
+#    AIO.MaxIncomingMessageSize
+#        Maximum size (bytes) of a fully reassembled client-to-server AIO payload.
+#        Default: 262144 (cannot exceed AIO.MaxBufferSize)
+#
+#    AIO.MsgRateLimitMs
+#        Minimum milliseconds between completed incoming AIO messages per session (0 = disabled).
+#        Default: 50
+#
+#    AIO.MaxBlocks
+#        Maximum number of handler blocks per incoming AIO message.
+#        Default: 32
+#
+#    AIO.MaxParseFailures
+#        Parse failures per session before reassembly buffers are cleared (0 = no threshold).
+#        Default: 16
+#
+#    AIO.ClientScriptPath
+#        Path to client lua scripts to send to the client
+#        Default: "lua_client_scripts"
+#
+
+AIO.Prefix = "AIO"
+AIO.MaxParts = 64
+AIO.MsgMaxLen = 255
+AIO.InitCooldown = 5000
+AIO.MsgCacheTime = 15000
+AIO.MsgCacheDelay = 5000
+AIO.MaxBufferSize = 1048576
+AIO.MaxIncomingMessageSize = 262144
+AIO.MsgRateLimitMs = 50
+AIO.MaxBlocks = 32
+AIO.MaxParseFailures = 16
+AIO.ClientScriptPath = "lua_client_scripts"
 
 #
 ###################################################################################################

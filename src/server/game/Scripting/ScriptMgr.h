@@ -815,6 +815,8 @@ class TC_GAME_API GroupScript : public ScriptObject
         virtual void OnDisband(Group* group);
 };
 
+#include "AIOScript.h"
+
 // Manages registration, loading, and execution of scripts.
 class TC_GAME_API ScriptMgr
 {
@@ -1077,8 +1079,26 @@ class TC_GAME_API ScriptMgr
         void ModifyMeleeDamage(Unit* target, Unit* attacker, uint32& damage);
         void ModifySpellDamageTaken(Unit* target, Unit* attacker, int32& damage);
 
+    public: /* Scheduled scripts */
+
+        uint32 IncreaseScheduledScriptsCount() { return ++_scheduledScripts; }
+        uint32 DecreaseScheduledScriptCount() { return --_scheduledScripts; }
+        uint32 DecreaseScheduledScriptCount(size_t count) { return _scheduledScripts -= count; }
+        bool IsScriptScheduled() const { return _scheduledScripts > 0; }
+
+    public: /* AIOScript */
+
+        void OnAddonMessage(Player* sender, std::string const& message);
+        void RegisterAIOScript(AIOScript* script);
+        void RegisterAIOInitHook(AIOScript::InitMessageFunc func);
+        void RegisterAIOInitArgs(LuaVal const& scriptKey, LuaVal const& handlerKey,
+            AIOScript::ArgFunc a1, AIOScript::ArgFunc a2, AIOScript::ArgFunc a3,
+            AIOScript::ArgFunc a4, AIOScript::ArgFunc a5, AIOScript::ArgFunc a6);
+
     private:
         uint32 _scriptCount;
+        uint32 _scheduledScripts;
+        AIOHandlers* _aioHandlers;
 
         ScriptLoaderCallbackType _script_loader_callback;
 

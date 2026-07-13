@@ -152,6 +152,9 @@ foreach(SCRIPT_MODULE ${SCRIPT_MODULE_LIST})
     # Add the module content to the whole static module
     unset(SCRIPT_MODULE_PRIVATE_SOURCES)
     CollectSourceFiles(${SCRIPT_MODULE_PATH} SCRIPT_MODULE_PRIVATE_SOURCES)
+    if(SCRIPT_MODULE STREQUAL "AIO" AND NOT WITH_CAIO_EXAMPLES)
+      list(FILTER SCRIPT_MODULE_PRIVATE_SOURCES EXCLUDE REGEX "[/\\\\]ExampleWindow\\.cpp$")
+    endif()
     # Configure the scriptloader
     ConfigureScriptLoader(${SCRIPT_MODULE} SCRIPT_MODULE_PRIVATE_SCRIPTLOADER ON ${SCRIPT_MODULE})
     GetProjectNameOfScriptModule(${SCRIPT_MODULE} SCRIPT_MODULE_PROJECT_NAME)
@@ -203,6 +206,10 @@ set(WORLDSERVER_DYNAMIC_SCRIPT_MODULES_DEPENDENCIES ${DYNAMIC_SCRIPT_MODULE_PROJ
 
 ConfigureScriptLoader("static" SCRIPT_MODULE_PRIVATE_SCRIPTLOADER OFF ${STATIC_SCRIPT_MODULES})
 
+if(NOT WITH_CAIO_EXAMPLES)
+  list(FILTER PRIVATE_SOURCES EXCLUDE REGEX "[/\\\\]AIO[/\\\\]ExampleWindow\\.cpp$")
+endif()
+
 add_library(scripts STATIC
   ScriptLoader.h
   ${SCRIPT_MODULE_PRIVATE_SCRIPTLOADER}
@@ -218,6 +225,10 @@ target_include_directories(scripts
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
 
+if(WITH_CAIO_EXAMPLES)
+  target_compile_definitions(scripts PRIVATE WITH_CAIO_EXAMPLES)
+endif()
+
 set_target_properties(scripts
   PROPERTIES
     COMPILE_WARNING_AS_ERROR ${WITH_WARNINGS_AS_ERRORS}
@@ -225,8 +236,16 @@ set_target_properties(scripts
 
 # Generate precompiled header
 if(USE_SCRIPTPCH)
+  set(SCRIPT_PCH_REUSE_PROJECTS ${DYNAMIC_SCRIPT_MODULE_PROJECTS})
+  if(WITH_CAIO_EXAMPLES)
+    foreach(script_project ${DYNAMIC_SCRIPT_MODULE_PROJECTS})
+      target_compile_definitions(${script_project} PRIVATE WITH_CAIO_EXAMPLES)
+    endforeach()
+    GetProjectNameOfScriptModule("AIO" SCRIPT_AIO_PROJECT_NAME)
+    list(REMOVE_ITEM SCRIPT_PCH_REUSE_PROJECTS ${SCRIPT_AIO_PROJECT_NAME})
+  endif()
   add_cxx_pch("scripts" ${PRIVATE_PCH_HEADER} ${DYNAMIC_SCRIPT_MODULE_PROJECTS})
-  reuse_cxx_pch("${DYNAMIC_SCRIPT_MODULE_PROJECTS}" scripts)
+  reuse_cxx_pch("${SCRIPT_PCH_REUSE_PROJECTS}" scripts)
 endif()
 
 # Remove all shared libraries in the installl directory which

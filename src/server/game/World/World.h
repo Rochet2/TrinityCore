@@ -35,11 +35,17 @@
 #include <map>
 #include <unordered_map>
 
+#include "AIO.h"
+
+class Object;
 class Player;
 class WorldPacket;
 class WorldSession;
 class WorldSocket;
 struct Realm;
+
+class LuaVal;
+class AIOMsg;
 
 // ServerMessages.dbc
 enum ServerMessageType
@@ -388,6 +394,16 @@ enum WorldIntConfigs : uint32
     CONFIG_CHARTER_COST_ARENA_5v5,
     CONFIG_NO_GRAY_AGGRO_ABOVE,
     CONFIG_NO_GRAY_AGGRO_BELOW,
+    CONFIG_AIO_MAXPARTS,
+    CONFIG_AIO_MSG_MAX_LEN,
+    CONFIG_AIO_INIT_COOLDOWN,
+    CONFIG_AIO_MSG_CACHE_TIME,
+    CONFIG_AIO_MSG_CACHE_DELAY,
+    CONFIG_AIO_MAX_BUFFER_SIZE,
+    CONFIG_AIO_MAX_INCOMING,
+    CONFIG_AIO_MSG_RATE_MS,
+    CONFIG_AIO_MAX_BLOCKS,
+    CONFIG_AIO_MAX_PARSE_FAILURES,
     CONFIG_AUCTION_GETALL_DELAY,
     CONFIG_AUCTION_SEARCH_DELAY,
     CONFIG_TALENTS_INSPECTING,
@@ -770,6 +786,33 @@ class TC_GAME_API World
 
         void ReloadRBAC();
 
+        struct AIOAddon
+        {
+            std::string name;
+            std::string code;
+            std::string file;
+            uint32 crc;
+            uint32 permission;
+
+            AIOAddon(std::string const& addonName, std::string const& addonFile, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION)
+                : name(addonName), file(addonFile), crc(0), permission(permission) { }
+        };
+
+        std::string GetAIOPrefix() const { return m_aioprefix; }
+        std::string const& GetAIOClientWirePrefix() const { return m_aioClientWirePrefix; }
+        std::string GetAIOClientScriptPath() const { return m_aioclientpath; }
+
+        void ForceReloadPlayerAddons(uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
+        void ForceResetPlayerAddons(uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
+        void AIOMessageAll(AIOMsg& msg, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
+        void SendAllSimpleAIOMessage(std::string const& message, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
+        bool ReloadAddons();
+        bool AddAddon(AIOAddon const& addon);
+        bool RemoveAddon(std::string const& addonName, uint32* permission = nullptr);
+        uint32 PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const;
+
+        void ValidateAIOSettings();
+
         void RemoveOldCorpses();
         void TriggerGuidWarning();
         void TriggerGuidAlert();
@@ -891,7 +934,14 @@ class TC_GAME_API World
         uint32 _warnDiff;
         time_t _warnShutdownTime;
 
-    friend class debug_commandscript;
+        typedef std::list<AIOAddon> AddonCodeListType;
+        AddonCodeListType m_AddonList;
+        std::string m_aioprefix;
+        std::string m_aioClientWirePrefix;
+        std::string m_aioclientpath;
+
+        friend class AIOScript;
+        friend class debug_commandscript;
 };
 
 TC_GAME_API extern Realm realm;

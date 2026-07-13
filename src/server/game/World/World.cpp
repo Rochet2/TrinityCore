@@ -88,7 +88,14 @@
 #include "WhoListStorage.h"
 #include "WorldSession.h"
 
+#include <fstream>
 #include <boost/asio/ip/address.hpp>
+#include <boost/crc.hpp>
+#include <boost/filesystem.hpp>
+#include "AIOUtil.h"
+#include "AIOMsg.h"
+#include "WorldAIO.h"
+#include "smallfolk.h"
 
 TC_GAME_API std::atomic<bool> World::m_stopEvent(false);
 TC_GAME_API uint8 World::m_ExitCode = SHUTDOWN_EXIT_CODE;
@@ -1563,6 +1570,27 @@ void World::LoadConfigSettings(bool reload)
     m_bool_configs[CONFIG_CALCULATE_CREATURE_ZONE_AREA_DATA] = sConfigMgr->GetBoolDefault("Calculate.Creature.Zone.Area.Data", false);
     m_bool_configs[CONFIG_CALCULATE_GAMEOBJECT_ZONE_AREA_DATA] = sConfigMgr->GetBoolDefault("Calculate.Gameoject.Zone.Area.Data", false);
 
+    // AIO (255 = max WoW addon whisper length; must match client AIO_MsgLen when using client-side AIO)
+    m_int_configs[CONFIG_AIO_MAXPARTS] = sConfigMgr->GetIntDefault("AIO.MaxParts", 64);
+    m_int_configs[CONFIG_AIO_MSG_MAX_LEN] = std::min<uint32>(sConfigMgr->GetIntDefault("AIO.MsgMaxLen", AIO_MAX_WHISPER_LENGTH), AIO_MAX_WHISPER_LENGTH);
+    m_int_configs[CONFIG_AIO_INIT_COOLDOWN] = sConfigMgr->GetIntDefault("AIO.InitCooldown", 5000);
+    // Matches AIO.lua AIO_MSG_CACHE_TIME / AIO_MSG_CACHE_DELAY (server-side reassembly)
+    m_int_configs[CONFIG_AIO_MSG_CACHE_TIME] = sConfigMgr->GetIntDefault("AIO.MsgCacheTime", 15000);
+    m_int_configs[CONFIG_AIO_MSG_CACHE_DELAY] = sConfigMgr->GetIntDefault("AIO.MsgCacheDelay", 5000);
+    m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE] = sConfigMgr->GetIntDefault("AIO.MaxBufferSize", 1048576);
+    m_int_configs[CONFIG_AIO_MAX_INCOMING] = sConfigMgr->GetIntDefault("AIO.MaxIncomingMessageSize", 262144);
+    m_int_configs[CONFIG_AIO_MSG_RATE_MS] = sConfigMgr->GetIntDefault("AIO.MsgRateLimitMs", 50);
+    m_int_configs[CONFIG_AIO_MAX_BLOCKS] = sConfigMgr->GetIntDefault("AIO.MaxBlocks", 32);
+    m_int_configs[CONFIG_AIO_MAX_PARSE_FAILURES] = sConfigMgr->GetIntDefault("AIO.MaxParseFailures", 16);
+    m_aioclientpath = sConfigMgr->GetStringDefault("AIO.ClientScriptPath", "lua_client_scripts");
+    m_aioprefix = sConfigMgr->GetStringDefault("AIO.Prefix", "AIO");
+    if (m_aioprefix.size() > 15u)
+        m_aioprefix = m_aioprefix.substr(0, 15);
+    m_aioClientWirePrefix = "C" + m_aioprefix;
+
+    if (m_int_configs[CONFIG_AIO_MAX_INCOMING] > m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE])
+        m_int_configs[CONFIG_AIO_MAX_INCOMING] = m_int_configs[CONFIG_AIO_MAX_BUFFER_SIZE];
+
     // HotSwap
     m_bool_configs[CONFIG_HOTSWAP_ENABLED] = sConfigMgr->GetBoolDefault("HotSwap.Enabled", true);
     m_bool_configs[CONFIG_HOTSWAP_RECOMPILER_ENABLED] = sConfigMgr->GetBoolDefault("HotSwap.EnableReCompiler", true);
@@ -1616,6 +1644,7 @@ void World::SetInitialWorldSettings()
 
     ///- Initialize config settings
     LoadConfigSettings();
+    ValidateAIOSettings();
 
     ///- Initialize Allowed Security Level
     LoadDBAllowedSecurityLevel();
@@ -3599,6 +3628,193 @@ void World::ReloadRBAC()
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
         if (WorldSession* session = itr->second)
             session->InvalidateRBACData();
+}
+
+bool World::AddAddon(AIOAddon const& addon)
+{
+    if (addon.file.empty())
+        return false;
+
+    if (!Trinity::AIO::IsSafeAddonRelativePath(addon.file))
+    {
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO AddAddon: rejected unsafe path '{}' for addon {}", addon.file, addon.name);
+        return false;
+    }
+
+    // Check if addon already exist
+    for (AddonCodeListType::iterator itr = m_AddonList.begin(); itr != m_AddonList.end(); ++itr)
+    {
+        if (itr->name == addon.name)
+        {
+            return false;
+        }
+    }
+
+    AIOAddon copy(addon);
+    copy.code = "";
+
+    // Format path
+    std::string path;
+    path = sWorld->GetAIOClientScriptPath();
+    if (path.back() != '/' && path.back() != '\\')
+    {
+        path += '/';
+    }
+    path += copy.file;
+
+    // Get file
+    std::ifstream in(path, std::ios::in | std::ios::binary);
+    if (in)
+    {
+        in.seekg(0, std::ios::end);
+        copy.code.resize(in.tellg());
+        in.seekg(0, std::ios::beg);
+        in.read(&copy.code[0], copy.code.size());
+        in.close();
+        if (copy.code.empty())
+        {
+            return false;
+        }
+    }
+    else
+    {
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO AddAddon: Couldn't open file {} of addon {}", path, copy.name);
+        return false;
+    }
+
+    // Set crc on original file content
+    boost::crc_32_type crc_result;
+    crc_result.process_bytes(copy.code.data(), copy.code.length());
+    copy.crc = crc_result.checksum();
+
+    // Uncompressed addon payload (compression/obfuscation not implemented)
+    copy.code = std::string(1, 'U') + copy.code;
+    m_AddonList.push_back(copy);
+
+    sLog->outAIOMessage(0, LOG_LEVEL_INFO, "AIO: Loaded addon {} from file {}", copy.name, copy.file);
+    return true;
+}
+
+bool World::RemoveAddon(std::string const& addonName, uint32* permission)
+{
+    for (AddonCodeListType::iterator itr = m_AddonList.begin(); itr != m_AddonList.end(); ++itr)
+    {
+        if (itr->name == addonName)
+        {
+            if (permission)
+                *permission = itr->permission;
+            m_AddonList.erase(itr);
+            return true;
+        }
+    }
+    return false;
+}
+
+void World::ValidateAIOSettings()
+{
+    if (m_aioprefix.empty())
+        TC_LOG_ERROR("server.loading", "AIO.Prefix must not be empty.");
+
+    if (m_int_configs[CONFIG_AIO_MSG_MAX_LEN] != AIO_MAX_WHISPER_LENGTH)
+    {
+        TC_LOG_WARN("server.loading", "AIO.MsgMaxLen is {} but {} is required for 3.3.5 addon whispers; clamping.",
+            m_int_configs[CONFIG_AIO_MSG_MAX_LEN], AIO_MAX_WHISPER_LENGTH);
+        m_int_configs[CONFIG_AIO_MSG_MAX_LEN] = AIO_MAX_WHISPER_LENGTH;
+    }
+
+    boost::filesystem::path clientPath(m_aioclientpath);
+    if (!boost::filesystem::exists(clientPath))
+        TC_LOG_WARN("server.loading", "AIO.ClientScriptPath '{}' does not exist (create it or fix the config).", m_aioclientpath);
+    else if (!boost::filesystem::is_directory(clientPath))
+        TC_LOG_ERROR("server.loading", "AIO.ClientScriptPath '{}' is not a directory.", m_aioclientpath);
+
+    TC_LOG_INFO("server.loading", "AIO: wire prefix '{}', client scripts '{}', max incoming {} bytes, max blocks {}, rate limit {} ms, parse failure limit {}.",
+        m_aioClientWirePrefix, m_aioclientpath, m_int_configs[CONFIG_AIO_MAX_INCOMING], m_int_configs[CONFIG_AIO_MAX_BLOCKS],
+        m_int_configs[CONFIG_AIO_MSG_RATE_MS], m_int_configs[CONFIG_AIO_MAX_PARSE_FAILURES]);
+}
+
+bool World::ReloadAddons()
+{
+    sLog->outAIOMessage(0, LOG_LEVEL_INFO, "World::ReloadAddons()");
+
+    AddonCodeListType prevAddonList;
+    prevAddonList.swap(m_AddonList);
+    try
+    {
+        for (AddonCodeListType::const_iterator itr = prevAddonList.begin(); itr != prevAddonList.end(); ++itr)
+        {
+            AddAddon(*itr);
+        }
+    }
+    catch (std::exception &e)
+    {
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO: Error reloading addons. Exception: {}", e.what());
+        m_AddonList.swap(prevAddonList);
+        return false;
+    }
+    catch (...)
+    {
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO: Error reloading addons");
+        m_AddonList.swap(prevAddonList);
+        return false;
+    }
+    return true;
+}
+
+uint32 World::PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const
+{
+    if (!clientData.istable())
+        return 0;
+
+    uint32 i = 0;
+    for (AddonCodeListType::const_iterator itr = m_AddonList.begin(); itr != m_AddonList.end(); ++itr)
+    {
+        if (!forPlayer->GetSession()->HasPermission(itr->permission))
+            continue;
+
+        LuaVal CRCVal = clientData.get(itr->name);
+        if (CRCVal == itr->crc)
+        {
+            cacheTable[static_cast<unsigned int>(++i)] = itr->name;
+        }
+        else
+        {
+            LuaVal addonData(TTABLE);
+            addonData["name"] = itr->name;
+            addonData["crc"] = itr->crc;
+            addonData["code"] = itr->code;
+            addonsTable[static_cast<unsigned int>(++i)] = addonData;
+        }
+    }
+    return i;
+}
+
+void World::ForceReloadPlayerAddons(uint32 permission)
+{
+    for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
+    {
+        if (itr->second->GetPlayer() && itr->second->HasPermission(permission))
+            itr->second->GetPlayer()->ForceReloadAddons();
+    }
+}
+
+void World::ForceResetPlayerAddons(uint32 permission)
+{
+    for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
+    {
+        if (itr->second->GetPlayer() && itr->second->HasPermission(permission))
+            itr->second->GetPlayer()->ForceResetAddons();
+    }
+}
+
+void World::AIOMessageAll(AIOMsg& msg, uint32 permission)
+{
+    Trinity::AIO::MessageAll(this, msg, permission);
+}
+
+void World::SendAllSimpleAIOMessage(std::string const& message, uint32 permission)
+{
+    Trinity::AIO::SendAllSimple(this, message, permission);
 }
 
 void World::RemoveOldCorpses()

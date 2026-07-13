@@ -112,6 +112,8 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include "AIOMsg.h"
+#include "PlayerAIO.h"
 #include "WorldStatePackets.h"
 
 #define ZONE_UPDATE_INTERVAL (1*IN_MILLISECONDS)
@@ -336,6 +338,10 @@ Player::Player(WorldSession* session): Unit(true)
 
     m_achievementMgr = new AchievementMgr(this);
     m_reputationMgr = new ReputationMgr(this);
+
+    m_aioInitCd = false;
+    m_aioInitTimer = 0;
+    m_messageIdIndex = 1;
 }
 
 Player::~Player()
@@ -1239,6 +1245,17 @@ void Player::Update(uint32 p_time)
 
     if (IsHasDelayedTeleport())
         TeleportTo(m_teleport_dest, m_teleport_options);
+
+    // AIO init cooldown
+    if (m_aioInitCd)
+    {
+        m_aioInitTimer += p_time;
+        if (m_aioInitTimer >= sWorld->getIntConfig(CONFIG_AIO_INIT_COOLDOWN))
+        {
+            m_aioInitCd = false;
+            m_aioInitTimer = 0;
+        }
+    }
 }
 
 void Player::Heartbeat()
@@ -20561,6 +20578,70 @@ void Player::Whisper(uint32 textId, Player* target, bool /*isBossWhisper = false
     WorldPackets::Chat::Chat packet;
     packet.Initialize(CHAT_MSG_WHISPER, LANG_UNIVERSAL, this, target, bct->GetText(locale, GetGender()), 0, "", locale);
     target->SendDirectMessage(packet.Write());
+}
+
+void Player::ForceReloadAddons()
+{
+    Trinity::AIO::Handle(this, "AIO", "ForceReload");
+}
+
+void Player::ForceResetAddons()
+{
+    Trinity::AIO::Handle(this, "AIO", "ForceReset");
+}
+
+void Player::SendSimpleAIOMessage(std::string const& message)
+{
+    if (message.empty())
+        return;
+
+    std::string const& aioPrefix = sWorld->GetAIOPrefix();
+    uint32 const maxPacketLen = std::min<uint32>(sWorld->getIntConfig(CONFIG_AIO_MSG_MAX_LEN), AIO_MAX_WHISPER_LENGTH);
+    uint32 const shortHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 2; // S + prefix + tab + short id
+    uint32 const longHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 6;  // S + prefix + tab + long meta
+
+    if (shortHeaderLen + message.size() <= size_t(maxPacketLen))
+    {
+        std::string fullmsg = "S" + aioPrefix + "\t\x1\x1" + message;
+        WorldPackets::Chat::Chat packet;
+        packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
+        SendDirectMessage(packet.Write());
+        return;
+    }
+
+    uint32 const chunkLen = maxPacketLen > longHeaderLen ? maxPacketLen - longHeaderLen : 1;
+    float const messageLen = float(message.size());
+    uint16 const parts = uint16(std::ceil(messageLen / float(chunkLen)));
+
+    uint16 high = uint16(std::floor(float(parts) / 254.0f));
+    std::string partsStr(1, char(high + 1));
+    partsStr += char(parts - high * 254 + 1);
+
+    high = uint16(std::floor(float(m_messageIdIndex) / 254.0f));
+    std::string messageIdStr(1, char(high + 1));
+    messageIdStr += char(m_messageIdIndex - high * 254 + 1);
+
+    if (m_messageIdIndex >= 64769) // 2^16 - 767
+        m_messageIdIndex = 1;
+    else
+        ++m_messageIdIndex;
+
+    size_t cursor = 0;
+    for (uint16 partId = 1; partId <= parts; ++partId)
+    {
+        high = uint16(std::floor(float(partId) / 254.0f));
+        std::string partIdStr(1, char(high + 1));
+        partIdStr += char(partId - high * 254 + 1);
+
+        std::string fullmsg = "S" + aioPrefix + "\t" + messageIdStr + partsStr + partIdStr;
+        fullmsg += message.substr(cursor, chunkLen);
+
+        WorldPackets::Chat::Chat packet;
+        packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
+        SendDirectMessage(packet.Write());
+
+        cursor += chunkLen;
+    }
 }
 
 Item* Player::GetMItem(ObjectGuid::LowType id)

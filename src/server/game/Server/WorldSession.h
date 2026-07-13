@@ -1258,6 +1258,7 @@ class TC_GAME_API WorldSession
         AsyncCallbackProcessor<SQLQueryHolderCallback> _queryHolderProcessor;
 
     friend class World;
+    friend class ScriptMgr;
     protected:
         class DosProtection
         {
@@ -1302,6 +1303,15 @@ class TC_GAME_API WorldSession
         {
             return _legitCharacters.find(lowGUID) != _legitCharacters.end();
         }
+
+        enum class IncomingAIOWhisperResult : uint8
+        {
+            NotAIO,
+            Consumed,
+            DropPacket
+        };
+
+        IncomingAIOWhisperResult HandleIncomingAIOClientWhisper(Player* sender, Player* receiver, std::string const& msg);
 
         // Movement helpers
         Unit* ValidateAndGetUnitBeingMoved(ObjectGuid guid, OpcodeClient opcode, bool forStatusAck) const;
@@ -1369,6 +1379,32 @@ class TC_GAME_API WorldSession
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;
+
+        // AIO
+        typedef std::map<uint32, std::string> AddonPartStringMap;
+        struct LongMessageBufferInfo
+        {
+            uint32 Parts = 0;
+            uint32 Timer = 0;
+            uint32 BufferedBytes = 0;
+            AddonPartStringMap Map;
+        };
+        typedef std::map<uint32, LongMessageBufferInfo> AddonMessageBufferMap;
+        AddonMessageBufferMap _addonMessageBuffer;
+        uint32 _aioMsgCacheSweepTimer = 0;
+        uint32 _aioLastCompleteMessageMs = 0;
+        uint32 _aioRateLimitedCount = 0;
+        uint32 _aioParseFailureCount = 0;
+
+        enum class AIOIncomingGateResult : uint8
+        {
+            Allow,
+            RateLimited
+        };
+
+        AIOIncomingGateResult CheckAIOIncomingGate(Player* sender, size_t payloadBytes);
+        void NotifyAIOIncomingParseFailure(Player* sender);
+        void RecordAIOIncomingAbuse(Player* sender, char const* reason);
 };
 
 #endif

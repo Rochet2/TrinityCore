@@ -22,6 +22,7 @@ void AddSC_ahbot_commandscript();
 void AddSC_arena_commandscript();
 void AddSC_ban_commandscript();
 void AddSC_bf_commandscript();
+void AddSC_caio_commandscript();
 void AddSC_bg_commandscript();
 void AddSC_cast_commandscript();
 void AddSC_character_commandscript();
@@ -68,6 +69,7 @@ void AddCommandsScripts()
     AddSC_arena_commandscript();
     AddSC_ban_commandscript();
     AddSC_bf_commandscript();
+    AddSC_caio_commandscript();
     AddSC_bg_commandscript();
     AddSC_cast_commandscript();
     AddSC_character_commandscript();

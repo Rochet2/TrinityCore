@@ -224,6 +224,11 @@ void Log::OutCommandImpl(uint32 account, Trinity::FormatStringView messageFormat
     write(std::make_unique<LogMessage>(LOG_LEVEL_INFO, "commands.gm", Trinity::StringVFormat(messageFormat, messageFormatArgs), Trinity::ToString(account)));
 }
 
+void Log::OutAIOMessageImpl(uint32 account, LogLevel level, Trinity::FormatStringView messageFormat, Trinity::FormatArgs messageFormatArgs)
+{
+    write(std::make_unique<LogMessage>(level, "AIO", Trinity::StringVFormat(messageFormat, messageFormatArgs), account ? Trinity::ToString(account) : "World"));
+}
+
 void Log::write(std::unique_ptr<LogMessage> msg) const
 {
     Logger const* logger = GetLoggerByType(msg->type);

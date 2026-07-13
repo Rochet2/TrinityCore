@@ -1243,6 +1243,12 @@ enum TrinityStrings
     LANG_SHUTDOWN_CANCELLED                       = 11018,
     LANG_YOU_CHANGE_POWER                         = 11019, // master branch ONLY
     LANG_YOUR_POWER_CHANGED                       = 11020, // master branch ONLY
-    LANG_INVALID_POWER_NAME                       = 11021  // master branch ONLY
+    LANG_INVALID_POWER_NAME                       = 11021, // master branch ONLY
+
+    LANG_CAIO_FORCERELOAD_SENT                    = 60002,
+    LANG_CAIO_FORCERESET_SENT                     = 60003,
+    LANG_CAIO_RELOADADDONS_ERROR                  = 60004,
+    LANG_CAIO_ADDADDON_ERROR                      = 60005,
+    LANG_CAIO_REMOVEADDON_ERROR                   = 60006,
 };
 #endif

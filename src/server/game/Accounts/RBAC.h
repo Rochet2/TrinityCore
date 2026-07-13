@@ -751,6 +751,7 @@ enum RBACPermissions
     //
     // IF YOU ADD NEW PERMISSIONS, ADD THEM IN MASTER BRANCH AS WELL!
     //
+    RBAC_PERM_COMMAND_CAIO                                   = 5000,
     // custom permissions 1000+
     RBAC_PERM_MAX
 };
