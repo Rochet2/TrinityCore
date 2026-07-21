@@ -262,31 +262,28 @@ CreatureDifficulty const* CreatureTemplate::GetDifficulty(Difficulty difficulty)
         return GetDifficulty(Difficulty(difficultyEntry->FallbackDifficultyID));
 
     // No data for DIFFICULTY_NONE (0)
-    struct DefaultCreatureDifficulty : public CreatureDifficulty
+    static CreatureDifficulty constexpr DefDifficulty =
     {
-        DefaultCreatureDifficulty()
-        {
-            DeltaLevelMin = 0;
-            DeltaLevelMax = 0;
-            ContentTuningID = 0;
-            HealthScalingExpansion = 0;
-            HealthModifier = 1.f;
-            ManaModifier = 1.f;
-            ArmorModifier = 1.f;
-            DamageModifier = 1.f;
-            CreatureDifficultyID = 0;
-            TypeFlags = 0;
-            TypeFlags2 = 0;
-            TypeFlags3 = 0;
-            LootID = 0;
-            PickPocketLootID = 0;
-            SkinLootID = 0;
-            GoldMin = 0;
-            GoldMax = 0;
-        }
+        .DeltaLevelMin = 0,
+        .DeltaLevelMax = 0,
+        .ContentTuningID = 0,
+        .HealthScalingExpansion = 0,
+        .HealthModifier = 1.f,
+        .ManaModifier = 1.f,
+        .ArmorModifier = 1.f,
+        .DamageModifier = 1.f,
+        .CreatureDifficultyID = 0,
+        .TypeFlags = 0,
+        .TypeFlags2 = 0,
+        .TypeFlags3 = 0,
+        .LootID = 0,
+        .PickPocketLootID = 0,
+        .SkinLootID = 0,
+        .GoldMin = 0,
+        .GoldMax = 0,
+        .StaticFlags = CreatureStaticFlagsHolder()
     };
-    static const DefaultCreatureDifficulty defDifficulty;
-    return &defDifficulty;
+    return &DefDifficulty;
 }
 
 bool AssistDelayEvent::Execute(uint64 /*e_time*/, uint32 /*p_time*/)
@@ -1542,24 +1539,21 @@ void Creature::SaveToDB(uint32 mapid, std::vector<Difficulty> const& spawnDiffic
 
     // check if it's a custom model and if not, use 0 for displayId
     CreatureTemplate const* cinfo = GetCreatureTemplate();
-    if (cinfo)
-    {
-        for (CreatureModel const& model : cinfo->Models)
-            if (displayId && displayId == model.CreatureDisplayID)
-                displayId = 0;
+    for (CreatureModel const& model : cinfo->Models)
+        if (displayId && displayId == model.CreatureDisplayID)
+            displayId = 0;
 
-        if (spawnNpcFlags != cinfo->npcflag)
-            npcflag = spawnNpcFlags;
+    if (spawnNpcFlags != cinfo->npcflag)
+        npcflag = spawnNpcFlags;
 
-        if (m_unitData->Flags != cinfo->unit_flags)
-            unitFlags = m_unitData->Flags;
+    if (m_unitData->Flags != cinfo->unit_flags)
+        unitFlags = m_unitData->Flags;
 
-        if (m_unitData->Flags2 != cinfo->unit_flags2)
-            unitFlags2 = m_unitData->Flags2;
+    if (m_unitData->Flags2 != cinfo->unit_flags2)
+        unitFlags2 = m_unitData->Flags2;
 
-        if (m_unitData->Flags3 != cinfo->unit_flags3)
-            unitFlags3 = m_unitData->Flags3;
-    }
+    if (m_unitData->Flags3 != cinfo->unit_flags3)
+        unitFlags3 = m_unitData->Flags3;
 
     if (!data.spawnId)
         data.spawnId = m_spawnId;
@@ -1584,7 +1578,9 @@ void Creature::SaveToDB(uint32 mapid, std::vector<Difficulty> const& spawnDiffic
     // prevent add data integrity problems
     data.wander_distance = GetDefaultMovementType() == IDLE_MOTION_TYPE ? 0.0f : m_wanderDistance;
     data.currentwaypoint = 0;
-    data.curHealthPct = uint32(GetHealthPct());
+    if (!cinfo->RegenHealth)
+        data.curHealthPct = uint32(GetHealthPct());
+
     // prevent add data integrity problems
     data.movementType = !m_wanderDistance && GetDefaultMovementType() == RANDOM_MOTION_TYPE
         ? IDLE_MOTION_TYPE : GetDefaultMovementType();
@@ -2059,7 +2055,13 @@ void Creature::LoadEquipment(int8 id, bool force /*= true*/)
 
 void Creature::SetSpawnHealth()
 {
-    SetHealth(CountPctFromMaxHealth(m_creatureData ? m_creatureData->curHealthPct : 100));
+    // set health only if regenerating is not enabled (otherwise it would immediately go back to full health anyway)
+    if (!_regenerateHealth && m_creatureData && m_creatureData->curHealthPct)
+        SetHealth(CountPctFromMaxHealth(*m_creatureData->curHealthPct));
+    // or when creature respawns in legacy compatibility mode
+    else if (getDeathState() == JUST_RESPAWNED)
+        SetFullHealth();
+
     SetInitialPowerValue(GetPowerType());
 }
 
