@@ -246,7 +246,7 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
 
     - uses: actions/checkout@v6
@@ -282,17 +282,19 @@ jobs:
     - name: Dependencies
       if: steps.upstream.outputs.merge_needed == 'true'
       run: |
-        sudo apt-get update && sudo apt-get install -yq libboost-all-dev g++-11 ccache
-        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 --slave /usr/bin/g++ g++ /usr/bin/g++-11
+        sudo apt-get update && sudo apt-get install -yq ccache clang-17 \
+          libboost-dev libboost-filesystem-dev libboost-locale-dev \
+          libboost-program-options-dev libboost-regex-dev libboost-thread-dev \
+          libssl-dev libreadline-dev zlib1g-dev libbz2-dev
 
     - name: Restore ccache
       if: steps.upstream.outputs.merge_needed == 'true'
       uses: actions/cache/restore@v5
       with:
         path: .ccache
-        key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}
+        key: ccache-335-u24-${{ matrix.branch }}-${{ matrix.pch }}
         restore-keys: |
-          ccache-335-3.3.5-${{ matrix.pch }}
+          ccache-335-u24-3.3.5-${{ matrix.pch }}
 
     - name: Init ccache directory
       if: steps.upstream.outputs.merge_needed == 'true'
@@ -300,6 +302,9 @@ jobs:
 
     - name: Setup
       if: steps.upstream.outputs.merge_needed == 'true'
+      env:
+        CC: /usr/bin/clang-17
+        CXX: /usr/bin/clang++-17
       run: |
         mkdir bin
         cd bin
@@ -333,14 +338,14 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh cache delete "ccache-335-${{ matrix.branch }}-${{ matrix.pch }}" --repo "${{ github.repository }}" || true
+        gh cache delete "ccache-335-u24-${{ matrix.branch }}-${{ matrix.pch }}" --repo "${{ github.repository }}" || true
 
     - name: Save ccache
       if: success() && steps.upstream.outputs.merge_needed == 'true' && steps.ccache_has_data.outputs.has_data == 'true'
       uses: actions/cache/save@v5
       with:
         path: .ccache
-        key: ccache-335-${{ matrix.branch }}-${{ matrix.pch }}
+        key: ccache-335-u24-${{ matrix.branch }}-${{ matrix.pch }}
 
     - name: Unit tests
       if: steps.upstream.outputs.merge_needed == 'true'
