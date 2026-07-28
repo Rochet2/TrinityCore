@@ -117,7 +117,12 @@ jobs:
 
     - name: ccache stats
       if: always() && steps.upstream.outputs.merge_needed == 'true'
-      run: ccache -s
+      run: |
+        if command -v ccache >/dev/null; then
+          ccache -s
+        else
+          echo "ccache not installed (earlier steps skipped), skipping stats"
+        fi
 
     - name: Check ccache has data
       id: ccache_has_data
@@ -319,7 +324,12 @@ jobs:
 
     - name: ccache stats
       if: always() && steps.upstream.outputs.merge_needed == 'true'
-      run: ccache -s
+      run: |
+        if command -v ccache >/dev/null; then
+          ccache -s
+        else
+          echo "ccache not installed (earlier steps skipped), skipping stats"
+        fi
 
     - name: Check ccache has data
       id: ccache_has_data
