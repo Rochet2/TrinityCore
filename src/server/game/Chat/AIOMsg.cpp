@@ -45,7 +45,7 @@ AIOMsg& AIOMsg::Add(LuaVal const& scriptKey, LuaVal const& handlerKey, LuaVal co
         ++nArgs;
     }
 
-    block[1] = nArgs;
+    block[1] = static_cast<unsigned int>(nArgs);
     _val.insert(block);
     return *this;
 }
@@ -61,7 +61,7 @@ AIOMsg& AIOMsg::AppendLast(LuaVal const& a1, LuaVal const& a2, LuaVal const& a3,
     if (!nArgsVal.isnumber())
         return *this;
 
-    unsigned int nArgs = static_cast<unsigned int>(nArgsVal.num());
+    unsigned int nArgs = static_cast<unsigned int>(static_cast<uint32>(nArgsVal.num()));
     if (!a1.isnil())
     {
         block.insert(a1);
@@ -93,6 +93,6 @@ AIOMsg& AIOMsg::AppendLast(LuaVal const& a1, LuaVal const& a2, LuaVal const& a3,
         ++nArgs;
     }
 
-    block[1] = nArgs;
+    block[1] = static_cast<unsigned int>(nArgs);
     return *this;
 }

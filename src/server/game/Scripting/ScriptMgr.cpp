@@ -1022,7 +1022,7 @@ std::string const& ScriptObject::GetName() const
 }
 
 ScriptMgr::ScriptMgr()
-    : _scriptCount(0), _script_loader_callback(nullptr), _scheduledScripts(0), _aioHandlers(nullptr)
+    : _scriptCount(0), _scheduledScripts(0), _aioHandlers(nullptr), _script_loader_callback(nullptr)
 {
 }
 
@@ -2619,7 +2619,7 @@ void ScriptMgr::OnAddonMessage(Player* sender, std::string const& message)
         }
 
         if (AIOScript* aioScript = AIOScript::FindByKey(scriptKeyVal))
-            aioScript->OnHandle(sender, handlerKeyVal, block);
+            aioScript->HandleAddonBlock(sender, handlerKeyVal, block);
     }
 }
 
@@ -2681,6 +2681,11 @@ AIOScript* AIOScript::FindByKey(LuaVal const& scriptKey)
         return nullptr;
 
     return itr->second;
+}
+
+void AIOScript::HandleAddonBlock(Player* sender, LuaVal const& handlerKey, LuaVal const& args)
+{
+    OnHandle(sender, handlerKey, args);
 }
 
 template<class ScriptClass>
@@ -2748,13 +2753,13 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
         uint32 index = 3;
         LuaVal hookBlock(TTABLE);
 
-        hookBlock[1] = static_cast<unsigned int>(itr->argsList.size() + 1);
+        hookBlock[1] = static_cast<unsigned int>(itr->argsList.size()) + 1u;
         hookBlock[2] = itr->scriptKey;
         hookBlock[3] = itr->handlerKey;
         for (std::list<ArgFunc>::const_iterator it = itr->argsList.begin(); it != itr->argsList.end(); ++it)
-            hookBlock[++index] = (*it)(sender);
+            hookBlock[static_cast<int>(++index)] = (*it)(sender);
 
-        argsToSend[++blockIndex] = hookBlock;
+        argsToSend[static_cast<unsigned int>(++blockIndex)] = hookBlock;
     }
 
     LuaVal AIOInitBlock(TTABLE);
@@ -2762,7 +2767,7 @@ void AIOHandlers::HandleInit(Player* sender, LuaVal const& args)
     AIOInitBlock[2] = "AIO";
     AIOInitBlock[3] = "Init";
     AIOInitBlock[4] = AIO_VERSION;
-    AIOInitBlock[5] = nAddons;
+    AIOInitBlock[5] = static_cast<unsigned int>(nAddons);
     AIOInitBlock[6] = addonTable;
     AIOInitBlock[7] = cacheTable;
 

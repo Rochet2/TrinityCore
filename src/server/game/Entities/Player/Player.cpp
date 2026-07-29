@@ -20603,7 +20603,8 @@ void Player::SendSimpleAIOMessage(std::string const& message)
     }
 
     uint32 const chunkLen = maxPacketLen > longHeaderLen ? maxPacketLen - longHeaderLen : 1;
-    uint16 const parts = uint16(std::ceil(float(message.size()) / float(chunkLen)));
+    float const messageLen = float(message.size());
+    uint16 const parts = uint16(std::ceil(messageLen / float(chunkLen)));
 
     uint16 high = uint16(std::floor(float(parts) / 254.0f));
     std::string partsStr(1, char(high + 1));

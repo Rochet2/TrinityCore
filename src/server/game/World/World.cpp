@@ -3731,7 +3731,7 @@ uint32 World::PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable,
         LuaVal CRCVal = clientData.get(itr->name);
         if (CRCVal == itr->crc)
         {
-            cacheTable[++i] = itr->name;
+            cacheTable[static_cast<unsigned int>(++i)] = itr->name;
         }
         else
         {
@@ -3739,7 +3739,7 @@ uint32 World::PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable,
             addonData["name"] = itr->name;
             addonData["crc"] = itr->crc;
             addonData["code"] = itr->code;
-            addonsTable[++i] = addonData;
+            addonsTable[static_cast<unsigned int>(++i)] = addonData;
         }
     }
     return i;

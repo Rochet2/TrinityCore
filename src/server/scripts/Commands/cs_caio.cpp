@@ -48,7 +48,7 @@ public:
 
     static bool HandleVersionCommand(ChatHandler* handler)
     {
-        handler->PSendSysMessage("AIO version {} (protocol {:.2f}).", AIO_VERSION_STRING, AIO_VERSION);
+        handler->PSendSysMessage("AIO version %s (protocol %.2f).", AIO_VERSION_STRING, AIO_VERSION);
         return true;
     }
 
