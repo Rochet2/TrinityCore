@@ -35,13 +35,7 @@
 #include <map>
 #include <unordered_map>
 
-#define AIO_VERSION 1.75
-#define AIO_VERSION_STRING "1.75"
-
-// RBAC permission id used when distributing addons/messages to players (see sql/CAIO/Auth.sql)
-constexpr uint32 AIO_DEFAULT_ADDON_PERMISSION = 195;
-// WoW addon whisper payload limit (matches client AIO.lua when AIO_SERVER is false)
-constexpr uint32 AIO_MAX_WHISPER_LENGTH = 255;
+#include "AIO.h"
 
 class Object;
 class Player;
@@ -810,7 +804,7 @@ class TC_GAME_API World
         bool ReloadAddons();
         bool AddAddon(AIOAddon const& addon);
         bool RemoveAddon(std::string const& addonName, uint32* permission = nullptr);
-        size_t PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const;
+        uint32 PrepareClientAddons(LuaVal const& clientData, LuaVal& addonsTable, LuaVal& cacheTable, Player* forPlayer) const;
 
         void RemoveOldCorpses();
         void TriggerGuidWarning();

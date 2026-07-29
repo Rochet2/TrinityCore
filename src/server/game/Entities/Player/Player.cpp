@@ -20594,7 +20594,7 @@ void Player::SendSimpleAIOMessage(std::string const& message)
     uint32 const shortHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 2; // S + prefix + tab + short id
     uint32 const longHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 6;  // S + prefix + tab + long meta
 
-    if (shortHeaderLen + message.size() <= maxPacketLen)
+    if (shortHeaderLen + message.size() <= size_t(maxPacketLen))
     {
         std::string fullmsg = "S" + aioPrefix + "\t\x1\x1" + message;
         WorldPackets::Chat::Chat packet;
