@@ -36,10 +36,6 @@
 
 #include "smallfolk.h"
 
-#include <limits>
-#include <string>
-#include <vector>
-
 struct AccessRequirement;
 struct AchievementEntry;
 struct AreaTableEntry;
@@ -81,7 +77,6 @@ class ReputationMgr;
 class SpellCastTargets;
 class AIOMsg;
 class TradeData;
-class UpdateMask;
 
 enum InventoryType : uint8;
 enum ItemClass : uint8;

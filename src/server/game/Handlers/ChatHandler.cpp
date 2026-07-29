@@ -296,103 +296,11 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
 
             if (lang == LANG_ADDON && receiver)
             {
-                size_t delimPos = msg.find('\t');
-                if (delimPos != std::string::npos)
-                {
-                    std::string prefix = msg.substr(0, delimPos);
-                    if (prefix == "C" + sWorld->GetAIOPrefix())
-                    {
-                        if (receiver != sender)
-                            return;
-
-                        uint16 messageId = 0;
-                        if ((msg.size() - delimPos - 1) >= size_t(2))
-                        {
-                            messageId = (msg[delimPos + 1] - 1) * 254 + msg[delimPos + 2] - 1;
-
-                            if (messageId == 0)
-                            {
-                                sScriptMgr->OnAddonMessage(sender, msg.substr(delimPos + 3));
-                                break;
-                            }
-                        }
-
-                        if ((msg.size() - delimPos - 1) >= size_t(6))
-                        {
-                            uint32 parts = (msg[delimPos + 3] - 1) * 254 + msg[delimPos + 4] - 1;
-                            if (parts < 2)
-                            {
-                                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "HandleAddonMessagechatOpcode: Received AIO addon message with number of parts: %u (< 2). Sender: %s", parts, sender->GetName().c_str());
-                                return;
-                            }
-
-                            uint32 maxparts = sWorld->getIntConfig(CONFIG_AIO_MAXPARTS);
-                            if (parts > maxparts)
-                            {
-                                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "HandleAddonMessagechatOpcode: Received AIO addon message with too many parts: %u (> %u). Message Id: %u, Sender: %s", parts, maxparts, messageId, sender->GetName().c_str());
-                                return;
-                            }
-
-                            uint32 partId = (msg[delimPos + 5] - 1) * 254 + msg[delimPos + 6] - 1;
-                            if (partId < 1 || partId > parts)
-                            {
-                                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "HandleAddonMessagechatOpcode: Invalid AIO part id %u for %u parts. Message Id: %u, Sender: %s", partId, parts, messageId, sender->GetName().c_str());
-                                return;
-                            }
-
-                            std::string const partPayload = msg.substr(delimPos + 7);
-                            uint32 const maxBufferSize = sWorld->getIntConfig(CONFIG_AIO_MAX_BUFFER_SIZE);
-
-                            AddonMessageBufferMap::iterator messagePartsItr = _addonMessageBuffer.find(messageId);
-                            if (messagePartsItr == _addonMessageBuffer.end())
-                                messagePartsItr = _addonMessageBuffer.insert(std::make_pair(messageId, LongMessageBufferInfo())).first;
-                            else if (parts != messagePartsItr->second.Parts)
-                                messagePartsItr->second = LongMessageBufferInfo();
-
-                            messagePartsItr->second.Parts = parts;
-                            messagePartsItr->second.Timer = 0;
-                            messagePartsItr->second.BufferedBytes += uint32(partPayload.size());
-                            if (messagePartsItr->second.BufferedBytes > maxBufferSize)
-                            {
-                                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "HandleAddonMessagechatOpcode: AIO reassembly buffer exceeded %u bytes. Message Id: %u, Sender: %s", maxBufferSize, messageId, sender->GetName().c_str());
-                                _addonMessageBuffer.erase(messagePartsItr);
-                                return;
-                            }
-
-                            messagePartsItr->second.Map[partId] = std::move(partPayload);
-
-                            bool haveAllParts = messagePartsItr->second.Map.size() >= static_cast<size_t>(messagePartsItr->second.Parts);
-                            if (haveAllParts)
-                            {
-                                for (uint32 expectedPart = 1; expectedPart <= parts; ++expectedPart)
-                                {
-                                    if (messagePartsItr->second.Map.find(expectedPart) == messagePartsItr->second.Map.end())
-                                    {
-                                        haveAllParts = false;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (haveAllParts)
-                            {
-                                std::string actualAIOMessage;
-                                actualAIOMessage.reserve(messagePartsItr->second.BufferedBytes);
-                                for (uint32 expectedPart = 1; expectedPart <= parts; ++expectedPart)
-                                    actualAIOMessage += messagePartsItr->second.Map.find(expectedPart)->second;
-
-                                sScriptMgr->OnAddonMessage(sender, actualAIOMessage);
-                                _addonMessageBuffer.erase(messagePartsItr);
-                                break;
-                            }
-
-                            break;
-                        }
-
-                        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "HandleAddonMessagechatOpcode: Received AIO long addon message without meta data, Sender: %s", sender->GetName().c_str());
-                        break;
-                    }
-                }
+                IncomingAIOWhisperResult const aioResult = HandleIncomingAIOClientWhisper(sender, receiver, msg);
+                if (aioResult == IncomingAIOWhisperResult::DropPacket)
+                    return;
+                if (aioResult == IncomingAIOWhisperResult::Consumed)
+                    break;
             }
             if (!receiver || (lang != LANG_ADDON && !receiver->isAcceptWhispers() && receiver->GetSession()->HasPermission(rbac::RBAC_PERM_CAN_FILTER_WHISPERS) && !receiver->IsInWhisperWhiteList(sender->GetGUID())))
             {

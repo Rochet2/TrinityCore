@@ -818,83 +818,8 @@ class TC_GAME_API GroupScript : public ScriptObject
         virtual void OnDisband(Group* group);
 };
 
-// ##################### Abstract AIO handler script #####################
-// Inherit AIOScript to make an AIO handler script
-//
-// See smallfork_cpp at https://github.com/Rochet2/smallfolk_cpp for
-// reference on how to use LuaVal
-//
-// Example of use:
-//
-// class ExampleAIOScript : public AIOScript
-// {
-//     public:
-//         ExampleAIOScript()
-//             : AIOScript("ExampleScriptName")
-//         {
-//             using namespace std::placeholders;
-//
-//             // Loads addon files to addons list and sends them on AIO client initialization
-//             // Looks for the file in path config AIO.ClientScriptPath
-//             AddAddon("ExampleAddon", "example_addon.lua");
-//
-//             // You can also add addons to be sent to players with specific permission
-//             AddAddon("AnotherAddon", "example_addon.lua", 192); // 192 refers to admin RBAC permission
-//
-//             // Handler function signature: void HandlerFunction(Player* sender, LuaVal const& args)
-//             AddHandler("Print", std::bind(&ExampleAIOScript::HandlePrint, this, _1, _2));
-//             AddHandler("Save", std::bind(&ExampleAIOScript::HandleSave, this, _1, _2));
-//
-//             // Initialization handler and arguments
-//             AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleAIOScript::InitArg, this, _1), std::bind(&ExampleAIOScript::InitArg, this, _1));
-//             // Adds additional argument to send to handler
-//             AddInitArgs("ExampleScriptName", "Init", std::bind(&ExampleAIOScript::InitArg2, this, _1));
-//             AddInitArgs("AnotherScript", "InitB"); // Arguments are not necessary
-//         }
-//
-//         void HandlePrint(Player* sender, LuaVal const& args)
-//         {
-//             // LuaVal args in a handler function is always a table
-//             // Handler arguments index starts from 4
-//             LuaVal inputVal = args.get(4);
-//             LuaVal sliderVal = args.get(5);
-//
-//             // MUST check if the value type is valid or else smallfolk_cpp will
-//             // throw on obtaining that type
-//             if (!inputVal.isstring() || !sliderVal.isnumber())
-//                 return;
-//
-//             sender->GetSession()->SendNotification("HandlePrint -> Stored String: %s, Input: %s, Slider Value: %f",
-//                 storedString.c_str(), inputVal.str().c_str(), sliderVal.num());
-//         }
-//
-//         void HandleSave(Player* sender, LuaVal const& args)
-//         {
-//             LuaVal saveVal = args.get(4);
-//
-//             if (!saveVal.isstring())
-//                 return;
-//
-//             storedString = saveVal.str();
-//             sender->GetSession()->SendNotification("Saved");
-//         }
-//
-//         LuaVal InitArg(Player* /*sender*/)
-//         {
-//             LuaVal arg(TTABLE);
-//             arg.set("key", 12.3);
-//             arg["key2"] = false;
-//             return arg;
-//         }
-//
-//         LuaVal InitArg2(Player* /*sender*/)
-//         {
-//             return LuaVal("LuaVal will implicitly create a string LuaVal for this arg");
-//         }
-//
-//     private:
-//         std::string storedString;
-// };
+// Inherit AIOScript for server-side AIO handlers (LuaVal / smallfolk_cpp).
+// Full example: doc/CAIO_SCRIPT_EXAMPLE.md
 class AIOScript : public ScriptObject
 {
     public:
@@ -937,6 +862,8 @@ class AIOScript : public ScriptObject
         // Returns null if scriptName doesn't exist or typename was incorrect.
         template<class ScriptClass>
         ScriptClass *GetScript(const LuaVal &key);
+
+        static AIOScript* FindByKey(LuaVal const& scriptKey);
 
     private:
         void OnHandle(Player* sender, LuaVal const& handlerKey, LuaVal const& args);
