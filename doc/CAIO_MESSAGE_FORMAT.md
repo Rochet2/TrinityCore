@@ -13,13 +13,15 @@ One whisper addon payload is a **smallfolk** dump of an array of blocks:
 }
 ```
 
-- `n` — number of arguments **including** `handlerKey` (CAIO sets `block[1]` accordingly).
+- `n` — number of arguments **including** `handlerKey` (CAIO sets `block[1]` accordingly). Server rejects `n > 15` (stock `AIO_SERVER` limit).
 - `scriptKey` — block name (`AIO`, `AIOExample`, …); must be registered with `AIO.RegisterEvent` on the client or `AIOScript` on the server.
 - Arguments from index 4 onward are handler parameters (`unpack(data, 3, n+2)` on the Lua side).
 
 Use `AIOMsg` / `AIO.Msg():Add(...)` rather than building tables manually.
 
 ## Wire encoding (3.3.5)
+
+On TrinityCore, AIO uses **`CHAT_MSG_WHISPER` with `LANG_ADDON`** (not a separate addon channel packet). The client still sees **`CHAT_MSG_ADDON`**; this matches stock `AIO.lua` server behaviour.
 
 - Prefix: `S` + `AIO.Prefix` + `\t` (server→client) or `C` + prefix + `\t` (client→server).
 - Short message: two bytes `\1\1` then the smallfolk string.
