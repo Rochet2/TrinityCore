@@ -3,8 +3,8 @@
 #include "Log.h"
 #include "Player.h"
 #include "PlayerAIO.h"
-#include "ScriptMgr.h"
 #include "World.h"
+#include "WorldSession.h"
 #include <cmath>
 #include <list>
 

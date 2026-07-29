@@ -25,7 +25,11 @@ void AppendPackedArgs(LuaVal& block, uint32& nArgs, LuaVal const& a1, LuaVal con
     {
         if (nArgs >= Trinity::AIO::MAX_BLOCK_ARGS)
             break;
-        block.insert(args[i]);
+        // Layout: [1]=n, [2]=script, [3]=handler, [4+]=args. nArgs counts from handlerKey.
+        // Assign by index (not insert): smallfolk insert(nil) is a no-op and drops middle nils.
+        unsigned int const index = 3u + nArgs;
+        if (!args[i].isnil())
+            block[index] = args[i];
         ++nArgs;
     }
 }
