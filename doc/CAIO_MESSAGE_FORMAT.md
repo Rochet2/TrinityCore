@@ -30,7 +30,9 @@ On TrinityCore, AIO uses **`CHAT_MSG_WHISPER` with `LANG_ADDON`** (not a separat
 
 ## Version handshake
 
-On init, client sends `AIO` / `Init` with protocol version **1.75**. Server defines `AIO_VERSION` / `AIO_VERSION_STRING` in `src/server/game/AIO/AIO.h`.
+On init, client sends `AIO` / `Init` with protocol version **1.75**. Server defines `AIO_VERSION` / `AIO_VERSION_STRING` in `src/server/game/AIO/AIO.h`. Both sides currently require an exact numeric match (stock AIO `~=` / CAIO `|a-b| > 0.01`). Messaging fixes from [AIO PR #27](https://github.com/Rochet2/AIO/pull/27) do **not** change this wire version.
+
+Future work may introduce semver (`MAJOR.MINOR.PATCH`) with handshake on major+minor only; that is deferred until the AIO client supports it.
 
 ## Compression / obfuscation
 

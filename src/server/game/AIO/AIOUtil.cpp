@@ -1,5 +1,6 @@
 #include "AIOUtil.h"
 
+#include <cmath>
 #include <exception>
 
 namespace Trinity::AIO
@@ -13,6 +14,24 @@ bool IsSafeAddonRelativePath(std::string const& path)
         return false;
 
     return path.find_first_of(":*?\"<>|") == std::string::npos;
+}
+
+std::string Basename(std::string const& path)
+{
+    size_t const slash = path.find_last_of("/\\");
+    if (slash == std::string::npos)
+        return path;
+    return path.substr(slash + 1);
+}
+
+bool IsMessageExpired(uint32 stampMs, uint32 nowMs, uint32 cacheTimeMs)
+{
+    return (nowMs - stampMs) >= cacheTimeMs;
+}
+
+bool IsValidBlockArgCount(double nArgs)
+{
+    return std::isfinite(nArgs) && nArgs >= 1.0 && nArgs == std::floor(nArgs) && nArgs <= double(MAX_BLOCK_ARGS);
 }
 
 LoadMessageOutcome TryLoadIncomingMessage(std::string const& message, uint32 maxBytes, uint32 maxBlocks)

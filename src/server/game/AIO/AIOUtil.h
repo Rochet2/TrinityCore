@@ -10,6 +10,9 @@ namespace Trinity::AIO
     constexpr uint32 MAX_BLOCK_ARGS = 15;
 
     TC_GAME_API bool IsSafeAddonRelativePath(std::string const& path);
+    TC_GAME_API std::string Basename(std::string const& path);
+    TC_GAME_API bool IsMessageExpired(uint32 stampMs, uint32 nowMs, uint32 cacheTimeMs);
+    TC_GAME_API bool IsValidBlockArgCount(double nArgs);
 
     enum class LoadMessageResult : uint8
     {

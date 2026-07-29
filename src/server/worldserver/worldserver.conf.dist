@@ -4153,6 +4153,11 @@ PacketSpoof.BanDuration = 86400
 #        Path to client lua scripts to send to the client
 #        Default: "lua_client_scripts"
 #
+#    AIO.ForceReloadOnStartup
+#        If enabled, send ForceReload to online players after C++ scripts finish loading
+#        (matches AIO.lua AIO_FORCE_RELOAD_ON_STARTUP). Cold boot typically has no sessions.
+#        Default: 1 (true)
+#
 
 AIO.Prefix = "AIO"
 AIO.MaxParts = 64
@@ -4166,6 +4171,7 @@ AIO.MsgRateLimitMs = 50
 AIO.MaxBlocks = 32
 AIO.MaxParseFailures = 16
 AIO.ClientScriptPath = "lua_client_scripts"
+AIO.ForceReloadOnStartup = 1
 
 #
 ###################################################################################################

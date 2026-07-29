@@ -1582,6 +1582,7 @@ void World::LoadConfigSettings(bool reload)
     m_int_configs[CONFIG_AIO_MSG_RATE_MS] = sConfigMgr->GetIntDefault("AIO.MsgRateLimitMs", 50);
     m_int_configs[CONFIG_AIO_MAX_BLOCKS] = sConfigMgr->GetIntDefault("AIO.MaxBlocks", 32);
     m_int_configs[CONFIG_AIO_MAX_PARSE_FAILURES] = sConfigMgr->GetIntDefault("AIO.MaxParseFailures", 16);
+    m_bool_configs[CONFIG_AIO_FORCE_RELOAD_ON_STARTUP] = sConfigMgr->GetBoolDefault("AIO.ForceReloadOnStartup", true);
     m_aioclientpath = sConfigMgr->GetStringDefault("AIO.ClientScriptPath", "lua_client_scripts");
     m_aioprefix = sConfigMgr->GetStringDefault("AIO.Prefix", "AIO");
     if (m_aioprefix.size() > 15u)

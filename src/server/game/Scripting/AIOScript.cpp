@@ -5,7 +5,6 @@
 #include "PlayerAIO.h"
 #include "World.h"
 #include "WorldSession.h"
-#include <cmath>
 #include <list>
 
 class AIOHandlers : public AIOScript
@@ -136,7 +135,7 @@ void AIOScript::DispatchIncomingBlocks(Player* sender, LuaVal const& mainTable)
             continue;
 
         double const nArgs = nArgsVal.num();
-        if (!std::isfinite(nArgs) || nArgs < 1.0 || nArgs != std::floor(nArgs) || nArgs > double(Trinity::AIO::MAX_BLOCK_ARGS))
+        if (!Trinity::AIO::IsValidBlockArgCount(nArgs))
         {
             sLog->outAIOMessage(sender->GetSession()->GetAccountId(), LOG_LEVEL_ERROR,
                 "AIO: Block from '{}' has invalid argument count (n={}). Sender: {}",

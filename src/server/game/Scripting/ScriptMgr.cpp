@@ -1092,6 +1092,10 @@ void ScriptMgr::Initialize()
 
     TC_LOG_INFO("server.loading", ">> Loaded {} C++ scripts in {} ms",
         GetScriptCount(), GetMSTimeDiffToNow(oldMSTime));
+
+    // Matches AIO.lua AIO_FORCE_RELOAD_ON_STARTUP (no-op at cold boot with zero sessions).
+    if (sWorld->getBoolConfig(CONFIG_AIO_FORCE_RELOAD_ON_STARTUP))
+        sWorld->ForceReloadPlayerAddons();
 }
 
 void ScriptMgr::SetScriptContext(std::string const& context)

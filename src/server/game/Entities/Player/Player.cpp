@@ -113,6 +113,9 @@
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include "AIOMsg.h"
+#include "AIOCodec.h"
+#include <vector>
+#include "AIO.h"
 #include "PlayerAIO.h"
 #include "WorldStatePackets.h"
 
@@ -20605,60 +20608,35 @@ void Player::SendSimpleAIOMessage(std::string const& message)
 
     std::string const& aioPrefix = sWorld->GetAIOPrefix();
     uint32 const maxPacketLen = std::min<uint32>(sWorld->getIntConfig(CONFIG_AIO_MSG_MAX_LEN), AIO_MAX_WHISPER_LENGTH);
-    uint32 const shortHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 2; // S + prefix + tab + short id
-    uint32 const longHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 6;  // S + prefix + tab + long meta
-
-    if (shortHeaderLen + message.size() <= size_t(maxPacketLen))
-    {
-        std::string fullmsg = "S" + aioPrefix + "\t\x1\x1" + message;
-        WorldPackets::Chat::Chat packet;
-        packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
-        SendDirectMessage(packet.Write());
+    uint32 const prefixAndTab = 1u + uint32(aioPrefix.size()) + 1u; // S + prefix + tab
+    if (maxPacketLen <= prefixAndTab)
         return;
-    }
 
-    uint32 const chunkLen = maxPacketLen > longHeaderLen ? maxPacketLen - longHeaderLen : 1;
-    uint32 const partsNeeded = uint32((message.size() + chunkLen - 1) / chunkLen);
-    // Long-message meta encodes part count in two bytes with max ~64769 (same bound as message ids).
-    constexpr uint32 MAX_AIO_MESSAGE_PARTS = 64769;
-    if (partsNeeded == 0 || partsNeeded > MAX_AIO_MESSAGE_PARTS)
-    {
-        sLog->outAIOMessage(GetSession()->GetAccountId(), LOG_LEVEL_ERROR,
-            "AIO: Outgoing message too large ({} bytes, {} parts) for '{}'.",
-            message.size(), partsNeeded, GetName());
-        return;
-    }
-
-    uint16 const parts = uint16(partsNeeded);
-
-    uint16 high = uint16(std::floor(float(parts) / 254.0f));
-    std::string partsStr(1, char(high + 1));
-    partsStr += char(parts - high * 254 + 1);
-
-    high = uint16(std::floor(float(m_messageIdIndex) / 254.0f));
-    std::string messageIdStr(1, char(high + 1));
-    messageIdStr += char(m_messageIdIndex - high * 254 + 1);
-
-    if (m_messageIdIndex >= 64769) // 2^16 - 767
+    uint32 const maxAfterTab = maxPacketLen - prefixAndTab;
+    uint32 messageId = m_messageIdIndex;
+    if (m_messageIdIndex >= Trinity::AIO::Codec::MAX_ENCODED_UINT16)
         m_messageIdIndex = 1;
     else
         ++m_messageIdIndex;
 
-    size_t cursor = 0;
-    for (uint16 partId = 1; partId <= parts; ++partId)
+    // Short messages ignore messageId; long messages need a non-zero id.
+    if (2u + message.size() > size_t(maxAfterTab) && messageId == 0)
+        messageId = 1;
+
+    std::vector<std::string> const packets = Trinity::AIO::Codec::SplitPayload(message, maxAfterTab, messageId);
+    if (packets.empty())
     {
-        high = uint16(std::floor(float(partId) / 254.0f));
-        std::string partIdStr(1, char(high + 1));
-        partIdStr += char(partId - high * 254 + 1);
+        sLog->outAIOMessage(GetSession()->GetAccountId(), LOG_LEVEL_ERROR,
+            "AIO: Outgoing message too large ({} bytes) for '{}'.", message.size(), GetName());
+        return;
+    }
 
-        std::string fullmsg = "S" + aioPrefix + "\t" + messageIdStr + partsStr + partIdStr;
-        fullmsg += message.substr(cursor, chunkLen);
-
+    for (std::string const& body : packets)
+    {
+        std::string fullmsg = "S" + aioPrefix + "\t" + body;
         WorldPackets::Chat::Chat packet;
         packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
         SendDirectMessage(packet.Write());
-
-        cursor += chunkLen;
     }
 }
 

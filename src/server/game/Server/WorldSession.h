@@ -23,6 +23,7 @@
 #define __WORLDSESSION_H
 
 #include "Common.h"
+#include "AIOReassembler.h"
 #include "AsyncCallbackProcessor.h"
 #include "AuthDefines.h"
 #include "DatabaseEnvFwd.h"
@@ -1380,16 +1381,7 @@ class TC_GAME_API WorldSession
         WorldSession& operator=(WorldSession const& right) = delete;
 
         // AIO
-        typedef std::map<uint32, std::string> AddonPartStringMap;
-        struct LongMessageBufferInfo
-        {
-            uint32 Parts = 0;
-            uint32 Timer = 0;
-            uint32 BufferedBytes = 0;
-            AddonPartStringMap Map;
-        };
-        typedef std::map<uint32, LongMessageBufferInfo> AddonMessageBufferMap;
-        AddonMessageBufferMap _addonMessageBuffer;
+        Trinity::AIO::Reassembler _aioReassembler;
         uint32 _aioMsgCacheSweepTimer = 0;
         uint32 _aioLastCompleteMessageMs = 0;
         uint32 _aioRateLimitedCount = 0;

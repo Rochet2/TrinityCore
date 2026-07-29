@@ -11,6 +11,31 @@ TEST_CASE("AIO addon path validation", "[AIO]")
     REQUIRE_FALSE(Trinity::AIO::IsSafeAddonRelativePath(""));
 }
 
+TEST_CASE("AIO basename", "[AIO]")
+{
+    REQUIRE(Trinity::AIO::Basename("/server/lua_scripts/MyAddon.lua") == "MyAddon.lua");
+    REQUIRE(Trinity::AIO::Basename("C:\\server\\lua_scripts\\MyAddon.lua") == "MyAddon.lua");
+    REQUIRE(Trinity::AIO::Basename("C:/server/lua_scripts/MyAddon.lua") == "MyAddon.lua");
+    REQUIRE(Trinity::AIO::Basename("MyAddon.lua") == "MyAddon.lua");
+}
+
+TEST_CASE("AIO message expiry uses milliseconds", "[AIO]")
+{
+    REQUIRE_FALSE(Trinity::AIO::IsMessageExpired(1000, 10000, 15000));
+    REQUIRE(Trinity::AIO::IsMessageExpired(1000, 16000, 15000));
+    REQUIRE(Trinity::AIO::IsMessageExpired(1000, 17000, 15000));
+}
+
+TEST_CASE("AIO block arg count validation", "[AIO]")
+{
+    REQUIRE(Trinity::AIO::IsValidBlockArgCount(1.0));
+    REQUIRE(Trinity::AIO::IsValidBlockArgCount(15.0));
+    REQUIRE_FALSE(Trinity::AIO::IsValidBlockArgCount(0.0));
+    REQUIRE_FALSE(Trinity::AIO::IsValidBlockArgCount(16.0));
+    REQUIRE_FALSE(Trinity::AIO::IsValidBlockArgCount(1.5));
+    REQUIRE_FALSE(Trinity::AIO::IsValidBlockArgCount(-1.0));
+}
+
 TEST_CASE("AIO incoming message load", "[AIO]")
 {
     AIOMsg msg("TestScript", "Handler", LuaVal("arg"));
@@ -67,4 +92,3 @@ TEST_CASE("AIOMsg packs middle nil arguments", "[AIO]")
     REQUIRE(block.get(5).isnil());
     REQUIRE(block.get(6).num() == 3.0);
 }
-

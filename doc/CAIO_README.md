@@ -14,7 +14,22 @@ Currently CAIO only supports TrinityCore 3.3.5. This work lives on [Rochet2/Trin
 
 ## Supported AIO version
 
-AIO version **1.75** — must match `AIO_VERSION` in your server and client `AIO.lua` files (see [Rochet2/AIO](https://github.com/Rochet2/AIO)).
+AIO protocol version **1.75** — must match `AIO_VERSION` in your server and client `AIO.lua` files (see [Rochet2/AIO](https://github.com/Rochet2/AIO)). Init still uses exact float equality (`|a-b| > 0.01`), so stock 1.75 clients keep working.
+
+CAIO mirrors messaging hardening from [AIO PR #27](https://github.com/Rochet2/AIO/pull/27) (cache TTL in ms, hole-safe reassembly, buffered-byte accounting, framing helpers/tests) **without** bumping the Init version — those fixes are wire-compatible.
+
+**Future (not in this branch):** semantic versioning (`MAJOR.MINOR.PATCH`) with Init matching major+minor only so patch releases can diverge. That should land in the AIO client first, then CAIO.
+
+## Security notes (untrusted client → server)
+
++ Treat all client→server AIO payloads as untrusted: validate block `n`, script/handler keys, sizes, and part metadata before dispatch.
++ Production toggles: `AIO.MsgRateLimitMs`, `AIO.MaxIncomingMessageSize`, `AIO.MaxBlocks`, `AIO.MaxParts`, `AIO.MaxBufferSize`, `AIO.MaxParseFailures`, `AIO.MsgCacheTime` / `AIO.MsgCacheDelay`.
++ Addon file paths are restricted via `IsSafeAddonRelativePath` (no `..`, absolute paths, or shell metacharacters).
+
+## PR #27 parity (already in CAIO vs newly covered)
+
++ Already present: ms message-cache TTL/sweep, hole-safe long-message completion, per-message `BufferedBytes` caps, middle-`nil` `AIOMsg` packing, path safety, rate/parse abuse gates.
++ This work: extracted framing encode/split + reassembler (unit-tested), basename/expiry helpers, `AIO.ForceReloadOnStartup`, expanded Catch2 coverage mirroring AIO’s framing/reassembler/util tests.
 
 ## Install
 
