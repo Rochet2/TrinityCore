@@ -2436,10 +2436,11 @@ void Spell::EffectUntrainTalents()
     if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
         return;
 
-    if (!unitTarget || m_caster->GetTypeId() == TYPEID_PLAYER)
+    if (!unitTarget->IsPlayer())
         return;
 
-    unitTarget->ToPlayer()->SendTalentWipeConfirm(m_caster->GetGUID());
+    Player* playerTarget = unitTarget->ToPlayer();
+    playerTarget->SendRespecWipeConfirm(m_caster->GetGUID(), playerTarget->GetNextResetTalentsCost());
 }
 
 void Spell::EffectTeleUnitsFaceCaster()
@@ -3886,7 +3887,7 @@ void Spell::EffectInebriate()
     if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
         return;
 
-    if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+    if (!unitTarget || !unitTarget->IsPlayer())
         return;
 
     Player* player = unitTarget->ToPlayer();
@@ -3908,7 +3909,7 @@ void Spell::EffectInebriate()
 
     player->SetDrunkValue(currentDrunk, m_CastItem ? m_CastItem->GetEntry() : 0);
 
-    if (currentDrunk == 100 && roll_chance_i(25))
+    if (currentDrunk == 100 && drunkMod > 0 && roll_chance_i(25))
         player->CastSpell(player, 67468, false);    // Drunken Vomit
 }
 
