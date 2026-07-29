@@ -68,4 +68,8 @@ class ExampleAIOScript : public AIOScript
 
 Register the script in a loader (see `src/server/scripts/AIO/aio_script_loader.cpp` and `WITH_CAIO_EXAMPLES`).
 
+To send messages to the client from C++, use `Trinity::AIO::Handle` / `Trinity::AIO::Message` from `PlayerAIO.h` (keeps `Player.h` free of `LuaVal`).
+
+For full init-message rewriting (stock `AIO.AddOnInit`), call `AddOnInit` with a callback that receives `(Player*, LuaVal& initMessage)` after the init blocks are assembled and before send.
+
 Handler `args` is always a table; handler parameters start at index **4**. Always check value types before use.

@@ -15,10 +15,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// ExampleWindow.cpp is excluded from the AIO module when WITH_CAIO_EXAMPLES is off.
-void AddSC_ExampleWindow();
+#ifndef WITH_CAIO_EXAMPLES
 
-void AddAIOScripts()
+void AddSC_ExampleWindow()
 {
-    AddSC_ExampleWindow();
 }
+
+#endif

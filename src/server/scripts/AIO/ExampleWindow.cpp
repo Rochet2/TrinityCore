@@ -1,4 +1,5 @@
 #include "ScriptMgr.h"
+#include "PlayerAIO.h"
 #include "Player.h"
 #include "Chat.h"
 #include "smallfolk.h"
@@ -11,9 +12,9 @@ class ExampleWindowScript : public AIOScript
         ExampleWindowScript()
             : AIOScript("AIOExample"), counter(0)
         {
-            AddAddon("ExampleWindow", "ExampleWindow.lua");
+            AddAddon("ExampleWindow", "ExampleWindow/ExampleWindow.lua");
             AddHandler("Print", std::bind(&ExampleWindowScript::HandlePrint, this, std::placeholders::_1, std::placeholders::_2));
-            AddHandler("bullshit", std::bind(&ExampleWindowScript::HandleBullshit, this, std::placeholders::_1, std::placeholders::_2));
+            AddHandler("StressTest", std::bind(&ExampleWindowScript::HandleStressTest, this, std::placeholders::_1, std::placeholders::_2));
             AddInitArgs("AIOExample", "Init", std::bind(&ExampleWindowScript::InitArg, this, std::placeholders::_1), std::bind(&ExampleWindowScript::InitArg, this, std::placeholders::_1));
             AddInitArgs("AIOExample", "Init", std::bind(&ExampleWindowScript::InitArg2, this, std::placeholders::_1));
             AddInitArgs("AIOExample", "InitB");
@@ -40,7 +41,7 @@ class ExampleWindowScript : public AIOScript
                     return;
                 }
                 std::string payload(size_t(size), 'b');
-                sender->AIOHandle("AIOExample", "bullshit", payload);
+                Trinity::AIO::Handle(sender, "AIOExample", "StressTest", payload);
             }
             catch (...)
             {
@@ -48,13 +49,13 @@ class ExampleWindowScript : public AIOScript
             }
         }
 
-        void HandleBullshit(Player* sender, LuaVal const& args)
+        void HandleStressTest(Player* sender, LuaVal const& args)
         {
             LuaVal payload = args.get(4);
             if (!payload.isstring())
                 return;
 
-            ChatHandler(sender->GetSession()).PSendSysMessage("Received bullshit block (%u bytes).", uint32(payload.str().size()));
+            ChatHandler(sender->GetSession()).PSendSysMessage("Received StressTest block (%u bytes).", uint32(payload.str().size()));
         }
 
         LuaVal InitArg(Player* /*sender*/)

@@ -15,10 +15,19 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// ExampleWindow.cpp is excluded from the AIO module when WITH_CAIO_EXAMPLES is off.
-void AddSC_ExampleWindow();
+#ifndef TRINITY_WORLD_AIO_H
+#define TRINITY_WORLD_AIO_H
 
-void AddAIOScripts()
+#include "AIO.h"
+#include <string>
+
+class AIOMsg;
+class World;
+
+namespace Trinity::AIO
 {
-    AddSC_ExampleWindow();
+    TC_GAME_API void MessageAll(World* world, AIOMsg& msg, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
+    TC_GAME_API void SendAllSimple(World* world, std::string const& message, uint32 permission = AIO_DEFAULT_ADDON_PERMISSION);
 }
+
+#endif

@@ -49,7 +49,6 @@ class AIOMsg
 
     private:
         LuaVal _val;
-        friend class Player;
 };
 
 #endif

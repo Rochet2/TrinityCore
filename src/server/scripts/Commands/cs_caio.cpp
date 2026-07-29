@@ -7,6 +7,7 @@ EndScriptData */
 
 #include "ScriptMgr.h"
 #include "AIO.h"
+#include "AIOUtil.h"
 #include "Chat.h"
 #include "ChatCommand.h"
 #include "Language.h"
@@ -54,7 +55,8 @@ public:
 
     static bool HandleSendCommand(ChatHandler* handler, PlayerIdentifier const& target, QuotedString message)
     {
-        if (!LuaVal::loads(message).istable())
+        Trinity::AIO::LoadMessageOutcome const outcome = Trinity::AIO::TryLoadIncomingMessage(message, sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING), sWorld->getIntConfig(CONFIG_AIO_MAX_BLOCKS));
+        if (outcome.result != Trinity::AIO::LoadMessageResult::Ok)
         {
             handler->SendSysMessage("CAIO: message must be smallfolk-serialized table data (use AIOMsg or AIO.Msg on the server).");
             return false;
@@ -65,7 +67,7 @@ public:
             return false;
 
         player->SendSimpleAIOMessage(message);
-        handler->PSendSysMessage(LANG_SENDMESSAGE, target.GetName().c_str(), message.c_str());
+        handler->PSendSysMessage("CAIO: sent %zu bytes to %s.", message.size(), target.GetName().c_str());
         return true;
     }
 
@@ -93,7 +95,8 @@ public:
 
     static bool HandleSendAllCommand(ChatHandler* handler, QuotedString message, Optional<uint32> permission)
     {
-        if (!LuaVal::loads(message).istable())
+        Trinity::AIO::LoadMessageOutcome const outcome = Trinity::AIO::TryLoadIncomingMessage(message, sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING), sWorld->getIntConfig(CONFIG_AIO_MAX_BLOCKS));
+        if (outcome.result != Trinity::AIO::LoadMessageResult::Ok)
         {
             handler->SendSysMessage("CAIO: message must be smallfolk-serialized table data (use AIOMsg or AIO.Msg on the server).");
             return false;
@@ -101,7 +104,7 @@ public:
 
         uint32 perm = permission.value_or(AIO_DEFAULT_ADDON_PERMISSION);
         sWorld->SendAllSimpleAIOMessage(message, perm);
-        handler->PSendSysMessage(LANG_SENDMESSAGE, "all players", message.c_str());
+        handler->PSendSysMessage("CAIO: sent %zu bytes to all players.", message.size());
         return true;
     }
 
@@ -131,6 +134,12 @@ public:
 
     static bool HandleAddAddonCommand(ChatHandler* handler, std::string addonName, QuotedString addonFile, Optional<uint32> permission)
     {
+        if (!Trinity::AIO::IsSafeAddonRelativePath(addonFile))
+        {
+            handler->SendSysMessage("CAIO: addon file path must be relative to AIO.ClientScriptPath and must not contain '..'.");
+            return false;
+        }
+
         uint32 perm = permission.value_or(AIO_DEFAULT_ADDON_PERMISSION);
         World::AIOAddon newAddon(addonName, addonFile, perm);
         if (sWorld->AddAddon(newAddon))
