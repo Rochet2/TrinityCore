@@ -209,6 +209,6 @@ std::list<GameObject*> GOMove::GetNearbyGameObjects(Player* player, float range)
     std::list<GameObject*> objects;
     Trinity::GameObjectInRangeCheck check(x, y, z, range);
     Trinity::GameObjectListSearcher<Trinity::GameObjectInRangeCheck> searcher(player, objects, check);
-    Cell::VisitGridObjects(player, searcher, SIZE_OF_GRIDS, false);
+    Cell::VisitGridObjects(player, searcher, SIZE_OF_GRIDS);
     return objects;
 }
