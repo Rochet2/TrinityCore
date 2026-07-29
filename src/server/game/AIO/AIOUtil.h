@@ -1,4 +1,3 @@
-
 #ifndef TRINITY_AIO_UTIL_H
 #define TRINITY_AIO_UTIL_H
 

@@ -1,4 +1,3 @@
-
 #ifndef TRINITY_AIOSCRIPT_H
 #define TRINITY_AIOSCRIPT_H
 

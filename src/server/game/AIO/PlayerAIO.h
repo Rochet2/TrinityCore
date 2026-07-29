@@ -1,7 +1,7 @@
-
 #ifndef TRINITY_PLAYER_AIO_H
 #define TRINITY_PLAYER_AIO_H
 
+#include "Define.h"
 #include "AIOMsg.h"
 #include "smallfolk.h"
 

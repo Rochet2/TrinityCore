@@ -1,4 +1,3 @@
-
 #include "ScriptMgr.h"
 #include "AIOUtil.h"
 #include "Log.h"

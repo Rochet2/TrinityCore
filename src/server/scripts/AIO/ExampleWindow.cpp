@@ -1,4 +1,3 @@
-
 #include "ScriptMgr.h"
 
 #ifdef WITH_CAIO_EXAMPLES

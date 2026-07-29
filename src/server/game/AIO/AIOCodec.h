@@ -1,4 +1,3 @@
-
 #ifndef TRINITY_AIO_CODEC_H
 #define TRINITY_AIO_CODEC_H
 

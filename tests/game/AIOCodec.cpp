@@ -1,4 +1,3 @@
-
 #include "tc_catch2.h"
 
 #include "AIOCodec.h"
