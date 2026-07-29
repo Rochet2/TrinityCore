@@ -37,7 +37,6 @@
 
 #include "AIO.h"
 
-class Object;
 class Player;
 class WorldPacket;
 class WorldSession;

@@ -1024,7 +1024,7 @@ std::string const& ScriptObject::GetName() const
 }
 
 ScriptMgr::ScriptMgr()
-    : _scriptCount(0), _scheduledScripts(0), _aioHandlers(nullptr), _script_loader_callback(nullptr)
+    : _scriptCount(0), _aioHandlers(nullptr), _script_loader_callback(nullptr)
 {
 }
 
@@ -1048,10 +1048,10 @@ void ScriptMgr::Initialize()
     TC_LOG_INFO("server.loading", "Loading C++ scripts");
 
     FillSpellSummary();
-    _aioHandlers = CreateAIOHandlers();
 
     // Load core scripts
     SetScriptContext(GetNameOfStaticContext());
+    _aioHandlers = CreateAIOHandlers();
 
     // SmartAI
     AddSC_SmartScripts();
@@ -1135,7 +1135,8 @@ void ScriptMgr::Unload()
 {
     sScriptRegistryCompositum->Unload();
     AIOScript::ClearScriptByKeyMap();
-    DestroyAIOHandlers(_aioHandlers);
+    // AIOHandlers is owned by ScriptRegistry<AIOScript>; do not delete again.
+    _aioHandlers = nullptr;
 
     delete[] SpellSummary;
     delete[] UnitAI::AISpellInfo;

@@ -68,3 +68,20 @@ TEST_CASE("AIOMsg round trip", "[AIO]")
     REQUIRE(block.get(2).tostring() == "ScriptA");
     REQUIRE(block.get(3).tostring() == "HandlerA");
 }
+
+TEST_CASE("AIOMsg packs middle nil arguments", "[AIO]")
+{
+    AIOMsg msg;
+    msg.Add("ScriptA", "HandlerA", LuaVal(1), LuaVal::nil, LuaVal(3));
+
+    Trinity::AIO::LoadMessageOutcome const outcome = Trinity::AIO::TryLoadIncomingMessage(msg.dumps(), 4096, 8);
+    REQUIRE(outcome.result == Trinity::AIO::LoadMessageResult::Ok);
+
+    LuaVal block = outcome.table.get(1);
+    // n includes handlerKey + three positional slots (middle nil kept)
+    REQUIRE(uint32(block.get(1).num()) == 4u);
+    REQUIRE(block.get(4).num() == 1.0);
+    REQUIRE(block.get(5).isnil());
+    REQUIRE(block.get(6).num() == 3.0);
+}
+

@@ -20618,8 +20618,18 @@ void Player::SendSimpleAIOMessage(std::string const& message)
     }
 
     uint32 const chunkLen = maxPacketLen > longHeaderLen ? maxPacketLen - longHeaderLen : 1;
-    float const messageLen = float(message.size());
-    uint16 const parts = uint16(std::ceil(messageLen / float(chunkLen)));
+    uint32 const partsNeeded = uint32((message.size() + chunkLen - 1) / chunkLen);
+    // Long-message meta encodes part count in two bytes with max ~64769 (same bound as message ids).
+    constexpr uint32 MAX_AIO_MESSAGE_PARTS = 64769;
+    if (partsNeeded == 0 || partsNeeded > MAX_AIO_MESSAGE_PARTS)
+    {
+        sLog->outAIOMessage(GetSession()->GetAccountId(), LOG_LEVEL_ERROR,
+            "AIO: Outgoing message too large ({} bytes, {} parts) for '{}'.",
+            message.size(), partsNeeded, GetName());
+        return;
+    }
+
+    uint16 const parts = uint16(partsNeeded);
 
     uint16 high = uint16(std::floor(float(parts) / 254.0f));
     std::string partsStr(1, char(high + 1));

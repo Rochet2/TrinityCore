@@ -1,11 +1,30 @@
+/*
+ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "ScriptMgr.h"
+
+#ifdef WITH_CAIO_EXAMPLES
+
 #include "PlayerAIO.h"
 #include "Player.h"
 #include "Chat.h"
 #include "smallfolk.h"
 
-// Optional CAIO test script (from Rochet2). Pairs with AIO Examples/TestWindow client addons.
-// Place ExampleWindow.lua (and related client files) under lua_client_scripts/ExampleWindow/
+// Optional CAIO test script. Pairs with lua_client_scripts/ExampleWindow/ExampleWindow.lua
 class ExampleWindowScript : public AIOScript
 {
     public:
@@ -75,3 +94,11 @@ void AddSC_ExampleWindow()
 {
     new ExampleWindowScript();
 }
+
+#else
+
+void AddSC_ExampleWindow()
+{
+}
+
+#endif

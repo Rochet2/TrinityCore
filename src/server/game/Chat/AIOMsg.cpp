@@ -1,5 +1,35 @@
 #include "AIOMsg.h"
+#include "AIOUtil.h"
 #include "Player.h"
+#include <cmath>
+
+namespace
+{
+uint32 CountPackedArgs(LuaVal const& a1, LuaVal const& a2, LuaVal const& a3, LuaVal const& a4, LuaVal const& a5, LuaVal const& a6)
+{
+    LuaVal const args[6] = { a1, a2, a3, a4, a5, a6 };
+    int last = -1;
+    for (int i = 0; i < 6; ++i)
+    {
+        if (!args[i].isnil())
+            last = i;
+    }
+    return last < 0 ? 0u : uint32(last + 1);
+}
+
+void AppendPackedArgs(LuaVal& block, uint32& nArgs, LuaVal const& a1, LuaVal const& a2, LuaVal const& a3, LuaVal const& a4, LuaVal const& a5, LuaVal const& a6)
+{
+    LuaVal const args[6] = { a1, a2, a3, a4, a5, a6 };
+    uint32 const count = CountPackedArgs(a1, a2, a3, a4, a5, a6);
+    for (uint32 i = 0; i < count; ++i)
+    {
+        if (nArgs >= Trinity::AIO::MAX_BLOCK_ARGS)
+            break;
+        block.insert(args[i]);
+        ++nArgs;
+    }
+}
+}
 
 AIOMsg::AIOMsg()
     : _val(TTABLE)
@@ -8,42 +38,14 @@ AIOMsg::AIOMsg()
 AIOMsg& AIOMsg::Add(LuaVal const& scriptKey, LuaVal const& handlerKey, LuaVal const& a1, LuaVal const& a2, LuaVal const& a3, LuaVal const& a4, LuaVal const& a5, LuaVal const& a6)
 {
     LuaVal block(TTABLE);
+    // n includes handlerKey (stock AIO layout); start at 1 then pack positional args including middle nils.
     uint32 nArgs = 1;
 
     block[1] = 0;
     block[2] = scriptKey;
     block[3] = handlerKey;
 
-    if (!a1.isnil())
-    {
-        block.insert(a1);
-        ++nArgs;
-    }
-    if (!a2.isnil())
-    {
-        block.insert(a2);
-        ++nArgs;
-    }
-    if (!a3.isnil())
-    {
-        block.insert(a3);
-        ++nArgs;
-    }
-    if (!a4.isnil())
-    {
-        block.insert(a4);
-        ++nArgs;
-    }
-    if (!a5.isnil())
-    {
-        block.insert(a5);
-        ++nArgs;
-    }
-    if (!a6.isnil())
-    {
-        block.insert(a6);
-        ++nArgs;
-    }
+    AppendPackedArgs(block, nArgs, a1, a2, a3, a4, a5, a6);
 
     block[1] = static_cast<unsigned int>(nArgs);
     _val.insert(block);
@@ -61,37 +63,12 @@ AIOMsg& AIOMsg::AppendLast(LuaVal const& a1, LuaVal const& a2, LuaVal const& a3,
     if (!nArgsVal.isnumber())
         return *this;
 
-    unsigned int nArgs = static_cast<unsigned int>(static_cast<uint32>(nArgsVal.num()));
-    if (!a1.isnil())
-    {
-        block.insert(a1);
-        ++nArgs;
-    }
-    if (!a2.isnil())
-    {
-        block.insert(a2);
-        ++nArgs;
-    }
-    if (!a3.isnil())
-    {
-        block.insert(a3);
-        ++nArgs;
-    }
-    if (!a4.isnil())
-    {
-        block.insert(a4);
-        ++nArgs;
-    }
-    if (!a5.isnil())
-    {
-        block.insert(a5);
-        ++nArgs;
-    }
-    if (!a6.isnil())
-    {
-        block.insert(a6);
-        ++nArgs;
-    }
+    double const n = nArgsVal.num();
+    if (!std::isfinite(n) || n < 1.0 || n != std::floor(n))
+        return *this;
+
+    uint32 nArgs = static_cast<uint32>(n);
+    AppendPackedArgs(block, nArgs, a1, a2, a3, a4, a5, a6);
 
     block[1] = static_cast<unsigned int>(nArgs);
     return *this;

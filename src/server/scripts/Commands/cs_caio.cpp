@@ -104,7 +104,7 @@ public:
 
         uint32 perm = permission.value_or(AIO_DEFAULT_ADDON_PERMISSION);
         sWorld->SendAllSimpleAIOMessage(message, perm);
-        handler->PSendSysMessage("CAIO: sent %zu bytes to all players.", message.size());
+        handler->PSendSysMessage("CAIO: sent %zu bytes to all players with permission %u.", message.size(), perm);
         return true;
     }
 

@@ -152,9 +152,6 @@ foreach(SCRIPT_MODULE ${SCRIPT_MODULE_LIST})
     # Add the module content to the whole static module
     unset(SCRIPT_MODULE_PRIVATE_SOURCES)
     CollectSourceFiles(${SCRIPT_MODULE_PATH} SCRIPT_MODULE_PRIVATE_SOURCES)
-    if(SCRIPT_MODULE STREQUAL "AIO" AND NOT WITH_CAIO_EXAMPLES)
-      list(FILTER SCRIPT_MODULE_PRIVATE_SOURCES EXCLUDE REGEX "[/\\\\]ExampleWindow\\.cpp$")
-    endif()
     # Configure the scriptloader
     ConfigureScriptLoader(${SCRIPT_MODULE} SCRIPT_MODULE_PRIVATE_SCRIPTLOADER ON ${SCRIPT_MODULE})
     GetProjectNameOfScriptModule(${SCRIPT_MODULE} SCRIPT_MODULE_PROJECT_NAME)
@@ -205,10 +202,6 @@ endforeach()
 set(WORLDSERVER_DYNAMIC_SCRIPT_MODULES_DEPENDENCIES ${DYNAMIC_SCRIPT_MODULE_PROJECTS} PARENT_SCOPE)
 
 ConfigureScriptLoader("static" SCRIPT_MODULE_PRIVATE_SCRIPTLOADER OFF ${STATIC_SCRIPT_MODULES})
-
-if(NOT WITH_CAIO_EXAMPLES)
-  list(FILTER PRIVATE_SOURCES EXCLUDE REGEX "[/\\\\]AIO[/\\\\]ExampleWindow\\.cpp$")
-endif()
 
 add_library(scripts STATIC
   ScriptLoader.h

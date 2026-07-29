@@ -152,11 +152,12 @@ void AIOScript::DispatchIncomingBlocks(Player* sender, LuaVal const& mainTable)
         if (!nArgsVal.isnumber() || scriptKeyVal.isnil() || handlerKeyVal.isnil())
             continue;
 
-        if (nArgsVal.num() > double(Trinity::AIO::MAX_BLOCK_ARGS))
+        double const nArgs = nArgsVal.num();
+        if (!std::isfinite(nArgs) || nArgs < 1.0 || nArgs != std::floor(nArgs) || nArgs > double(Trinity::AIO::MAX_BLOCK_ARGS))
         {
-            sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
-                "AIO: Block from '{}' has over {} arguments (n={:.0f}). Sender: {}",
-                scriptKeyVal.tostring(), Trinity::AIO::MAX_BLOCK_ARGS, nArgsVal.num(), sender->GetName());
+            sLog->outAIOMessage(sender->GetSession()->GetAccountId(), LOG_LEVEL_ERROR,
+                "AIO: Block from '{}' has invalid argument count (n={}). Sender: {}",
+                scriptKeyVal.tostring(), nArgs, sender->GetName());
             continue;
         }
 
@@ -263,9 +264,9 @@ AIOHandlers* CreateAIOHandlers()
     return new AIOHandlers();
 }
 
-void DestroyAIOHandlers(AIOHandlers* handlers)
+void DestroyAIOHandlers(AIOHandlers* /*handlers*/)
 {
-    delete handlers;
+    // Ownership is held by ScriptRegistry<AIOScript>; callers must only clear their raw pointer.
 }
 
 void RegisterAIOInitHookOnHandlers(AIOHandlers* handlers, AIOScript::InitMessageFunc func)

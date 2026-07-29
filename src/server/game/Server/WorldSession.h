@@ -1258,7 +1258,6 @@ class TC_GAME_API WorldSession
         AsyncCallbackProcessor<SQLQueryHolderCallback> _queryHolderProcessor;
 
     friend class World;
-    friend class ScriptMgr;
     protected:
         class DosProtection
         {
@@ -1403,8 +1402,10 @@ class TC_GAME_API WorldSession
         };
 
         AIOIncomingGateResult CheckAIOIncomingGate(Player* sender, size_t payloadBytes);
-        void NotifyAIOIncomingParseFailure(Player* sender);
         void RecordAIOIncomingAbuse(Player* sender, char const* reason);
+
+    public:
+        void NotifyAIOIncomingParseFailure(Player* sender);
 };
 
 #endif

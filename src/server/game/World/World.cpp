@@ -3654,8 +3654,12 @@ bool World::AddAddon(AIOAddon const& addon)
     copy.code = "";
 
     // Format path
-    std::string path;
-    path = sWorld->GetAIOClientScriptPath();
+    std::string path = sWorld->GetAIOClientScriptPath();
+    if (path.empty())
+    {
+        sLog->outAIOMessage(0, LOG_LEVEL_ERROR, "AIO AddAddon: AIO.ClientScriptPath is empty; cannot load addon {}", addon.name);
+        return false;
+    }
     if (path.back() != '/' && path.back() != '\\')
     {
         path += '/';
