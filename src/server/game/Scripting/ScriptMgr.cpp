@@ -45,7 +45,7 @@
 #include <cmath>
 #include "WorldPacket.h"
 #include "WorldSession.h"
-#include "smallfolk_cpp/smallfolk.h"
+#include "smallfolk.h"
 
 // Trait which indicates whether this script type
 // must be assigned in the database.
@@ -2594,9 +2594,9 @@ void ScriptMgr::OnAddonMessage(Player *sender, const std::string &message)
 		return;
 
 	//Call handlers from all blocks in order
-	for(size_t i = 1; i <= mainTable.tbl().size(); ++i)
+	for (size_t i = 1; i <= mainTable.len(); ++i)
 	{
-		LuaVal block = mainTable.get(static_cast<unsigned int>(i));
+		LuaVal block = mainTable.get(static_cast<int>(i));
 		if(!block.istable())
 			continue;
 
@@ -2615,7 +2615,7 @@ AIOScript::AIOScript(const LuaVal &scriptKey)
 {
 	if(AIOScript::_scriptByKeyMap.find(scriptKey) != AIOScript::_scriptByKeyMap.end())
 	{
-		sLog->outAIOMessage(0, LOG_LEVEL_FATAL, "AIO scriptKey '%s' of type tag '%i' already exist. Use another key.", scriptKey.tostring().c_str(), scriptKey.GetTypeTag());
+		sLog->outAIOMessage(0, LOG_LEVEL_FATAL, "AIO scriptKey '%s' of type tag '%i' already exist. Use another key.", scriptKey.tostring().c_str(), scriptKey.typetag());
 		ASSERT(false);
 	}
 	ScriptRegistry<AIOScript>::Instance()->AddScript(this);

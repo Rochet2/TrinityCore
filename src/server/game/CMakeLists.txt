@@ -34,14 +34,11 @@ target_include_directories(game-interface
   INTERFACE
     ${PUBLIC_INCLUDES})
 
-target_include_directories(game-interface
-  INTERFACE
-    ${CMAKE_SOURCE_DIR}/dep/smallfolk_cpp)
-
 target_link_libraries(game-interface
   INTERFACE
     shared
-    Detour)
+    Detour
+    smallfolk_cpp::smallfolk)
 
 add_library(game
   ${PRIVATE_SOURCES})

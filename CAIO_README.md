@@ -12,7 +12,7 @@ AIO version **1.75** — must match `AIO_VERSION` in your server and client `AIO
 ## Install
 
 + Clone this repository/branch or merge with your own TrinityCore 3.3.5 branch
-+ `git submodule update --init --recursive` (required for `dep/smallfolk_cpp`)
++ `git submodule update --init --recursive` (required for `dep/smallfolk_cpp/smallfolk_cpp`, tracks [smallfolk_cpp](https://github.com/Rochet2/smallfolk_cpp) **master**, currently v2.x)
 + Build/Install TrinityCore
 + [Install(Add) (C)AIO scripts](#api-reference)
 + Run SQL files from `TrinityCore_Installation_Dir/sql/CAIO` (`Auth.sql` on auth DB, `World.sql` on world DB)
@@ -130,7 +130,9 @@ private:
 
 ### smallfolk_cpp LuaVal reference
 
-https://github.com/Rochet2/smallfolk_cpp
+https://github.com/Rochet2/smallfolk_cpp (v2.x on `master` — linked as CMake target `smallfolk_cpp::smallfolk`, include `smallfolk.h`)
+
+Use `LuaVal::nil` (not `LuaVal::nil()`) for default optional arguments. Type tag accessor is `typetag()`.
 
 ### CAIO reference and functions
 

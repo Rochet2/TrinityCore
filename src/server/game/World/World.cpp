@@ -93,7 +93,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/crc.hpp>
 #include "AIOMsg.h"
-#include "smallfolk_cpp/smallfolk.h"
+#include "smallfolk.h"
 
 TC_GAME_API std::atomic<bool> World::m_stopEvent(false);
 TC_GAME_API uint8 World::m_ExitCode = SHUTDOWN_EXIT_CODE;

@@ -34,7 +34,7 @@
 #include <queue>
 #include <unordered_set>
 
-#include "smallfolk_cpp/smallfolk.h"
+#include "smallfolk.h"
 
 #include <limits>
 #include <string>
@@ -1082,8 +1082,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 		// To trigger multiple handlers in one message or to send more
 		// arguments use Player::AIOMessage
 		void AIOHandle(const LuaVal &scriptKey, const LuaVal &handlerKey,
-			const LuaVal &a1 = LuaVal::nil(), const LuaVal &a2 = LuaVal::nil(), const LuaVal &a3 = LuaVal::nil(),
-			const LuaVal &a4 = LuaVal::nil(), const LuaVal &a5 = LuaVal::nil(), const LuaVal &a6 = LuaVal::nil());
+			const LuaVal &a1 = LuaVal::nil, const LuaVal &a2 = LuaVal::nil, const LuaVal &a3 = LuaVal::nil,
+			const LuaVal &a4 = LuaVal::nil, const LuaVal &a5 = LuaVal::nil, const LuaVal &a6 = LuaVal::nil);
 
 		// AIO can only understand smallfolk LuaVal::dumps() format
 		// Handler functions are called by creating a table as below

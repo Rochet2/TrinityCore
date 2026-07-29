@@ -11,7 +11,7 @@ EndScriptData */
 #include "RBAC.h"
 #include "ScriptMgr.h"
 #include "World.h"
-#include "smallfolk_cpp/smallfolk.h"
+#include "smallfolk.h"
 
 class caio_commandscript : public CommandScript
 {
