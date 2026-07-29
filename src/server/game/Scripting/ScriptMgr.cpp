@@ -2600,10 +2600,19 @@ void ScriptMgr::OnAddonMessage(Player *sender, const std::string &message)
 		if(!block.istable())
 			continue;
 
+		LuaVal nArgsVal = block.get(1);
 		LuaVal scriptKeyVal = block.get(2);
 		LuaVal handlerKeyVal = block.get(3);
-		if(!block.get(1).isnumber() || scriptKeyVal.isnil() || handlerKeyVal.isnil())
+		if (!nArgsVal.isnumber() || scriptKeyVal.isnil() || handlerKeyVal.isnil())
 			continue;
+
+		if (nArgsVal.num() > 15.0)
+		{
+			sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+				"AIO: Block from '%s' has over 15 arguments (n=%.0f). Sender: %s",
+				scriptKeyVal.tostring().c_str(), nArgsVal.num(), sender->GetName().c_str());
+			continue;
+		}
 
 		if (AIOScript* aioScript = _aioHandlers->GetScript<AIOScript>(scriptKeyVal))
 			aioScript->OnHandle(sender, handlerKeyVal, block);
@@ -2758,8 +2767,6 @@ void AIOHandlers::HandleInit(Player *sender, const LuaVal &args)
 
 	argsToSend[1] = AIOInitBlock;
 	sender->SendSimpleAIOMessage(argsToSend.dumps());
-
-	sender->SetAIOInitialized(true);
 }
 
 void AIOHandlers::HandleError(Player *sender, const LuaVal &args)

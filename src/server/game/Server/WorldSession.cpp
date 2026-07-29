@@ -476,20 +476,22 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
             return false;                                       //Will remove this session from the world session map
     }
 
-	//AIO clear long message buffer
-	if(m_Socket && m_Socket->IsOpen())
+	// AIO: drop incomplete long messages (AIO.lua AIO_MSG_CACHE_TIME / AIO_MSG_CACHE_DELAY)
+	if (m_Socket && m_Socket->IsOpen() && !_addonMessageBuffer.empty())
 	{
-		for(AddonMessageBufferMap::iterator itr = _addonMessageBuffer.begin();
-			itr != _addonMessageBuffer.end();)
+		_aioMsgCacheSweepTimer += diff;
+		uint32 const sweepDelay = sWorld->getIntConfig(CONFIG_AIO_MSG_CACHE_DELAY);
+		if (_aioMsgCacheSweepTimer >= sweepDelay)
 		{
-			itr->second.Timer += diff;
-			if (itr->second.Timer >= sWorld->getIntConfig(CONFIG_AIO_BUFFER_TIMEOUT))
+			_aioMsgCacheSweepTimer = 0;
+			uint32 const cacheTime = sWorld->getIntConfig(CONFIG_AIO_MSG_CACHE_TIME);
+			for (AddonMessageBufferMap::iterator itr = _addonMessageBuffer.begin(); itr != _addonMessageBuffer.end();)
 			{
-				_addonMessageBuffer.erase(itr++);
-			}
-			else
-			{
-				++itr;
+				itr->second.Timer += sweepDelay;
+				if (itr->second.Timer >= cacheTime)
+					_addonMessageBuffer.erase(itr++);
+				else
+					++itr;
 			}
 		}
 	}

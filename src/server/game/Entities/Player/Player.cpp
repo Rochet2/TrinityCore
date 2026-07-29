@@ -340,7 +340,6 @@ Player::Player(WorldSession* session): Unit(true)
     m_achievementMgr = new AchievementMgr(this);
     m_reputationMgr = new ReputationMgr(this);
 
-	m_aioInitialized = false;
 	m_aioInitCd = false;
 	m_aioInitTimer = 0;
 	m_messageIdIndex = 1;
