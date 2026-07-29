@@ -40,6 +40,9 @@
 #include "Transport.h"
 #include "Vehicle.h"
 #include "Weather.h"
+#include "World.h"
+
+#include <cmath>
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include "smallfolk_cpp/smallfolk.h"
@@ -2593,16 +2596,16 @@ void ScriptMgr::OnAddonMessage(Player *sender, const std::string &message)
 	//Call handlers from all blocks in order
 	for(size_t i = 1; i <= mainTable.tbl().size(); ++i)
 	{
-		LuaVal &block = mainTable[i];
+		LuaVal block = mainTable.get(static_cast<unsigned int>(i));
 		if(!block.istable())
 			continue;
 
-		LuaVal &scriptKeyVal = block[2];
-		LuaVal &handlerKeyVal = block[3];
-		if(!block[1].isnumber() || scriptKeyVal.isnil() || handlerKeyVal.isnil())
+		LuaVal scriptKeyVal = block.get(2);
+		LuaVal handlerKeyVal = block.get(3);
+		if(!block.get(1).isnumber() || scriptKeyVal.isnil() || handlerKeyVal.isnil())
 			continue;
 
-		if(AIOScript *aioScript = _aioHandlers->GetScript<AIOScript>(scriptKeyVal))
+		if (AIOScript* aioScript = _aioHandlers->GetScript<AIOScript>(scriptKeyVal))
 			aioScript->OnHandle(sender, handlerKeyVal, block);
 	}
 }
@@ -2615,7 +2618,7 @@ AIOScript::AIOScript(const LuaVal &scriptKey)
 		sLog->outAIOMessage(0, LOG_LEVEL_FATAL, "AIO scriptKey '%s' of type tag '%i' already exist. Use another key.", scriptKey.tostring().c_str(), scriptKey.GetTypeTag());
 		ASSERT(false);
 	}
-	ScriptRegistry<AIOScript>::AddScript(this);
+	ScriptRegistry<AIOScript>::Instance()->AddScript(this);
 	AIOScript::_scriptByKeyMap[scriptKey] = this;
 }
 
@@ -2660,16 +2663,6 @@ void AIOScript::AddInitArgs(const LuaVal &scriptKey, const LuaVal &handlerKey, A
 		list->push_back(a6);
 }
 
-template<>
-AIOScript *AIOScript::GetScript(const LuaVal &scriptKey)
-{
-	AIOScriptByKeyMap::const_iterator itr = AIOScript::_scriptByKeyMap.find(scriptKey);
-	if(itr == AIOScript::_scriptByKeyMap.end())
-		return 0;
-
-	return itr->second;
-}
-
 template<class ScriptClass>
 ScriptClass *AIOScript::GetScript(const LuaVal &scriptKey)
 {
@@ -2680,13 +2673,22 @@ ScriptClass *AIOScript::GetScript(const LuaVal &scriptKey)
 	return dynamic_cast<ScriptClass*>(itr->second);
 }
 
+bool AIOScript::AddAddon(std::string const& addonName, std::string const& addonFile, uint32 permission)
+{
+    return sWorld->AddAddon(World::AIOAddon(addonName, addonFile, permission));
+}
+
 void AIOScript::OnHandle(Player *sender, const LuaVal &handlerKey, const LuaVal &args)
 {
 	HandlerMapType::const_iterator itr = _handlerMap.find(handlerKey);
 	if(itr != _handlerMap.end())
 	{
 		itr->second(sender, args); //Call the handler function
+		return;
 	}
+
+	sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "AIO: No handler '%s' on script '%s'. Sender: %s",
+		handlerKey.tostring().c_str(), _key.tostring().c_str(), sender->GetName().c_str());
 }
 
 AIOHandlers::AIOHandlers()
@@ -2702,20 +2704,21 @@ void AIOHandlers::HandleInit(Player *sender, const LuaVal &args)
 	if(sender->isAIOInitOnCooldown())
 		return;
 
-	sender->setAIOIntOnCooldown(true);
-	LuaVal &versionVal = args[4];
-	LuaVal &clientDataVal = args[5];
+	LuaVal versionVal = args.get(4);
+	LuaVal clientDataVal = args.get(5);
 	if(!versionVal.isnumber() || !clientDataVal.istable())
 	{
 		sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "AIOHandlers::HandleInit: Invalid version value or clientData value. Sender: %s, Args: %s", sender->GetName().c_str(), args.dumps().c_str());
 		return;
 	}
 
-	if(versionVal.num() != AIO_VERSION)
+	if (std::abs(versionVal.num() - AIO_VERSION) > 0.01)
 	{
 		sender->AIOHandle("AIO", "Init", AIO_VERSION);
 		return;
 	}
+
+	sender->setAIOIntOnCooldown(true);
 
 	LuaVal addonTable(TTABLE);
 	LuaVal cacheTable(TTABLE);
@@ -2756,49 +2759,18 @@ void AIOHandlers::HandleInit(Player *sender, const LuaVal &args)
 	argsToSend[1] = AIOInitBlock;
 	sender->SendSimpleAIOMessage(argsToSend.dumps());
 
-	sender->m_aioInitialized = true;
+	sender->SetAIOInitialized(true);
 }
 
 void AIOHandlers::HandleError(Player *sender, const LuaVal &args)
 {
-	LuaVal &msgVal = args[4];
+	LuaVal msgVal = args.get(4);
 	if(!msgVal.isstring())
 		return;
 
 	sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR, "%s Received client addon error: %s", sender->GetSession()->GetPlayerInfo().c_str(), msgVal.str().c_str());
 }
 
-
-// Instantiate static members of ScriptRegistry.
-template<class TScript> std::map<uint32, TScript*> ScriptRegistry<TScript>::ScriptPointerList;
-template<class TScript> uint32 ScriptRegistry<TScript>::_scriptIdCounter = 0;
-
-// Specialize for each script type class like so:
-template class ScriptRegistry<SpellScriptLoader>;
-template class ScriptRegistry<ServerScript>;
-template class ScriptRegistry<WorldScript>;
-template class ScriptRegistry<FormulaScript>;
-template class ScriptRegistry<WorldMapScript>;
-template class ScriptRegistry<InstanceMapScript>;
-template class ScriptRegistry<BattlegroundMapScript>;
-template class ScriptRegistry<ItemScript>;
-template class ScriptRegistry<CreatureScript>;
-template class ScriptRegistry<GameObjectScript>;
-template class ScriptRegistry<AreaTriggerScript>;
-template class ScriptRegistry<BattlegroundScript>;
-template class ScriptRegistry<OutdoorPvPScript>;
-template class ScriptRegistry<CommandScript>;
-template class ScriptRegistry<WeatherScript>;
-template class ScriptRegistry<AuctionHouseScript>;
-template class ScriptRegistry<ConditionScript>;
-template class ScriptRegistry<VehicleScript>;
-template class ScriptRegistry<DynamicObjectScript>;
-template class ScriptRegistry<TransportScript>;
-template class ScriptRegistry<AchievementCriteriaScript>;
-template class ScriptRegistry<PlayerScript>;
-template class ScriptRegistry<GuildScript>;
-template class ScriptRegistry<GroupScript>;
-template class ScriptRegistry<UnitScript>;
 void PlayerScript::OnPVPKill(Player* /*killer*/, Player* /*killed*/)
 {
 }

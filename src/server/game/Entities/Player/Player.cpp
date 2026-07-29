@@ -1249,10 +1249,10 @@ void Player::Update(uint32 p_time)
         TeleportTo(m_teleport_dest, m_teleport_options);
 
 	//AIO Init cooldown
-	if(m_aioInitCd)
+	if (m_aioInitCd)
 	{
 		m_aioInitTimer += p_time;
-		if(m_aioInitTimer >= 5000)
+		if (m_aioInitTimer >= sWorld->getIntConfig(CONFIG_AIO_INIT_COOLDOWN))
 		{
 			m_aioInitCd = false;
 			m_aioInitTimer = 0;
@@ -20585,80 +20585,56 @@ void Player::AIOHandle(const LuaVal &scriptKey, const LuaVal &handlerKey, const 
 	SendSimpleAIOMessage(msg.dumps());
 }
 
-void Player::SendSimpleAIOMessage(const std::string &message)
+void Player::SendSimpleAIOMessage(std::string const& message)
 {
-	if(message.empty())
-	{
+	if (message.empty())
 		return;
-	}
-	std::string aioPrefix = sWorld->GetAIOPrefix();
-	size_t shortMsgLen = message.size() + aioPrefix.size() + 4; //+4 for S \t and 2 byte for message id
-	uint32 msgMaxLen = sWorld->getIntConfig(CONFIG_AIO_MSG_MAX_LEN);
 
-	//If its a short message
-	if(shortMsgLen <= msgMaxLen)
+	std::string const& aioPrefix = sWorld->GetAIOPrefix();
+	uint32 const maxPacketLen = std::min<uint32>(sWorld->getIntConfig(CONFIG_AIO_MSG_MAX_LEN), AIO_MAX_WHISPER_LENGTH);
+	uint32 const shortHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 2; // S + prefix + tab + short id
+	uint32 const longHeaderLen = 1 + uint32(aioPrefix.size()) + 1 + 6;  // S + prefix + tab + long meta
+
+	if (shortHeaderLen + message.size() <= maxPacketLen)
 	{
 		std::string fullmsg = "S" + aioPrefix + "\t\x1\x1" + message;
-		WorldPacket data(SMSG_MESSAGECHAT, fullmsg.size() + 30);
-		data << uint8(CHAT_MSG_WHISPER);
-		data << int32(LANG_ADDON);
-		data << uint64(GetGUID());
-		data << uint32(0);
-		data << uint64(GetGUID());
-		data << uint32(fullmsg.size() + 1);
-		data << fullmsg;
-		data << uint8(0);
-		GetSession()->SendPacket(&data);
+		WorldPackets::Chat::Chat packet;
+		packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
+		SendDirectMessage(packet.Write());
 		return;
 	}
 
-	//If its a long message
-	uint16 parts = std::ceilf(float(shortMsgLen + 4) / float(msgMaxLen));
+	uint32 const chunkLen = maxPacketLen > longHeaderLen ? maxPacketLen - longHeaderLen : 1;
+	uint16 const parts = uint16(std::ceil(float(message.size()) / float(chunkLen)));
 
-	//parts to string
-	uint16 high = std::floorf((float)parts / 254);
-	std::string partsStr(1, high + 1);
-	partsStr += parts - high * 254 + 1;
+	uint16 high = uint16(std::floor(float(parts) / 254.0f));
+	std::string partsStr(1, char(high + 1));
+	partsStr += char(parts - high * 254 + 1);
 
-	//messageid to string
-	high = std::floorf((float)m_messageIdIndex / 254);
-	std::string messageIdStr(1, high + 1);
-	messageIdStr += m_messageIdIndex - high * 254 + 1;
+	high = uint16(std::floor(float(m_messageIdIndex) / 254.0f));
+	std::string messageIdStr(1, char(high + 1));
+	messageIdStr += char(m_messageIdIndex - high * 254 + 1);
 
-	//Increase or renew messageIdIndex
-	if(m_messageIdIndex >= 64769) //2^16 - 767
-	{
+	if (m_messageIdIndex >= 64769) // 2^16 - 767
 		m_messageIdIndex = 1;
-	}
 	else
-	{
 		++m_messageIdIndex;
-	}
 
-	//Send in parts
 	size_t cursor = 0;
-	for(uint16 partId = 1; partId <= parts; ++partId)
+	for (uint16 partId = 1; partId <= parts; ++partId)
 	{
-		//partid to string
-		high = std::floorf((float)partId / 254);
-		std::string partIdStr(1, high + 1);
-		partIdStr += partId - high * 254 + 1;
+		high = uint16(std::floor(float(partId) / 254.0f));
+		std::string partIdStr(1, char(high + 1));
+		partIdStr += char(partId - high * 254 + 1);
 
-		//send
 		std::string fullmsg = "S" + aioPrefix + "\t" + messageIdStr + partsStr + partIdStr;
-		fullmsg += message.substr(cursor, msgMaxLen);
-		WorldPacket data(SMSG_MESSAGECHAT, fullmsg.size() + 30);
-		data << uint8(CHAT_MSG_WHISPER);
-		data << int32(LANG_ADDON);
-		data << uint64(GetGUID());
-		data << uint32(0);
-		data << uint64(GetGUID());
-		data << uint32(fullmsg.size() + 1);
-		data << fullmsg;
-		data << uint8(0);
-		GetSession()->SendPacket(&data);
+		fullmsg += message.substr(cursor, chunkLen);
 
-		cursor += msgMaxLen;
+		WorldPackets::Chat::Chat packet;
+		packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
+		SendDirectMessage(packet.Write());
+
+		cursor += chunkLen;
 	}
 }
 

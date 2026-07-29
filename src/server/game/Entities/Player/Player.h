@@ -1071,8 +1071,8 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void Whisper(uint32 textId, Player* target, bool isBossWhisper = false) override;
         void WhisperAddon(std::string const& text, Player* receiver);
 
-		//Returns whether AIO client has been initialized
 		bool AIOInitialized() const { return m_aioInitialized; }
+        void SetAIOInitialized(bool initialized) { m_aioInitialized = initialized; }
 
 		// Sends an AIO message to the player
 		// See: class AIOMsg

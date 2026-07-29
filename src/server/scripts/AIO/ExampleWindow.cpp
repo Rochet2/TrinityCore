@@ -22,9 +22,9 @@ public:
 private:
 	void HandlePrint(Player* sender, const LuaVal& args)
 	{
-		LuaVal& btn = args[4];
-		LuaVal& inp = args[5];
-		LuaVal& val = args[6];
+		LuaVal btn = args.get(4);
+		LuaVal inp = args.get(5);
+		LuaVal val = args.get(6);
 		if (!btn.isstring() || !inp.isstring() || !val.isnumber())
 			return;
 
@@ -33,8 +33,13 @@ private:
 
 		try
 		{
-			int size = std::stoi(inp.str());
-			std::string payload(size, 'b');
+			long size = std::stol(inp.str());
+			if (size < 0 || size > 8192)
+			{
+				ChatHandler(sender->GetSession()).SendSysMessage("ExampleWindow: payload size must be between 0 and 8192.");
+				return;
+			}
+			std::string payload(size_t(size), 'b');
 			sender->AIOHandle("AIOExample", "bullshit", payload);
 		}
 		catch (...)
@@ -45,7 +50,7 @@ private:
 
 	void HandleBullshit(Player* sender, const LuaVal& args)
 	{
-		LuaVal& payload = args[4];
+		LuaVal payload = args.get(4);
 		if (!payload.isstring())
 			return;
 

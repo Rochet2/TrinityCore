@@ -203,6 +203,10 @@ set(WORLDSERVER_DYNAMIC_SCRIPT_MODULES_DEPENDENCIES ${DYNAMIC_SCRIPT_MODULE_PROJ
 
 ConfigureScriptLoader("static" SCRIPT_MODULE_PRIVATE_SCRIPTLOADER OFF ${STATIC_SCRIPT_MODULES})
 
+if(NOT WITH_CAIO_EXAMPLES)
+  list(FILTER PRIVATE_SOURCES EXCLUDE REGEX "[/\\\\]AIO[/\\\\]ExampleWindow\\.cpp$")
+endif()
+
 add_library(scripts STATIC
   ScriptLoader.h
   ${SCRIPT_MODULE_PRIVATE_SCRIPTLOADER}
@@ -217,6 +221,10 @@ target_link_libraries(scripts
 target_include_directories(scripts
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
+
+if(WITH_CAIO_EXAMPLES)
+  target_compile_definitions(scripts PRIVATE WITH_CAIO_EXAMPLES)
+endif()
 
 set_target_properties(scripts
   PROPERTIES
