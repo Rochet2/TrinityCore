@@ -377,7 +377,7 @@ public:
                                 bool cont = false;
                                 for (uint32 j = 0; j < pProto->StatsCount; ++j)
                                 {
-                                    if (statTypes[i] == pProto->ItemStat[j].ItemStatType) // skip existing stats on item
+                                    if (uint32(statTypes[i]) == pProto->ItemStat[j].ItemStatType) // skip existing stats on item
                                     {
                                         cont = true;
                                         break;
