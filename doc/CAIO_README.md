@@ -7,9 +7,10 @@ Currently CAIO only supports TrinityCore 3.3.5. This work lives on [Rochet2/Trin
 
 ## License
 
-+ TrinityCore base: GPLv2 text in `COPYING`, with per-file headers allowing **GPLv2 or later**.
++ TrinityCore base: GPLv2 text in `COPYING`; existing TrinityCore sources keep their per-file headers (**GPLv2 or later**).
 + CAIO: GPLv3 text in `CAIO LICENSE.txt`.
-+ Because TrinityCore headers permit “or later”, a combined TrinityCore+CAIO fork may be distributed under **GPLv3**. Source files still use the stock TrinityCore “v2 or later” header for consistency with the rest of the tree.
++ CAIO-owned units (e.g. `src/server/game/AIO/*`, `AIOMsg.*`, `AIOScript.*`, `cs_caio.cpp`, `src/server/scripts/AIO/*`, and CAIO tests) intentionally have **no** per-file license banner — same as original SaiFi CAIO; their license is via `CAIO LICENSE.txt`.
++ Because TrinityCore headers permit “or later”, a combined TrinityCore+CAIO tree may be distributed under **GPLv3**.
 
 ## Supported AIO version
 
