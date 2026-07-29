@@ -22,16 +22,16 @@ public:
     {
         static std::vector<ChatCommand> caioCommandTable =
         {
-            { "version",      rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleVersionCommand,      "" },
-            { "send",         rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleSendCommand,         "" },
-            { "forcereload",  rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleReloadCommand,       "" },
-            { "forcereset",   rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleResetCommand,        "" },
-            { "sendall",      rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleSendAllCommand,      "" },
-            { "forcereloadall", rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleReloadAllCommand,  "" },
-            { "forceresetall",  rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleResetAllCommand,   "" },
-            { "reloadaddons", rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleReloadAddonsCommand, "" },
-            { "addaddon",     rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleAddAddonCommand,     "" },
-            { "removeaddon",  rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleRemoveAddonCommand,  "" },
+            { "version",        rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleVersionCommand,        "" },
+            { "send",           rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleSendCommand,           "" },
+            { "forcereload",    rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleReloadCommand,         "" },
+            { "forcereset",     rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleResetCommand,          "" },
+            { "sendall",        rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleSendAllCommand,        "" },
+            { "forcereloadall", rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleReloadAllCommand,      "" },
+            { "forceresetall",  rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleResetAllCommand,       "" },
+            { "reloadaddons",   rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleReloadAddonsCommand,   "" },
+            { "addaddon",       rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleAddAddonCommand,       "" },
+            { "removeaddon",    rbac::RBAC_PERM_COMMAND_CAIO, true, &HandleRemoveAddonCommand,    "" },
         };
 
         static std::vector<ChatCommand> commandTable =
