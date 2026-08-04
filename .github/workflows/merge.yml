@@ -51,7 +51,7 @@ jobs:
       with:
         ref: ${{ matrix.branch }}
         fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.WORKFLOW_TOKEN }}
 
     - name: Check upstream
       id: upstream
@@ -258,7 +258,7 @@ jobs:
       with:
         ref: ${{ matrix.branch }}
         fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.WORKFLOW_TOKEN }}
 
     - name: Check upstream
       id: upstream
