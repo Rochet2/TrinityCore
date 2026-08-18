@@ -79,8 +79,8 @@ WorldPacket const* PartyInvite::Write()
 
     _worldPacket << SizedString::Data(InviterName);
 
-    for (uint32 LfgSlot : LfgSlots)
-        _worldPacket << LfgSlot;
+    for (uint32 lfgSlot : LfgSlots)
+        _worldPacket << lfgSlot;
 
     return &_worldPacket;
 }
@@ -474,7 +474,7 @@ ByteBuffer& operator<<(ByteBuffer& data, LeaverInfo const& leaverInfo)
     data << int32(leaverInfo.ConsecutiveSuccesses);
     data << leaverInfo.LastPenaltyTime;
     data << leaverInfo.LeaverExpirationTime;
-    data << int32(leaverInfo.Unknown_1120);
+    data << int32(leaverInfo.Flags);
     data << Bits<1>(leaverInfo.LeaverStatus);
     data.FlushBits();
 
@@ -486,8 +486,8 @@ ByteBuffer& operator<<(ByteBuffer& data, PartyPlayerInfo const& playerInfo)
     data << SizedString::BitsSize<6>(playerInfo.Name);
     data << SizedCString::BitsSize<6>(playerInfo.VoiceStateID);
     data << Bits<1>(playerInfo.Connected);
-    data << Bits<1>(playerInfo.VoiceChatSilenced);
     data << Bits<1>(playerInfo.FromSocialQueue);
+    data << Bits<1>(playerInfo.VoiceChatSilenced);
     data << playerInfo.Leaver;
     data << playerInfo.GUID;
     data << uint8(playerInfo.Subgroup);
