@@ -518,7 +518,7 @@ WorldPacket const* QuestGiverQuestDetails::Write()
     _worldPacket << SizedString::BitsSize<8>(PortraitTurnInName);
     _worldPacket << Bits<1>(AutoLaunched);
     _worldPacket << Bits<1>(FromContentPush);
-    _worldPacket << Bits<1>(false);   // unused in client
+    _worldPacket << Bits<1>(ReplayQuest);
     _worldPacket << Bits<1>(ResetByScheduler);
     _worldPacket << Bits<1>(StartCheat);
     _worldPacket << Bits<1>(DisplayPopup);
@@ -852,7 +852,7 @@ WorldPacket const* DisplayPlayerChoice::Write()
     _worldPacket << Bits<1>(HideWarboardHeader);
     _worldPacket << Bits<1>(KeepOpenAfterChoice);
     _worldPacket << Bits<1>(ShowChoicesAsList);
-    _worldPacket << Bits<1>(ForceDontShowChoicesAsList);
+    _worldPacket << Bits<1>(HasPowerChoice);
     _worldPacket << Bits<1>(RequiresSelection);
     _worldPacket.FlushBits();
 
