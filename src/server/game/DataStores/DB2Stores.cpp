@@ -2310,10 +2310,8 @@ static CurveInterpolationMode DetermineCurveType(CurveEntry const* curve, std::v
         {
             switch (points.size())
             {
-                case 1:
-                    return CurveInterpolationMode::Constant;
                 case 2:
-                    return CurveInterpolationMode::Linear;
+                    return CurveInterpolationMode::Cosine;
                 case 3:
                     return CurveInterpolationMode::Bezier3;
                 case 4:
@@ -2325,11 +2323,15 @@ static CurveInterpolationMode DetermineCurveType(CurveEntry const* curve, std::v
         }
         case 3:
             return CurveInterpolationMode::Cosine;
+        case 4:
+            return CurveInterpolationMode::Constant;
+        case 5:
+            return CurveInterpolationMode::Step;
         default:
             break;
     }
 
-    return points.size() != 1 ? CurveInterpolationMode::Linear : CurveInterpolationMode::Constant;
+    return CurveInterpolationMode::Linear;
 }
 
 float DB2Manager::GetCurveValueAt(uint32 curveId, float x) const
@@ -2343,18 +2345,26 @@ float DB2Manager::GetCurveValueAt(uint32 curveId, float x) const
     if (points.empty())
         return 0.0f;
 
+    if (points.size() == 1)
+        return points[0].Y;
+
     return GetCurveValueAt(DetermineCurveType(curve, points), points, x);
 }
 
 float DB2Manager::GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosition2D const> points, float x) const
 {
+    auto findPointIndex = [&](std::size_t pointIndex)
+    {
+        while (pointIndex < points.size() && points[pointIndex].X <= x)
+            ++pointIndex;
+        return pointIndex;
+    };
+
     switch (mode)
     {
         case CurveInterpolationMode::Linear:
         {
-            std::size_t pointIndex = 0;
-            while (pointIndex < points.size() && points[pointIndex].X <= x)
-                ++pointIndex;
+            std::size_t pointIndex = findPointIndex(0);
             if (!pointIndex)
                 return points[0].Y;
             if (pointIndex >= points.size())
@@ -2366,9 +2376,7 @@ float DB2Manager::GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosi
         }
         case CurveInterpolationMode::Cosine:
         {
-            std::size_t pointIndex = 0;
-            while (pointIndex < points.size() && points[pointIndex].X <= x)
-                ++pointIndex;
+            std::size_t pointIndex = findPointIndex(0);
             if (!pointIndex)
                 return points[0].Y;
             if (pointIndex >= points.size())
@@ -2380,9 +2388,7 @@ float DB2Manager::GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosi
         }
         case CurveInterpolationMode::CatmullRom:
         {
-            std::size_t pointIndex = 1;
-            while (pointIndex < points.size() && points[pointIndex].X <= x)
-                ++pointIndex;
+            std::size_t pointIndex = findPointIndex(1);
             if (pointIndex == 1)
                 return points[1].Y;
             if (pointIndex >= points.size() - 1)
@@ -2442,7 +2448,23 @@ float DB2Manager::GetCurveValueAt(CurveInterpolationMode mode, std::span<DBCPosi
             return tmp[0];
         }
         case CurveInterpolationMode::Constant:
-            return points[0].Y;
+        {
+            std::size_t pointIndex = findPointIndex(0);
+            if (pointIndex == 0)
+                return points[0].Y;
+            if (pointIndex >= points.size())
+                return points.back().Y;
+            return 0.0f;
+        }
+        case CurveInterpolationMode::Step:
+        {
+            std::size_t pointIndex = findPointIndex(0);
+            if (pointIndex == 0)
+                return points[0].Y;
+            if (pointIndex >= points.size())
+                return points.back().Y;
+            return points[pointIndex - 1].Y;
+        }
         default:
             break;
     }
