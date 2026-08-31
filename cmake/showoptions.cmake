@@ -34,6 +34,12 @@ else()
   message("* Build with scripts     : No")
 endif()
 
+if(WITH_CAIO_EXAMPLES)
+  message("* CAIO ExampleWindow     : Yes")
+else()
+  message("* CAIO ExampleWindow     : No (default)")
+endif()
+
 if(TOOLS)
   message("* Build map/vmap tools   : Yes (default)")
 else()

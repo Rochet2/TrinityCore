@@ -112,6 +112,11 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include "AIOMsg.h"
+#include "AIOCodec.h"
+#include <vector>
+#include "AIO.h"
+#include "PlayerAIO.h"
 #include "WorldStatePackets.h"
 
 #define ZONE_UPDATE_INTERVAL (1*IN_MILLISECONDS)
@@ -336,6 +341,10 @@ Player::Player(WorldSession* session): Unit(true)
 
     m_achievementMgr = new AchievementMgr(this);
     m_reputationMgr = new ReputationMgr(this);
+
+    m_aioInitCd = false;
+    m_aioInitTimer = 0;
+    m_messageIdIndex = 1;
 }
 
 Player::~Player()
@@ -1250,6 +1259,17 @@ void Player::Update(uint32 p_time)
 
     if (IsHasDelayedTeleport())
         TeleportTo(m_teleport_dest, m_teleport_options);
+
+    // AIO init cooldown
+    if (m_aioInitCd)
+    {
+        m_aioInitTimer += p_time;
+        if (m_aioInitTimer >= sWorld->getIntConfig(CONFIG_AIO_INIT_COOLDOWN))
+        {
+            m_aioInitCd = false;
+            m_aioInitTimer = 0;
+        }
+    }
 }
 
 void Player::Heartbeat()
@@ -20574,6 +20594,55 @@ void Player::Whisper(uint32 textId, Player* target, bool /*isBossWhisper = false
     WorldPackets::Chat::Chat packet;
     packet.Initialize(CHAT_MSG_WHISPER, LANG_UNIVERSAL, this, target, bct->GetText(locale, GetGender()), 0, "", locale);
     target->SendDirectMessage(packet.Write());
+}
+
+void Player::ForceReloadAddons()
+{
+    Trinity::AIO::Handle(this, "AIO", "ForceReload");
+}
+
+void Player::ForceResetAddons()
+{
+    Trinity::AIO::Handle(this, "AIO", "ForceReset");
+}
+
+void Player::SendSimpleAIOMessage(std::string const& message)
+{
+    if (message.empty())
+        return;
+
+    std::string const& aioPrefix = sWorld->GetAIOPrefix();
+    uint32 const maxPacketLen = std::min<uint32>(sWorld->getIntConfig(CONFIG_AIO_MSG_MAX_LEN), AIO_MAX_WHISPER_LENGTH);
+    uint32 const prefixAndTab = 1u + uint32(aioPrefix.size()) + 1u; // S + prefix + tab
+    if (maxPacketLen <= prefixAndTab)
+        return;
+
+    uint32 const maxAfterTab = maxPacketLen - prefixAndTab;
+    uint32 messageId = m_messageIdIndex;
+    if (m_messageIdIndex >= Trinity::AIO::Codec::MAX_ENCODED_UINT16)
+        m_messageIdIndex = 1;
+    else
+        ++m_messageIdIndex;
+
+    // Short messages ignore messageId; long messages need a non-zero id.
+    if (2u + message.size() > size_t(maxAfterTab) && messageId == 0)
+        messageId = 1;
+
+    std::vector<std::string> const packets = Trinity::AIO::Codec::SplitPayload(message, maxAfterTab, messageId);
+    if (packets.empty())
+    {
+        sLog->outAIOMessage(GetSession()->GetAccountId(), LOG_LEVEL_ERROR,
+            "AIO: Outgoing message too large ({} bytes) for '{}'.", message.size(), GetName());
+        return;
+    }
+
+    for (std::string const& body : packets)
+    {
+        std::string fullmsg = "S" + aioPrefix + "\t" + body;
+        WorldPackets::Chat::Chat packet;
+        packet.Initialize(CHAT_MSG_WHISPER, LANG_ADDON, this, this, fullmsg);
+        SendDirectMessage(packet.Write());
+    }
 }
 
 Item* Player::GetMItem(ObjectGuid::LowType id)

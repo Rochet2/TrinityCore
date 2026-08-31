@@ -88,6 +88,13 @@ elseif(WIN32)
   endif()
 endif()
 
+if(COPY_CONF AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lua_client_scripts")
+  if(UNIX)
+    install(DIRECTORY lua_client_scripts DESTINATION bin)
+  elseif(WIN32)
+    install(DIRECTORY lua_client_scripts DESTINATION "${CMAKE_INSTALL_PREFIX}")
+  endif()
+endif()
 # Generate precompiled header
 if(USE_COREPCH)
   add_cxx_pch(worldserver ${PRIVATE_PCH_HEADER})
