@@ -44,23 +44,37 @@
 #include "UpdateData.h"
 #include "ZoneScript.h"
 #include "advstd.h"
+#include <G3D/AABox.h>
+#include <G3D/Box.h>
+#include <G3D/CollisionDetection.h>
+#include <G3D/CoordinateFrame.h>
+#include <G3D/Cylinder.h>
+#include <G3D/Quat.h>
 #include <bit>
 
-struct AreaTrigger::MovementUpdateResult
+enum class MovementUpdateResult
 {
-    enum
-    {
-        None,
-        Moved,
-        Arrived
-    } Status;
+    None,
+    Moved,
+    Arrived
+};
 
+struct AreaTrigger::MovementUpdateWorldResult
+{
+    MovementUpdateResult Status;
+    ::Position Position;
+    G3D::Quat Rotation;
+};
+
+struct AreaTrigger::MovementUpdateLocalResult
+{
+    MovementUpdateResult Status;
     G3D::Vector3 Position;
-    float Rotation = 0.0f;
+    G3D::Vector3 Rotation;
 };
 
 AreaTrigger::AreaTrigger() : WorldObject(false), MapObject(), _spawnId(0), _aurEff(nullptr),
-    _duration(0), _totalDuration(0), _verticesUpdatePreviousOrientation(std::numeric_limits<float>::infinity()),
+    _duration(0), _totalDuration(0), _verticesUpdatePreviousRotation(),
     _isRemoved(false), _reachedDestination(true),
     _areaTriggerCreateProperties(nullptr), _areaTriggerTemplate(nullptr)
 {
@@ -184,7 +198,7 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
     {
         SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TimeToTargetScale), GetCreateProperties()->TimeToTargetScale != 0 ? GetCreateProperties()->TimeToTargetScale : *m_areaTriggerData->Duration);
         SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TimeToTargetPos), *m_areaTriggerData->Duration);
-        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TimeToTargetFacing), *m_areaTriggerData->Duration);
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TimeToTargetShape), *m_areaTriggerData->Duration);
     }
     SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::BoundsRadius2D), GetCreateProperties()->Shape.GetMaxSearchRadius());
     SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::DecalPropertiesID), GetCreateProperties()->DecalPropertiesId);
@@ -291,11 +305,18 @@ bool AreaTrigger::Create(AreaTriggerCreatePropertiesId areaTriggerCreateProperti
 
     SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::Facing), _stationaryPosition.GetOrientation());
 
-    UpdateShape();
-
     AI_Initialize();
 
     UpdateDynamicShapeFlag();
+
+    // Calculate initial position and rotation
+    {
+        auto [_, movedPos, movedRot] = CalculateWorldPositionAndRotation();
+        Relocate(movedPos);
+        _rotation = { movedRot.x, movedRot.y, movedRot.z, movedRot.w };
+    }
+
+    UpdateShape();
 
     if (!IsStaticSpawn())
     {
@@ -451,19 +472,19 @@ void AreaTrigger::ClearOverrideMoveCurve()
     UpdateDynamicShapeFlag();
 }
 
-void AreaTrigger::SetOverrideFacingCurve(float overrideFacing)
+void AreaTrigger::SetOverrideShapeCurve(float overrideFacing)
 {
-    SetOverrideCurve(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::OverrideFacingCurve), overrideFacing);
+    SetOverrideCurve(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::OverrideShapeCurve), overrideFacing);
 }
 
-void AreaTrigger::SetOverrideFacingCurve(std::array<DBCPosition2D, 2> const& points, Optional<uint32> startTimeOffset, CurveInterpolationMode interpolation)
+void AreaTrigger::SetOverrideShapeCurve(std::array<DBCPosition2D, 2> const& points, Optional<uint32> startTimeOffset, CurveInterpolationMode interpolation)
 {
-    SetOverrideCurve(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::OverrideFacingCurve), points, startTimeOffset, interpolation);
+    SetOverrideCurve(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::OverrideShapeCurve), points, startTimeOffset, interpolation);
 }
 
-void AreaTrigger::ClearOverrideFacingCurve()
+void AreaTrigger::ClearOverrideShapeCurve()
 {
-    ClearOverrideCurve(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::OverrideFacingCurve));
+    ClearOverrideCurve(m_values.ModifyValue(&AreaTrigger::m_areaTriggerData).ModifyValue(&UF::AreaTriggerData::OverrideShapeCurve));
 }
 
 void AreaTrigger::SetSpellVisual(SpellCastVisual const& visual)
@@ -472,6 +493,24 @@ void AreaTrigger::SetSpellVisual(SpellCastVisual const& visual)
 
     SetUpdateFieldValue(spellVisualMutator.ModifyValue(&UF::SpellCastVisual::SpellXSpellVisualID), visual.SpellXSpellVisualID);
     SetUpdateFieldValue(spellVisualMutator.ModifyValue(&UF::SpellCastVisual::ScriptVisualID), visual.ScriptVisualID);
+}
+
+void AreaTrigger::SetRollPitchYaw(float roll, float pitch, float yaw,
+    Optional<float> targetRoll, Optional<float> targetPitch, Optional<float> targetYaw)
+{
+    auto areaTriggerData = m_values.ModifyValue(&AreaTrigger::m_areaTriggerData);
+
+    SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::RollPitchYaw), { roll, pitch, yaw });
+    if (targetRoll && targetPitch && targetYaw)
+    {
+        SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TargetRollPitchYaw, 0), { *targetRoll, *targetPitch, *targetYaw });
+        SetAreaTriggerFlag(AreaTriggerFieldFlags::DynamicShape);
+    }
+    else
+    {
+        RemoveOptionalUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::TargetRollPitchYaw));
+        UpdateDynamicShapeFlag();
+    }
 }
 
 void AreaTrigger::SetDuration(int32 newDuration)
@@ -501,19 +540,11 @@ float AreaTrigger::CalcCurrentScale() const
     if (m_areaTriggerData->OverrideScaleCurve->OverrideActive)
         scale *= std::max(GetOverrideCurveValue(*m_areaTriggerData->OverrideScaleCurve, m_areaTriggerData->TimeToTargetScale), 0.000001f);
     else if (m_areaTriggerData->ScaleCurveId)
-        scale *= std::max(sDB2Manager.GetCurveValueAt(m_areaTriggerData->ScaleCurveId, GetOverrideCurveProgress(*m_areaTriggerData->OverrideScaleCurve, m_areaTriggerData->TimeToTargetScale)), 0.000001f);
+        scale *= std::max(sDB2Manager.GetCurveValueAt(m_areaTriggerData->ScaleCurveId, GetScaleProgress()), 0.000001f);
 
     scale *= std::max(GetOverrideCurveValue(*m_areaTriggerData->ExtraScaleCurve, m_areaTriggerData->TimeToTargetExtraScale), 0.000001f);
 
     return scale;
-}
-
-float AreaTrigger::GetProgress() const
-{
-    if (_totalDuration <= 0)
-        return 1.0f;
-
-    return std::clamp(float(GetTimeSinceCreated()) / float(GetTotalDuration()), 0.0f, 1.0f);
 }
 
 float AreaTrigger::GetOverrideCurveProgress(UF::OverrideCurve const& overrideCurve, uint32 timeTo) const
@@ -727,7 +758,7 @@ void AreaTrigger::SearchUnits(std::vector<Unit*>& targetList, float radius, bool
 
 void AreaTrigger::SearchUnitInSphere(UF::AreaTriggerSphere const& sphere, std::vector<Unit*>& targetList)
 {
-    float progress = GetProgress();
+    float progress = GetShapeProgress();
     if (m_areaTriggerData->MorphCurveId)
         progress = sDB2Manager.GetCurveValueAt(m_areaTriggerData->MorphCurveId, progress);
 
@@ -735,11 +766,16 @@ void AreaTrigger::SearchUnitInSphere(UF::AreaTriggerSphere const& sphere, std::v
     float radius = G3D::lerp(sphere.Radius, sphere.RadiusTarget, progress) * scale;
 
     SearchUnits(targetList, radius, true);
+
+    Trinity::Containers::EraseIf(targetList, [this, radius](Unit const* unit) -> bool
+    {
+        return !unit->IsWithinDist(this, radius);
+    });
 }
 
 void AreaTrigger::SearchUnitInBox(UF::AreaTriggerBox const& box, std::vector<Unit*>& targetList)
 {
-    float progress = GetProgress();
+    float progress = GetShapeProgress();
     if (m_areaTriggerData->MorphCurveId)
         progress = sDB2Manager.GetCurveValueAt(m_areaTriggerData->MorphCurveId, progress);
 
@@ -747,20 +783,32 @@ void AreaTrigger::SearchUnitInBox(UF::AreaTriggerBox const& box, std::vector<Uni
     float extentsX = G3D::lerp(box.Extents->Pos.GetPositionX(), box.ExtentsTarget->Pos.GetPositionX(), progress) * scale;
     float extentsY = G3D::lerp(box.Extents->Pos.GetPositionY(), box.ExtentsTarget->Pos.GetPositionY(), progress) * scale;
     float extentsZ = G3D::lerp(box.Extents->Pos.GetPositionZ(), box.ExtentsTarget->Pos.GetPositionZ(), progress) * scale;
-    float radius = std::sqrt(extentsX * extentsX + extentsY * extentsY);
+    float radius = std::sqrt(extentsX * extentsX + extentsY * extentsY + extentsZ * extentsZ);
 
     SearchUnits(targetList, radius, false);
 
-    Position const& boxCenter = GetPosition();
-    Trinity::Containers::EraseIf(targetList, [boxCenter, extentsX, extentsY, extentsZ](Unit const* unit) -> bool
+    if (targetList.empty())
+        return;
+
+    G3D::Box rotatedBox = G3D::CoordinateFrame(G3D::Quat(_rotation.x, _rotation.y, _rotation.z, _rotation.w), PositionToVector3(GetPosition()))
+        .toWorldSpace(G3D::AABox({ -extentsX, -extentsY, -extentsZ / 2 }, { extentsX, extentsY, extentsZ / 2 }));
+
+    Trinity::Containers::EraseIf(targetList, [&rotatedBox](Unit const* unit) -> bool
     {
-        return !unit->IsWithinBox(boxCenter, extentsX, extentsY, extentsZ / 2);
+        return !rotatedBox.contains(PositionToVector3(*unit));
     });
+
+#ifdef TRINITY_DEBUG
+    // DebugVisualizeShape
+    if (Player* caster = Object::ToPlayer(GetCaster()); caster && caster->isDebugAreaTriggers)
+        for (int32 corner = 0; corner < 8; ++corner)
+            caster->SummonCreature(1, Vector3ToPosition(rotatedBox.corner(corner)), TEMPSUMMON_TIMED_DESPAWN, 50ms);
+#endif
 }
 
 void AreaTrigger::SearchUnitInPolygon(UF::AreaTriggerPolygon const& polygon, std::vector<Unit*>& targetList)
 {
-    float progress = GetProgress();
+    float progress = GetShapeProgress();
     if (m_areaTriggerData->MorphCurveId)
         progress = sDB2Manager.GetCurveValueAt(m_areaTriggerData->MorphCurveId, progress);
 
@@ -770,17 +818,33 @@ void AreaTrigger::SearchUnitInPolygon(UF::AreaTriggerPolygon const& polygon, std
 
     SearchUnits(targetList, GetMaxSearchRadius(), false);
 
+    if (targetList.empty())
+        return;
+
     Trinity::Containers::EraseIf(targetList, [this, minZ, maxZ](Unit const* unit) -> bool
     {
         return unit->GetPositionZ() < minZ
             || unit->GetPositionZ() > maxZ
             || !unit->IsInPolygon2D(*this, _polygonVertices);
     });
+
+#ifdef TRINITY_DEBUG
+    // DebugVisualizeShape
+    if (Player* caster = Object::ToPlayer(GetCaster()); caster && caster->isDebugAreaTriggers)
+    {
+        for (Position const& vertex : _polygonVertices)
+        {
+            G3D::Vector3 pos = PositionToVector3(GetPosition()) + PositionToVector3(vertex);
+            caster->SummonCreature(1, Vector3ToPosition(pos + G3D::Vector3(0, 0, -height)), TEMPSUMMON_TIMED_DESPAWN, 50ms);
+            caster->SummonCreature(1, Vector3ToPosition(pos + G3D::Vector3(0, 0, +height)), TEMPSUMMON_TIMED_DESPAWN, 50ms);
+        }
+    }
+#endif
 }
 
 void AreaTrigger::SearchUnitInCylinder(UF::AreaTriggerCylinder const& cylinder, std::vector<Unit*>& targetList)
 {
-    float progress = GetProgress();
+    float progress = GetShapeProgress();
     if (m_areaTriggerData->MorphCurveId)
         progress = sDB2Manager.GetCurveValueAt(m_areaTriggerData->MorphCurveId, progress);
 
@@ -790,21 +854,35 @@ void AreaTrigger::SearchUnitInCylinder(UF::AreaTriggerCylinder const& cylinder, 
     if (!HasAreaTriggerFlag(AreaTriggerFieldFlags::HeightIgnoresScale))
         height *= scale;
 
-    float minZ = GetPositionZ() - height;
-    float maxZ = GetPositionZ() + height;
+    float zOffset = G3D::lerp(cylinder.LocationZOffset, cylinder.LocationZOffsetTarget, progress) * scale;
 
-    SearchUnits(targetList, radius, false);
+    SearchUnits(targetList, std::sqrt(radius * radius + height * height), false);
 
-    Trinity::Containers::EraseIf(targetList, [minZ, maxZ](Unit const* unit) -> bool
+    if (targetList.empty())
+        return;
+
+    G3D::Cylinder rotatedCylinder = G3D::CoordinateFrame(G3D::Quat(_rotation.x, _rotation.y, _rotation.z, _rotation.w), PositionToVector3(GetPosition()))
+        .toWorldSpace(G3D::Cylinder(
+            { 0.0f, 0.0f, 0.0f + zOffset },
+            { 0.0f, 0.0f, 0.0f + zOffset + height },
+            radius));
+
+    Trinity::Containers::EraseIf(targetList, [&rotatedCylinder](Unit const* unit) -> bool
     {
-        return unit->GetPositionZ() < minZ
-            || unit->GetPositionZ() > maxZ;
+        return !rotatedCylinder.contains(PositionToVector3(*unit));
     });
+
+#ifdef TRINITY_DEBUG
+    // DebugVisualizeShape
+    if (Player* caster = Object::ToPlayer(GetCaster()); caster && caster->isDebugAreaTriggers)
+        for (int32 end = 0; end < 2; ++end)
+            caster->SummonCreature(1, Vector3ToPosition(rotatedCylinder.point(end)), TEMPSUMMON_TIMED_DESPAWN, 50ms);
+#endif
 }
 
 void AreaTrigger::SearchUnitInDisk(UF::AreaTriggerDisk const& disk, std::vector<Unit*>& targetList)
 {
-    float progress = GetProgress();
+    float progress = GetShapeProgress();
     if (m_areaTriggerData->MorphCurveId)
         progress = sDB2Manager.GetCurveValueAt(m_areaTriggerData->MorphCurveId, progress);
 
@@ -815,35 +893,73 @@ void AreaTrigger::SearchUnitInDisk(UF::AreaTriggerDisk const& disk, std::vector<
     if (!HasAreaTriggerFlag(AreaTriggerFieldFlags::HeightIgnoresScale))
         height *= scale;
 
-    float minZ = GetPositionZ() - height;
-    float maxZ = GetPositionZ() + height;
+    float zOffset = G3D::lerp(disk.LocationZOffset, disk.LocationZOffsetTarget, progress) * scale;
 
-    SearchUnits(targetList, outerRadius, false);
+    SearchUnits(targetList, std::sqrt(outerRadius * outerRadius + height * height), false);
 
-    Trinity::Containers::EraseIf(targetList, [this, innerRadius, minZ, maxZ](Unit const* unit) -> bool
+    if (targetList.empty())
+        return;
+
+    G3D::Cylinder innerCylinder = G3D::CoordinateFrame(G3D::Quat(_rotation.x, _rotation.y, _rotation.z, _rotation.w), PositionToVector3(GetPosition()))
+        .toWorldSpace(G3D::Cylinder(
+            { 0.0f, 0.0f, 0.0f + zOffset },
+            { 0.0f, 0.0f, 0.0f + zOffset + height },
+            innerRadius));
+
+    G3D::Cylinder outerCylinder(innerCylinder.point(0), innerCylinder.point(1), outerRadius);
+
+    Trinity::Containers::EraseIf(targetList, [&innerCylinder, &outerCylinder](Unit const* unit) -> bool
     {
-        return unit->IsInDist2d(this, innerRadius) || unit->GetPositionZ() < minZ || unit->GetPositionZ() > maxZ;
+        G3D::Vector3 position = PositionToVector3(*unit);
+        return innerCylinder.contains(position) || !outerCylinder.contains(position);
     });
+
+#ifdef TRINITY_DEBUG
+    // DebugVisualizeShape
+    if (Player* caster = Object::ToPlayer(GetCaster()); caster && caster->isDebugAreaTriggers)
+        for (int32 end = 0; end < 2; ++end)
+            caster->SummonCreature(1, Vector3ToPosition(innerCylinder.point(end)), TEMPSUMMON_TIMED_DESPAWN, 50ms);
+#endif
 }
 
 void AreaTrigger::SearchUnitInBoundedPlane(UF::AreaTriggerBoundedPlane const& boundedPlane, std::vector<Unit*>& targetList)
 {
-    float progress = GetProgress();
+    float progress = GetShapeProgress();
     if (m_areaTriggerData->MorphCurveId)
         progress = sDB2Manager.GetCurveValueAt(m_areaTriggerData->MorphCurveId, progress);
 
     float scale = CalcCurrentScale();
-    float extentsX = G3D::lerp(boundedPlane.ExtentsX, boundedPlane.ExtentsTargetX, progress) * scale;
     float extentsY = G3D::lerp(boundedPlane.ExtentsY, boundedPlane.ExtentsTargetY, progress) * scale;
-    float radius = std::sqrt(extentsX * extentsX + extentsY * extentsY);
+    float extentsZ = G3D::lerp(boundedPlane.ExtentsZ, boundedPlane.ExtentsTargetZ, progress) * scale;
+    float radius = std::sqrt(extentsY * extentsY + extentsZ * extentsZ);
 
     SearchUnits(targetList, radius, false);
 
-    Position const& boxCenter = GetPosition();
-    Trinity::Containers::EraseIf(targetList, [boxCenter, extentsX, extentsY](Unit const* unit) -> bool
+    if (targetList.empty())
+        return;
+
+    G3D::CoordinateFrame coordinateFrame = G3D::CoordinateFrame(G3D::Quat(_rotation.x, _rotation.y, _rotation.z, _rotation.w), PositionToVector3(GetPosition()));
+
+    G3D::Vector3 corners[4] =
     {
-        return !unit->IsWithinBox(boxCenter, extentsX, extentsY, MAP_SIZE);
+        coordinateFrame.pointToWorldSpace(G3D::Vector3(0.0f, -extentsY, -extentsZ)),
+        coordinateFrame.pointToWorldSpace(G3D::Vector3(0.0f,  extentsY, -extentsZ)),
+        coordinateFrame.pointToWorldSpace(G3D::Vector3(0.0f, -extentsY,  extentsZ)),
+        coordinateFrame.pointToWorldSpace(G3D::Vector3(0.0f,  extentsY,  extentsZ))
+    };
+
+    Trinity::Containers::EraseIf(targetList, [&corners](Unit const* unit) -> bool
+    {
+        G3D::Vector3 closestPoint = G3D::CollisionDetection::closestPointToRectangle(corners[0], corners[1], corners[2], corners[3], PositionToVector3(*unit));
+        return !unit->IsInDist(closestPoint.x, closestPoint.y, closestPoint.z, unit->GetCombatReach());
     });
+
+#ifdef TRINITY_DEBUG
+    // DebugVisualizeShape
+    if (Player* caster = Object::ToPlayer(GetCaster()); caster && caster->isDebugAreaTriggers)
+        for (G3D::Vector3 const& corner : corners)
+            caster->SummonCreature(1, Vector3ToPosition(corner), TEMPSUMMON_TIMED_DESPAWN, 50ms);
+#endif
 }
 
 void AreaTrigger::HandleUnitEnterExit(std::vector<Unit*> const& newTargetList, AreaTriggerExitReason exitMode)
@@ -1035,10 +1151,10 @@ void AreaTrigger::SetShape(AreaTriggerShapeInfo const& shape)
         {
             SetUpdateFieldValue(areaTriggerData.ModifyValue(&UF::AreaTriggerData::ShapeType), 8);
             auto boundedPlane = areaTriggerData.ModifyValue(&UF::AreaTriggerData::ShapeData, UF::VariantCase<UF::AreaTriggerBoundedPlane>);
-            SetUpdateFieldValue(boundedPlane.ModifyValue(&UF::AreaTriggerBoundedPlane::ExtentsX), shapeData.Extents.Pos.GetPositionX());
-            SetUpdateFieldValue(boundedPlane.ModifyValue(&UF::AreaTriggerBoundedPlane::ExtentsY), shapeData.Extents.Pos.GetPositionY());
-            SetUpdateFieldValue(boundedPlane.ModifyValue(&UF::AreaTriggerBoundedPlane::ExtentsTargetX), shapeData.ExtentsTarget.Pos.GetPositionX());
-            SetUpdateFieldValue(boundedPlane.ModifyValue(&UF::AreaTriggerBoundedPlane::ExtentsTargetY), shapeData.ExtentsTarget.Pos.GetPositionY());
+            SetUpdateFieldValue(boundedPlane.ModifyValue(&UF::AreaTriggerBoundedPlane::ExtentsY), shapeData.ExtentsY);
+            SetUpdateFieldValue(boundedPlane.ModifyValue(&UF::AreaTriggerBoundedPlane::ExtentsZ), shapeData.ExtentsZ);
+            SetUpdateFieldValue(boundedPlane.ModifyValue(&UF::AreaTriggerBoundedPlane::ExtentsTargetY), shapeData.ExtentsTargetY);
+            SetUpdateFieldValue(boundedPlane.ModifyValue(&UF::AreaTriggerBoundedPlane::ExtentsTargetZ), shapeData.ExtentsTargetZ);
         }
         else
             static_assert(Trinity::dependant_false_v<ShapeType>, "Unsupported shape type");
@@ -1056,16 +1172,15 @@ float AreaTrigger::GetMaxSearchRadius() const
 void AreaTrigger::UpdatePolygonVertices()
 {
     UF::AreaTriggerPolygon const* shape = m_areaTriggerData->ShapeData.Get<UF::AreaTriggerPolygon>();
-    float newOrientation = GetOrientation();
 
     // No need to recalculate, orientation didn't change
-    if (G3D::fuzzyEq(_verticesUpdatePreviousOrientation, newOrientation) && shape->VerticesTarget.empty())
+    if (_verticesUpdatePreviousRotation == _rotation && shape->VerticesTarget.empty())
         return;
 
     _polygonVertices.assign(shape->Vertices.begin(), shape->Vertices.end());
     if (!shape->VerticesTarget.empty())
     {
-        float progress = GetProgress();
+        float progress = GetShapeProgress();
         if (m_areaTriggerData->MorphCurveId)
             progress = sDB2Manager.GetCurveValueAt(m_areaTriggerData->MorphCurveId, progress);
 
@@ -1079,18 +1194,16 @@ void AreaTrigger::UpdatePolygonVertices()
         }
     }
 
-    float angleSin = std::sin(newOrientation);
-    float angleCos = std::cos(newOrientation);
+    G3D::Matrix3 rotationMatrix(G3D::Quat(_rotation.x, _rotation.y, _rotation.z, _rotation.w));
 
     // This is needed to rotate the vertices, following orientation
     for (Position& vertice : _polygonVertices)
     {
-        float x = vertice.GetPositionX() * angleCos - vertice.GetPositionY() * angleSin;
-        float y = vertice.GetPositionY() * angleCos + vertice.GetPositionX() * angleSin;
-        vertice.Relocate(x, y);
+        G3D::Vector3 transformed = rotationMatrix * PositionToVector3(vertice);
+        vertice.Relocate(transformed.x, transformed.y);
     }
 
-    _verticesUpdatePreviousOrientation = newOrientation;
+    _verticesUpdatePreviousRotation = _rotation;
 }
 
 bool AreaTrigger::HasOverridePosition() const
@@ -1214,44 +1327,24 @@ void AreaTrigger::UndoActions(Unit* unit)
 
 void AreaTrigger::UpdatePositionAndRotation()
 {
-    Position oldPosition = GetPosition();
-    Position newPosition;
-    float oldRotation = GetOrientation();
-    auto [movementUpdateResult, position, rotation] = CalculateLocalPositionAndRotation();
+    auto [movementUpdateResult, newPosition, newRotation] = CalculateWorldPositionAndRotation();
 
     if (HasAreaTriggerFlag(AreaTriggerFieldFlags::Attached))
-    {
         if (Unit* target = GetTarget())
-        {
             RelocateStationaryPosition(target->GetPosition());
 
-            newPosition = target->GetPositionWithOffset(Vector3ToPosition(position));
-
-            if (!HasAreaTriggerFlag(AreaTriggerFieldFlags::AbsoluteOrientation))
-                rotation += target->GetOrientation();
-
-            if (movementUpdateResult == MovementUpdateResult::None)
-                movementUpdateResult = MovementUpdateResult::Moved;
-        }
-    }
-    else if (TransportBase const* transport = GetTransport())
-    {
-        newPosition = transport->GetPositionWithOffset(Vector3ToPosition(position));
-
-        if (!HasAreaTriggerFlag(AreaTriggerFieldFlags::AbsoluteOrientation))
-            rotation += transport->GetTransportOrientation();
-    }
-    else
-        newPosition = GetMovementOrigin().GetPositionWithOffset(Vector3ToPosition(position));
+    Position oldPosition = GetPosition();
+    QuaternionData oldRotation = std::exchange(_rotation, { newRotation.x, newRotation.y, newRotation.z, newRotation.w });
 
     if (newPosition != oldPosition)
     {
-        GetMap()->AreaTriggerRelocation(this, newPosition.GetPositionX(), newPosition.GetPositionY(), newPosition.GetPositionZ(), rotation);
+        GetMap()->AreaTriggerRelocation(this, newPosition.GetPositionX(), newPosition.GetPositionY(), newPosition.GetPositionZ(), newPosition.GetOrientation());
     }
-    else if (!G3D::fuzzyEq(rotation, oldRotation))
+    else
     {
-        SetOrientation(rotation);
-        UpdateShape();
+        SetOrientation(newPosition.GetOrientation());
+        if (oldRotation != _rotation)
+            UpdateShape();
     }
 
 #ifdef TRINITY_DEBUG
@@ -1268,26 +1361,78 @@ void AreaTrigger::UpdatePositionAndRotation()
     }
 }
 
+AreaTrigger::MovementUpdateWorldResult AreaTrigger::CalculateWorldPositionAndRotation() const
+{
+    auto [status, localPosition, localRotation] = CalculateLocalPositionAndRotation();
+    MovementUpdateWorldResult worldResult {
+        .Status = status,
+        .Position = Vector3ToPosition(localPosition),
+        .Rotation = G3D::Quat::fromYPRAngles(localRotation.z, localRotation.y, localRotation.x)
+    };
+
+    if (HasAreaTriggerFlag(AreaTriggerFieldFlags::Attached))
+    {
+        if (Unit* target = GetTarget())
+        {
+            worldResult.Position = target->GetPositionWithOffset(worldResult.Position);
+
+            if (!HasAreaTriggerFlag(AreaTriggerFieldFlags::AbsoluteOrientation))
+                worldResult.Rotation = G3D::Quat::fromAxisAngleRotation(G3D::Vector3::unitZ(), target->GetOrientation()) * worldResult.Rotation;
+
+            if (worldResult.Status == MovementUpdateResult::None)
+                worldResult.Status = MovementUpdateResult::Moved;
+        }
+    }
+    else if (TransportBase const* transport = GetTransport())
+    {
+        worldResult.Position = transport->GetPositionWithOffset(worldResult.Position);
+
+        if (!HasAreaTriggerFlag(AreaTriggerFieldFlags::AbsoluteOrientation))
+            worldResult.Rotation = G3D::Quat::fromAxisAngleRotation(G3D::Vector3::unitZ(), transport->GetTransportOrientation()) * worldResult.Rotation;
+    }
+    else
+        worldResult.Position = GetMovementOrigin().GetPositionWithOffset(worldResult.Position);
+
+    worldResult.Rotation.toYPRAngles(localRotation.z, localRotation.y, localRotation.x);
+    worldResult.Position.SetOrientation(localRotation.z);
+
+    return worldResult;
+}
+
 struct AreaTriggerPositionAndRotationCalcVisitor
 {
-    AreaTrigger::MovementUpdateResult operator()(UF::AreaTriggerSplineCalculator const&) const { return at->CalculateLocalSplinePositionAndRotation(); }
-    AreaTrigger::MovementUpdateResult operator()(UF::AreaTriggerOrbit const& orbit) const { return at->CalculateLocalOrbitPositionAndRotation(orbit); }
-    AreaTrigger::MovementUpdateResult operator()(std::monostate) const { return at->CalculateLocalStationaryPositionAndRotation(); }
-    AreaTrigger::MovementUpdateResult operator()(UF::AreaTriggerMovementScript const& /*script*/) const { ASSERT(false, "AreaTriggerMovementScript is not implemented"); }
+    AreaTrigger::MovementUpdateLocalResult operator()(UF::AreaTriggerSplineCalculator const&) const { return at->CalculateLocalSplinePositionAndRotation(); }
+    AreaTrigger::MovementUpdateLocalResult operator()(UF::AreaTriggerOrbit const& orbit) const { return at->CalculateLocalOrbitPositionAndRotation(orbit); }
+    AreaTrigger::MovementUpdateLocalResult operator()(std::monostate) const { return at->CalculateLocalStationaryPositionAndRotation(); }
+    AreaTrigger::MovementUpdateLocalResult operator()(UF::AreaTriggerMovementScript const& /*script*/) const { ASSERT(false, "AreaTriggerMovementScript is not implemented"); }
 
     AreaTrigger const* at;
 };
 
-AreaTrigger::MovementUpdateResult AreaTrigger::CalculateLocalPositionAndRotation() const
+AreaTrigger::MovementUpdateLocalResult AreaTrigger::CalculateLocalPositionAndRotation() const
 {
-    MovementUpdateResult result = m_areaTriggerData->PathData.Visit(AreaTriggerPositionAndRotationCalcVisitor{ this });
+    MovementUpdateLocalResult result = m_areaTriggerData->PathData.Visit(AreaTriggerPositionAndRotationCalcVisitor{ this });
+
+    if (m_areaTriggerData->TargetRollPitchYaw.has_value())
+    {
+        float progress = GetShapeProgress();
+        if (m_areaTriggerData->MorphCurveId)
+            progress = sDB2Manager.GetCurveValueAt(m_areaTriggerData->MorphCurveId, progress);
+
+        result.Rotation += PositionToVector3(m_areaTriggerData->RollPitchYaw->Pos)
+            .lerp(PositionToVector3(m_areaTriggerData->TargetRollPitchYaw->Pos), progress);
+    }
+    else
+        result.Rotation += PositionToVector3(m_areaTriggerData->RollPitchYaw->Pos);
 
     if (HasOverridePosition())
     {
         result.Status = MovementUpdateResult::Moved;
-        result.Position.x = GetOverrideCurveValue(*m_areaTriggerData->OverrideMoveCurveX, m_areaTriggerData->TimeToTargetPos);
-        result.Position.y = GetOverrideCurveValue(*m_areaTriggerData->OverrideMoveCurveY, m_areaTriggerData->TimeToTargetPos);
-        result.Position.z = GetOverrideCurveValue(*m_areaTriggerData->OverrideMoveCurveZ, m_areaTriggerData->TimeToTargetPos);
+
+        float progress = GetOverridePosProgress();
+        result.Position.x = GetOverrideCurveValueAtProgress(*m_areaTriggerData->OverrideMoveCurveX, progress);
+        result.Position.y = GetOverrideCurveValueAtProgress(*m_areaTriggerData->OverrideMoveCurveY, progress);
+        result.Position.z = GetOverrideCurveValueAtProgress(*m_areaTriggerData->OverrideMoveCurveZ, progress);
 
         if (m_movementInfo.transport.guid.IsEmpty())
             result.Position = PositionToVector3(GetMovementOrigin().GetPositionOffsetTo(Vector3ToPosition(result.Position)));
@@ -1412,7 +1557,7 @@ void AreaTrigger::InitOrbit(AreaTriggerOrbitInfo const& orbit, Optional<float> o
     SetUpdateFieldValue(pathData.ModifyValue(&UF::AreaTriggerOrbit::Center), center);
 }
 
-AreaTrigger::MovementUpdateResult AreaTrigger::CalculateLocalSplinePositionAndRotation() const
+AreaTrigger::MovementUpdateLocalResult AreaTrigger::CalculateLocalSplinePositionAndRotation() const
 {
     float currentTimePercent = std::clamp(float(GetElapsedTimeForMovement()) / float(GetTimeToTarget()), 0.0f, 1.0f);
     bool reachedDestination = currentTimePercent >= 1.0f;
@@ -1439,8 +1584,7 @@ AreaTrigger::MovementUpdateResult AreaTrigger::CalculateLocalSplinePositionAndRo
 
     float orientation = 0.0f;
     if (m_areaTriggerData->FacingCurveId)
-        orientation += sDB2Manager.GetCurveValueAt(m_areaTriggerData->FacingCurveId,
-            GetOverrideCurveProgress(m_areaTriggerData->OverrideFacingCurve, m_areaTriggerData->TimeToTargetFacing));
+        orientation += sDB2Manager.GetCurveValueAt(m_areaTriggerData->FacingCurveId, GetShapeProgress());
 
     if (!HasAreaTriggerFlag(AreaTriggerFieldFlags::AbsoluteOrientation))
     {
@@ -1450,13 +1594,30 @@ AreaTrigger::MovementUpdateResult AreaTrigger::CalculateLocalSplinePositionAndRo
             orientation += std::atan2(derivative.y, derivative.x);
     }
 
-    return { .Status = reachedDestination ? MovementUpdateResult::Arrived : MovementUpdateResult::Moved, .Position = currentPosition, .Rotation = orientation };
+    return {
+        .Status = reachedDestination ? MovementUpdateResult::Arrived : MovementUpdateResult::Moved,
+        .Position = currentPosition,
+        .Rotation = G3D::Vector3(0.0f, 0.0f, orientation)
+    };
 }
 
-AreaTrigger::MovementUpdateResult AreaTrigger::CalculateLocalOrbitPositionAndRotation(UF::AreaTriggerOrbit const& orbit) const
+AreaTrigger::MovementUpdateLocalResult AreaTrigger::CalculateLocalOrbitPositionAndRotation(UF::AreaTriggerOrbit const& orbit) const
 {
-    // AreaTrigger make exactly "Duration / TimeToTarget" loops during his life time
-    float pathProgress = float(GetElapsedTimeForMovement() + *orbit.ExtraTimeForBlending) / float(GetTimeToTarget());
+    uint32 movementTime = GetElapsedTimeForMovement();
+    uint32 timeToTarget = GetTimeToTarget() + orbit.ExtraTimeForBlending;
+    bool firstLoop = true;
+    if (HasAreaTriggerFlag(AreaTriggerFieldFlags::CanLoop) && timeToTarget)
+    {
+        // remove ExtraTimeForBlending if not on first loop
+        if (movementTime > timeToTarget)
+        {
+            timeToTarget -= orbit.ExtraTimeForBlending;
+            movementTime = (movementTime - orbit.ExtraTimeForBlending) % timeToTarget;
+            firstLoop = false;
+        }
+    }
+
+    float pathProgress = float(movementTime) / float(timeToTarget);
     if (m_areaTriggerData->MoveCurveId)
         pathProgress = sDB2Manager.GetCurveValueAt(m_areaTriggerData->MoveCurveId, pathProgress);
 
@@ -1465,30 +1626,31 @@ AreaTrigger::MovementUpdateResult AreaTrigger::CalculateLocalOrbitPositionAndRot
         pathProgress = std::min(1.f, pathProgress);
 
     float radius = orbit.Radius;
-    if (pathProgress <= 1.0f && G3D::fuzzyNe(orbit.BlendFromRadius, radius))
+    if (firstLoop && G3D::fuzzyNe(orbit.BlendFromRadius, radius))
     {
-        float blendCurve = (orbit.BlendFromRadius - radius) / radius;
-        RoundToInterval(blendCurve, 1.f, 4.f);
-        float blendProgress = std::min(1.f, pathProgress / blendCurve * 0.63661975f);
+        float blendCurve = std::clamp((orbit.BlendFromRadius - radius) / radius, 1.0f, 4.0f);
+        float blendProgress = std::clamp(std::abs(4.0f * pathProgress / blendCurve), 0.0f, 1.0f);
         radius = G3D::lerp(orbit.BlendFromRadius, radius, blendProgress);
     }
 
-    // Adapt Path progress depending of circle direction
-    if (!orbit.CounterClockwise)
-        pathProgress *= -1;
+    float angle = 2.0f * float(M_PI) * pathProgress;
 
-    float angle = orbit.InitialAngle + 2.f * float(M_PI) * pathProgress;
+    // Adapt angle depending of circle direction
+    if (!orbit.CounterClockwise)
+        angle *= -1;
+
+    angle += orbit.InitialAngle;
+
     G3D::Vector3 position =
     {
         radius * std::cos(angle),
         radius * std::sin(angle),
-        *m_areaTriggerData->ZOffset
+        m_areaTriggerData->ZOffset
     };
 
     float orientation = 0.0f;
     if (m_areaTriggerData->FacingCurveId)
-        orientation = sDB2Manager.GetCurveValueAt(m_areaTriggerData->FacingCurveId,
-            GetOverrideCurveProgress(m_areaTriggerData->OverrideFacingCurve, m_areaTriggerData->TimeToTargetFacing));
+        orientation = sDB2Manager.GetCurveValueAt(m_areaTriggerData->FacingCurveId, GetShapeProgress());
 
     if (!HasAreaTriggerFlag(AreaTriggerFieldFlags::AbsoluteOrientation))
     {
@@ -1496,20 +1658,27 @@ AreaTrigger::MovementUpdateResult AreaTrigger::CalculateLocalOrbitPositionAndRot
         orientation += orbit.CounterClockwise ? float(M_PI_4) : -float(M_PI_4);
     }
 
-    return { .Status = MovementUpdateResult::Moved, .Position = position, .Rotation = orientation };
+    return {
+        .Status = MovementUpdateResult::Moved,
+        .Position = position,
+        .Rotation = G3D::Vector3(0.0f, 0.0f, orientation)
+    };
 }
 
-AreaTrigger::MovementUpdateResult AreaTrigger::CalculateLocalStationaryPositionAndRotation() const
+AreaTrigger::MovementUpdateLocalResult AreaTrigger::CalculateLocalStationaryPositionAndRotation() const
 {
     float orientation = 0.0f;
     if (m_areaTriggerData->FacingCurveId)
-        orientation = sDB2Manager.GetCurveValueAt(m_areaTriggerData->FacingCurveId,
-            GetOverrideCurveProgress(m_areaTriggerData->OverrideFacingCurve, m_areaTriggerData->TimeToTargetFacing));
+        orientation = sDB2Manager.GetCurveValueAt(m_areaTriggerData->FacingCurveId, GetShapeProgress());
 
     if (!HasAreaTriggerFlag(AreaTriggerFieldFlags::AbsoluteOrientation))
         orientation += *m_areaTriggerData->Facing;
 
-    return { .Status = MovementUpdateResult::None, .Position = G3D::Vector3::zero(), .Rotation = orientation };
+    return {
+        .Status = MovementUpdateResult::None,
+        .Position = G3D::Vector3::zero(),
+        .Rotation = G3D::Vector3(0.0f, 0.0f, orientation)
+    };
 }
 
 struct AreaTriggerMovementOriginVisitor
