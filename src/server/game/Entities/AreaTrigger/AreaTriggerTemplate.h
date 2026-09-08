@@ -181,13 +181,14 @@ struct AreaTriggerShapeInfo
 
     struct BoundedPlane
     {
-        BoundedPlane()
-            : Extents(), ExtentsTarget() { }
+        BoundedPlane() = default;
         explicit BoundedPlane(std::array<float, MAX_AREATRIGGER_ENTITY_DATA> const& raw)
-            : Extents(raw[0], raw[1]), ExtentsTarget(raw[2], raw[3]) { }
+            : ExtentsY(raw[0]), ExtentsZ(raw[1]), ExtentsTargetY(raw[2]), ExtentsTargetZ(raw[3]) { }
 
-        TaggedPosition<Position::XY> Extents;
-        TaggedPosition<Position::XY> ExtentsTarget;
+        float ExtentsY = 0.0f;
+        float ExtentsZ = 0.0f;
+        float ExtentsTargetY = 0.0f;
+        float ExtentsTargetZ = 0.0f;
 
         float GetMaxSearchRadius() const;
         bool IsDynamic() const;
