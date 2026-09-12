@@ -1,0 +1,3 @@
+[submodule "dep/smallfolk_cpp/smallfolk_cpp"]
+	path = dep/smallfolk_cpp/smallfolk_cpp
+	url = https://github.com/Rochet2/smallfolk_cpp.git

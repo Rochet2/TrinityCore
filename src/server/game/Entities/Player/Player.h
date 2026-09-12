@@ -74,6 +74,7 @@ class PlayerMenu;
 class PlayerSocial;
 class ReputationMgr;
 class SpellCastTargets;
+class AIOMsg;
 class TradeData;
 
 enum InventoryType : uint8;
@@ -1063,6 +1064,24 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
         void Whisper(std::string_view text, Language language, Player* receiver, bool = false) override;
         void Whisper(uint32 textId, Player* target, bool isBossWhisper = false) override;
         void WhisperAddon(std::string const& text, Player* receiver);
+
+        // AIO can only understand smallfolk LuaVal::dumps() format
+        // Handler functions are called by creating a table as below
+        // {
+        //     {n, ScriptName, HandlerName(optional), Arg1..N(optional) },
+        //     {n, AnotherScriptName, AnotherHandlerName(optional), Arg1..N(optional) }
+        // }
+        // Where n is number of arguments including handler name as an argument
+        void SendSimpleAIOMessage(const std::string &message);
+
+        // Forces reload on the player AIO addons (syncs with server)
+        void ForceReloadAddons();
+
+        // Force reset: client addon data is deleted and downloaded again
+        void ForceResetAddons();
+
+        bool isAIOInitOnCooldown() const { return m_aioInitCd; }
+        void setAIOIntOnCooldown(bool cd) { m_aioInitCd = cd; m_aioInitTimer = 0; }
 
         /*********************************************************/
         /***                    STORAGE SYSTEM                 ***/
@@ -2552,11 +2571,16 @@ class TC_GAME_API Player : public Unit, public GridObject<Player>
 
         uint32 _activeCheats;
 
+        bool m_aioInitCd;
+        uint32 m_aioInitTimer;
+        uint16 m_messageIdIndex;
+
         // variables to save health and mana before duel and restore them after duel
         uint32 healthBeforeDuel;
         uint32 manaBeforeDuel;
 
         WorldLocation _corpseLocation;
+
 };
 
 TC_GAME_API void AddItemsSetItem(Player* player, Item* item);

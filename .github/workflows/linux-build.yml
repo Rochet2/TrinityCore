@@ -25,6 +25,8 @@ jobs:
             launcher: ccache
     steps:
     - uses: actions/checkout@v5
+      with:
+        submodules: recursive
     - name: Set reusable strings
       id: strings
       shell: bash
@@ -54,7 +56,7 @@ jobs:
         CXX: /usr/bin/${{ matrix.cxx }}
       run: >
         cmake -GNinja -S ${{ github.workspace }} -B ${{ steps.strings.outputs.build-output-dir }}
-        -DWITH_WARNINGS=1 -DWITH_WARNINGS_AS_ERRORS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=${{ matrix.pch }} -DUSE_SCRIPTPCH=${{ matrix.pch }} -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0
+        -DWITH_WARNINGS=1 -DWITH_WARNINGS_AS_ERRORS=1 -DWITH_COREDEBUG=0 -DUSE_COREPCH=${{ matrix.pch }} -DUSE_SCRIPTPCH=${{ matrix.pch }} -DTOOLS=1 -DSCRIPTS=dynamic -DSERVERS=1 -DNOJEM=0 -DWITH_CAIO_EXAMPLES=1
         -DCMAKE_C_FLAGS_DEBUG="-DNDEBUG -g0" -DCMAKE_CXX_FLAGS_DEBUG="-DNDEBUG -g0"
         -DCMAKE_INSTALL_PREFIX=check_install -DBUILD_TESTING=1
     - name: Build
