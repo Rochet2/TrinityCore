@@ -49,6 +49,9 @@
 #include "PacketUtilities.h"
 #include "Player.h"
 #include "Realm.h"
+#include "AIO.h"
+#include "AIOCodec.h"
+#include "AIOReassembler.h"
 #include "ScriptMgr.h"
 #include "SocialMgr.h"
 #include "QueryHolder.h"
@@ -318,7 +321,7 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                     }
                     else if (_player->IsInWorld())
                     {
-                        if(AntiDOS.EvaluateOpcode(*packet, currentTime))
+                        if (AntiDOS.EvaluateOpcode(*packet, currentTime))
                         {
                             sScriptMgr->OnPacketReceive(this, *packet);
                             opHandle->Call(this, *packet);
@@ -476,7 +479,199 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
             return false;                                       //Will remove this session from the world session map
     }
 
+    // AIO: drop incomplete long messages (AIO.lua AIO_MSG_CACHE_TIME / AIO_MSG_CACHE_DELAY)
+    if (m_Socket && m_Socket->IsOpen() && _aioReassembler.Size())
+    {
+        _aioMsgCacheSweepTimer += diff;
+        uint32 const sweepDelay = sWorld->getIntConfig(CONFIG_AIO_MSG_CACHE_DELAY);
+        if (_aioMsgCacheSweepTimer >= sweepDelay)
+        {
+            _aioMsgCacheSweepTimer = 0;
+            uint32 const cacheTime = sWorld->getIntConfig(CONFIG_AIO_MSG_CACHE_TIME);
+            _aioReassembler.Sweep(sweepDelay, cacheTime);
+        }
+    }
+
     return true;
+}
+
+WorldSession::AIOIncomingGateResult WorldSession::CheckAIOIncomingGate(Player* sender, size_t payloadBytes)
+{
+    uint32 const minInterval = sWorld->getIntConfig(CONFIG_AIO_MSG_RATE_MS);
+    if (!minInterval)
+        return AIOIncomingGateResult::Allow;
+
+    uint32 const now = getMSTime();
+    if (_aioLastCompleteMessageMs && (now - _aioLastCompleteMessageMs) < minInterval)
+    {
+        ++_aioRateLimitedCount;
+        if (_aioRateLimitedCount == 1 || (_aioRateLimitedCount % 25) == 0)
+        {
+            sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_WARN,
+                "AIO: Rate limited {} incoming message(s) from {} (latest {} bytes, {} ms since last accepted)",
+                _aioRateLimitedCount, sender->GetName(), payloadBytes, now - _aioLastCompleteMessageMs);
+        }
+        return AIOIncomingGateResult::RateLimited;
+    }
+
+    _aioLastCompleteMessageMs = now;
+    _aioRateLimitedCount = 0;
+    return AIOIncomingGateResult::Allow;
+}
+
+void WorldSession::NotifyAIOIncomingParseFailure(Player* sender)
+{
+    ++_aioParseFailureCount;
+    uint32 const maxFailures = sWorld->getIntConfig(CONFIG_AIO_MAX_PARSE_FAILURES);
+
+    if (_aioParseFailureCount == 1 || (_aioParseFailureCount % 5) == 0)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_WARN,
+            "AIO: Failed to parse incoming smallfolk payload from {} (failures: {})",
+            sender->GetName(), _aioParseFailureCount);
+    }
+
+    if (maxFailures && _aioParseFailureCount >= maxFailures)
+    {
+        RecordAIOIncomingAbuse(sender, "parse failure threshold");
+        _aioParseFailureCount = 0;
+    }
+}
+
+void WorldSession::RecordAIOIncomingAbuse(Player* sender, char const* reason)
+{
+    if (_aioReassembler.Size())
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_WARN,
+            "AIO: Cleared {} reassembly buffer(s) for {} ({})",
+            uint32(_aioReassembler.Size()), sender->GetName(), reason);
+        _aioReassembler.Clear();
+    }
+}
+
+WorldSession::IncomingAIOWhisperResult WorldSession::HandleIncomingAIOClientWhisper(Player* sender, Player* receiver, std::string const& msg)
+{
+    size_t delimPos = 0;
+    if (!Trinity::AIO::Codec::IsClientPrefix(sWorld->GetAIOClientWirePrefix(), msg, delimPos))
+        return IncomingAIOWhisperResult::NotAIO;
+
+    if (receiver != sender)
+        return IncomingAIOWhisperResult::DropPacket;
+
+    uint32 messageId = 0;
+    if ((msg.size() - delimPos - 1) >= size_t(2))
+    {
+        messageId = Trinity::AIO::Codec::DecodePair(msg[delimPos + 1], msg[delimPos + 2]);
+
+        if (messageId == 0)
+        {
+            std::string const& payload = msg.substr(delimPos + 3);
+            if (payload.size() > sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING))
+            {
+                sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+                    "AIO: Short message size {} exceeds limit {}. Sender: {}",
+                    payload.size(), sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING), sender->GetName());
+                return IncomingAIOWhisperResult::Consumed;
+            }
+
+            if (CheckAIOIncomingGate(sender, payload.size()) == AIOIncomingGateResult::Allow)
+                sScriptMgr->OnAddonMessage(sender, payload);
+            else
+                RecordAIOIncomingAbuse(sender, "rate limit");
+
+            return IncomingAIOWhisperResult::Consumed;
+        }
+    }
+
+    if ((msg.size() - delimPos - 1) < size_t(6))
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "HandleIncomingAIOClientWhisper: Received AIO long addon message without meta data. Sender: {}", sender->GetName());
+        return IncomingAIOWhisperResult::Consumed;
+    }
+
+    uint32 parts = Trinity::AIO::Codec::DecodePair(msg[delimPos + 3], msg[delimPos + 4]);
+    if (parts < 2)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "HandleIncomingAIOClientWhisper: Received AIO addon message with number of parts: {} (< 2). Sender: {}", parts, sender->GetName());
+        return IncomingAIOWhisperResult::DropPacket;
+    }
+
+    uint32 maxparts = sWorld->getIntConfig(CONFIG_AIO_MAXPARTS);
+    if (parts > maxparts)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "HandleIncomingAIOClientWhisper: Received AIO addon message with too many parts: {} (> {}). Message Id: {}, Sender: {}",
+            parts, maxparts, messageId, sender->GetName());
+        RecordAIOIncomingAbuse(sender, "too many parts");
+        return IncomingAIOWhisperResult::DropPacket;
+    }
+
+    uint32 partId = Trinity::AIO::Codec::DecodePair(msg[delimPos + 5], msg[delimPos + 6]);
+    if (partId < 1 || partId > parts)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "HandleIncomingAIOClientWhisper: Invalid AIO part id {} for {} parts. Message Id: {}, Sender: {}",
+            partId, parts, messageId, sender->GetName());
+        return IncomingAIOWhisperResult::DropPacket;
+    }
+
+    std::string const partPayload = msg.substr(delimPos + 7);
+    uint32 const maxBufferSize = sWorld->getIntConfig(CONFIG_AIO_MAX_BUFFER_SIZE);
+    uint32 const maxPacketLen = std::min<uint32>(sWorld->getIntConfig(CONFIG_AIO_MSG_MAX_LEN), AIO_MAX_WHISPER_LENGTH);
+    uint32 const longHeaderLen = uint32(sWorld->GetAIOClientWirePrefix().size()) + 1u + 6u;
+    uint32 const maxPartPayload = maxPacketLen > longHeaderLen ? maxPacketLen - longHeaderLen : 1u;
+    if (partPayload.size() > maxPartPayload)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "HandleIncomingAIOClientWhisper: AIO part payload {} bytes exceeds per-part limit {}. Message Id: {}, Sender: {}",
+            partPayload.size(), maxPartPayload, messageId, sender->GetName());
+        RecordAIOIncomingAbuse(sender, "oversized part");
+        return IncomingAIOWhisperResult::DropPacket;
+    }
+
+    Trinity::AIO::Reassembler::IngestResult const ingest = _aioReassembler.Ingest(
+        messageId, parts, partId, partPayload, maxparts, maxBufferSize);
+
+    if (ingest.error == Trinity::AIO::Reassembler::IngestError::TooManyConcurrent)
+    {
+        RecordAIOIncomingAbuse(sender, "too many concurrent reassemblies");
+        return IncomingAIOWhisperResult::DropPacket;
+    }
+    if (ingest.error == Trinity::AIO::Reassembler::IngestError::DuplicatePart)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "HandleIncomingAIOClientWhisper: Duplicate part {} for message id {}. Sender: {}", partId, messageId, sender->GetName());
+        RecordAIOIncomingAbuse(sender, "duplicate part");
+        return IncomingAIOWhisperResult::DropPacket;
+    }
+    if (ingest.error == Trinity::AIO::Reassembler::IngestError::BufferExceeded)
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "HandleIncomingAIOClientWhisper: AIO reassembly buffer exceeded {} bytes. Message Id: {}, Sender: {}",
+            maxBufferSize, messageId, sender->GetName());
+        RecordAIOIncomingAbuse(sender, "reassembly buffer exceeded");
+        return IncomingAIOWhisperResult::DropPacket;
+    }
+
+    if (!ingest.complete)
+        return IncomingAIOWhisperResult::Consumed;
+
+    if (ingest.payload.size() > sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING))
+    {
+        sLog->outAIOMessage(sender->GetGUID().GetCounter(), LOG_LEVEL_ERROR,
+            "AIO: Reassembled message size {} exceeds limit {}. Sender: {}",
+            ingest.payload.size(), sWorld->getIntConfig(CONFIG_AIO_MAX_INCOMING), sender->GetName());
+        return IncomingAIOWhisperResult::Consumed;
+    }
+
+    if (CheckAIOIncomingGate(sender, ingest.payload.size()) == AIOIncomingGateResult::Allow)
+        sScriptMgr->OnAddonMessage(sender, ingest.payload);
+    else
+        RecordAIOIncomingAbuse(sender, "rate limit");
+
+    return IncomingAIOWhisperResult::Consumed;
 }
 
 /// %Log the player out
@@ -619,6 +814,9 @@ void WorldSession::LogoutPlayer(bool save)
         stmt->setUInt32(0, GetAccountId());
         CharacterDatabase.Execute(stmt);
     }
+
+    // Clear aio long message buffer
+    _aioReassembler.Clear();
 
     m_playerLogout = false;
     m_playerSave = false;

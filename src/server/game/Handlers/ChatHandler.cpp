@@ -179,7 +179,7 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
         return;
     }
 
-    if (msg.size() > 255)
+    if (msg.size() > 255u)
         return;
 
     // Our Warden module also uses SendAddonMessage as a way to communicate Lua check results to the server, see if this is that
@@ -293,6 +293,15 @@ void WorldSession::HandleChatMessage(ChatMsg type, Language lang, std::string ms
             }
 
             Player* receiver = ObjectAccessor::FindConnectedPlayerByName(target);
+
+            if (lang == LANG_ADDON && receiver)
+            {
+                IncomingAIOWhisperResult const aioResult = HandleIncomingAIOClientWhisper(sender, receiver, msg);
+                if (aioResult == IncomingAIOWhisperResult::DropPacket)
+                    return;
+                if (aioResult == IncomingAIOWhisperResult::Consumed)
+                    break;
+            }
             if (!receiver || (lang != LANG_ADDON && !receiver->isAcceptWhispers() && receiver->GetSession()->HasPermission(rbac::RBAC_PERM_CAN_FILTER_WHISPERS) && !receiver->IsInWhisperWhiteList(sender->GetGUID())))
             {
                 SendPlayerNotFoundNotice(target);

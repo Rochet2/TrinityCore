@@ -23,6 +23,7 @@
 #define __WORLDSESSION_H
 
 #include "Common.h"
+#include "AIOReassembler.h"
 #include "AsyncCallbackProcessor.h"
 #include "AuthDefines.h"
 #include "DatabaseEnvFwd.h"
@@ -1303,6 +1304,15 @@ class TC_GAME_API WorldSession
             return _legitCharacters.find(lowGUID) != _legitCharacters.end();
         }
 
+        enum class IncomingAIOWhisperResult : uint8
+        {
+            NotAIO,
+            Consumed,
+            DropPacket
+        };
+
+        IncomingAIOWhisperResult HandleIncomingAIOClientWhisper(Player* sender, Player* receiver, std::string const& msg);
+
         // Movement helpers
         Unit* ValidateAndGetUnitBeingMoved(ObjectGuid guid, OpcodeClient opcode, bool forStatusAck) const;
 
@@ -1369,6 +1379,25 @@ class TC_GAME_API WorldSession
 
         WorldSession(WorldSession const& right) = delete;
         WorldSession& operator=(WorldSession const& right) = delete;
+
+        // AIO
+        Trinity::AIO::Reassembler _aioReassembler;
+        uint32 _aioMsgCacheSweepTimer = 0;
+        uint32 _aioLastCompleteMessageMs = 0;
+        uint32 _aioRateLimitedCount = 0;
+        uint32 _aioParseFailureCount = 0;
+
+        enum class AIOIncomingGateResult : uint8
+        {
+            Allow,
+            RateLimited
+        };
+
+        AIOIncomingGateResult CheckAIOIncomingGate(Player* sender, size_t payloadBytes);
+        void RecordAIOIncomingAbuse(Player* sender, char const* reason);
+
+    public:
+        void NotifyAIOIncomingParseFailure(Player* sender);
 };
 
 #endif
