@@ -850,7 +850,6 @@ void Player::UpdatePowerRegen(Powers power)
     if (powerIndex >= MAX_POWERS_PER_CLASS)
         return;
 
-    // TODO: updating haste should update UnitData::PowerRegenFlatModifier for certain power types
     PowerTypeEntry const* powerType = sDB2Manager.GetPowerTypeEntry(power);
     if (!powerType)
         return;
@@ -883,20 +882,15 @@ void Player::UpdatePowerRegen(Powers power)
             result_regen_interrupted    += base_regen;
             break;
         }
-        case POWER_RUNES:
-        {
-            float base_regen            = float(1 * IN_MILLISECONDS) / float(GetRuneBaseCooldown());
-
-            result_regen                = base_regen;
-            result_regen_interrupted    = base_regen;
-            break;
-        }
         default:
             break;
     }
 
     if (PowerRegenInfo[AsUnderlyingType(power)])
         pct_modifier *= sWorld->getRate(*PowerRegenInfo[AsUnderlyingType(power)]); // Config rate
+
+    if (powerType->GetFlags().HasFlag(PowerTypeFlags::RegenAffectedByHaste))
+        pct_modifier /= m_unitData->ModHasteRegen;
 
     pct_modifier                *= GetTotalAuraMultiplierByMiscValue(SPELL_AURA_MOD_POWER_REGEN_PERCENT, AsUnderlyingType(power));
     flat_modifier               += GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_POWER_REGEN, AsUnderlyingType(power)) / 5.f;
