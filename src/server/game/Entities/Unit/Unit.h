@@ -846,8 +846,11 @@ class TC_GAME_API Unit : public WorldObject
         void UpdateAttackTimeField(WeaponAttackType att);
         void ApplyAttackTimePercentMod(WeaponAttackType att, float val, bool apply);
         void ApplyCastTimePercentMod(float val, bool apply);
+        void ApplySpellHastePercentMod(float val, bool apply);
+        void ApplyHasteRegenPercentMod(float val, bool apply);
 
         void SetModCastingSpeed(float castingSpeed) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModCastingSpeed), castingSpeed); }
+        void SetModCastingSpeedNeg(float castingSpeedNeg) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModCastingSpeedNeg), castingSpeedNeg); }
         void SetModSpellHaste(float spellHaste) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModSpellHaste), spellHaste); }
         void SetModHaste(float haste) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModHaste), haste); }
         void SetModRangedHaste(float rangedHaste) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::ModRangedHaste), rangedHaste); }
@@ -1191,6 +1194,8 @@ class TC_GAME_API Unit : public WorldObject
 
         void ApplyInertia(int32 id, Milliseconds duration);
         void RemoveInertia(int32 id);
+
+        void SetGravityModifier(float gravityModifier);
 
         void SetInFront(WorldObject const* target);
         void SetFacingTo(float ori, bool force = true, uint32 movementId = EVENT_FACE);
@@ -1921,6 +1926,7 @@ class TC_GAME_API Unit : public WorldObject
         DynObjectList m_dynObj;
 
         typedef std::list<GameObject*> GameObjectList;
+        void RemoveGameObjectImpl(GameObject* gameObj, bool del);
         GameObjectList m_gameObj;
 
         typedef std::vector<AreaTrigger*> AreaTriggerList;
