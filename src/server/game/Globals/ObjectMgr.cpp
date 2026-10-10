@@ -2697,7 +2697,7 @@ void ObjectMgr::LoadGameObjects()
         if (!data.rotation.isUnit())
         {
             TC_LOG_ERROR("sql.sql", "Table `gameobject` has gameobject (GUID: {} Entry: {}) with invalid rotation quaternion (non-unit), defaulting to orientation on Z axis only", guid, data.id);
-            data.rotation = QuaternionData::fromEulerAnglesZYX(data.spawnPoint.GetOrientation(), 0.0f, 0.0f);
+            data.rotation = QuaternionData::fromOrientation(data.spawnPoint.GetOrientation());
         }
 
         if (sWorld->getBoolConfig(CONFIG_CALCULATE_GAMEOBJECT_ZONE_AREA_DATA))
@@ -6367,7 +6367,7 @@ void ObjectMgr::ReturnOrDeleteOldMails(bool serverUp)
         m->expire_time    = fields[5].GetInt64();
         m->deliver_time   = 0;
         m->COD            = fields[6].GetUInt64();
-        m->checked        = fields[7].GetUInt8();
+        m->checked        = fields[7].GetUInt32();
         m->mailTemplateId = fields[8].GetInt16();
 
         // Delete or return mail
@@ -6377,7 +6377,7 @@ void ObjectMgr::ReturnOrDeleteOldMails(bool serverUp)
             m->items.swap(itemsCache[m->messageID]);
 
             // if it is mail from non-player, or if it's already return mail, it shouldn't be returned, but deleted
-            if (m->messageType != MAIL_NORMAL || (m->checked & (MAIL_CHECK_MASK_COD_PAYMENT | MAIL_CHECK_MASK_RETURNED)))
+            if (m->messageType != MAIL_NORMAL || (m->checked & (MAIL_CHECK_MASK_COD_PAYMENT | MAIL_CHECK_MASK_RETURNED | MAIL_CHECK_MASK_NOT_RETURNABLE)))
             {
                 CharacterDatabaseTransaction nonTransactional(nullptr);
                 // mail open and then not returned

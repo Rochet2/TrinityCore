@@ -526,7 +526,7 @@ bool Item::Create(ObjectGuid::LowType guidlow, uint32 itemId, ItemContext contex
 
     _bonusData.Initialize(itemProto);
     SetCount(1);
-    SetUpdateFieldValue(m_values.ModifyValue(&Item::m_itemData).ModifyValue(&UF::ItemData::MaxDurability), itemProto->MaxDurability);
+    SetMaxDurability(itemProto->MaxDurability);
     SetDurability(itemProto->MaxDurability);
 
     for (ItemEffectEntry const* effect : GetEffects())
@@ -2235,7 +2235,7 @@ uint32 Item::GetSellPrice(Player const* owner, bool forVendor /*= false*/) const
 {
     ItemTemplate const* itemTemplate = GetTemplate();
     int64 price = Item::GetSellPrice(itemTemplate, GetQuality(), GetItemLevel(owner));
-    if (forVendor)
+    if (price && forVendor)
     {
         std::span<ItemEffectEntry const* const> effects = GetEffects();
         auto effectWithCharges = std::ranges::find_if(effects,
