@@ -1117,7 +1117,7 @@ void WorldSession::HandleGetItemPurchaseData(WorldPackets::Item::GetItemPurchase
 
 void WorldSession::HandleItemRefund(WorldPacket &recvData)
 {
-    TC_LOG_DEBUG("network", "WORLD: CMSG_ITEM_REFUND");
+    TC_LOG_DEBUG("network", "WORLD: CMSG_ITEM_PURCHASE_REFUND");
     ObjectGuid guid;
     recvData >> guid;                                      // item guid
 
