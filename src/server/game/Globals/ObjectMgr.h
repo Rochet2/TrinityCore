@@ -54,6 +54,7 @@ class Vehicle;
 class Map;
 enum class GossipOptionFlags : int32;
 enum class GossipOptionNpc : uint8;
+enum class SummonPropertiesEffectValueType : uint8;
 struct AccessRequirement;
 struct DeclinedName;
 struct FactionEntry;
@@ -524,6 +525,7 @@ typedef std::unordered_map<uint32, PageTextLocale> PageTextLocaleContainer;
 typedef std::unordered_map<uint32, std::vector<uint32>> UiMapQuestLinesMap;
 typedef std::unordered_map<uint32, std::vector<uint32>> UiMapQuestsMap;
 typedef std::unordered_map<uint32, VehicleSeatAddon> VehicleSeatAddonContainer;
+typedef std::unordered_map<uint32, SummonPropertiesEffectValueType> SummonPropertiesAddonContainer;
 
 struct GossipMenuItemsLocale
 {
@@ -1268,6 +1270,7 @@ class TC_GAME_API ObjectMgr
         void LoadVehicleTemplate();
         void LoadVehicleAccessories();
         void LoadVehicleSeatAddon();
+        void LoadSummonPropertiesAddon();
 
         void LoadNPCText();
 
@@ -1660,6 +1663,8 @@ class TC_GAME_API ObjectMgr
             return &itr->second;
         }
 
+        SummonPropertiesEffectValueType GetSummonPropertiesEffectValueType(uint32 summonPropertiesId) const;
+
         void LoadRaceAndClassExpansionRequirements();
 
         std::string GetPhaseName(uint32 phaseId) const;
@@ -1880,6 +1885,9 @@ class TC_GAME_API ObjectMgr
 
         std::set<uint32> _transportMaps; // Helper container storing map ids that are for transports only, loaded from gameobject_template
         VehicleSeatAddonContainer _vehicleSeatAddonStore;
+
+        SummonPropertiesAddonContainer _summonPropertiesAddonStore;
+
 };
 
 #define sObjectMgr ObjectMgr::instance()
