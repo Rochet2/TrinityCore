@@ -13128,15 +13128,13 @@ void Player::SendBuyError(BuyResult msg, Creature const* creature, uint32 vendor
     SendDirectMessage(packet.Write());
 }
 
-void Player::SendSellError(SellResult msg, Creature const* creature, ObjectGuid guid, uint32 param) const
+void Player::SendSellError(SellResult msg, Creature const* creature, ObjectGuid guid) const
 {
-    WorldPacket data(SMSG_SELL_ITEM, (8+8+(4)+1));  // last check 2.0.10
-    data << (creature ? creature->GetGUID() : ObjectGuid::Empty);
-    data << guid;
-    if (param > 0)
-        data << uint32(param);
-    data << uint8(msg);
-    SendDirectMessage(&data);
+    WorldPackets::Item::SellResponse sellResponse;
+    sellResponse.VendorGUID = creature ? creature->GetGUID() : ObjectGuid::Empty;
+    sellResponse.ItemGUID = guid;
+    sellResponse.Reason = msg;
+    SendDirectMessage(sellResponse.Write());
 }
 
 bool Player::IsUseEquipedWeapon(bool mainhand) const
@@ -20096,7 +20094,7 @@ void Player::SendAttackSwingBadFacingAttack() const
 void Player::SendAutoRepeatCancel(Unit* target)
 {
     WorldPackets::Combat::CancelAutoRepeat cancelAutoRepeat;
-    cancelAutoRepeat.Guid = target->GetPackGUID();      // may be it's target guid
+    cancelAutoRepeat.Guid = target->GetGUID();          // may be it's target guid
     SendMessageToSet(cancelAutoRepeat.Write(), true);
 }
 
@@ -26468,11 +26466,11 @@ void Player::RemoveRestFlag(RestFlag restFlag)
     }
 }
 
-uint32 Player::DoRandomRoll(uint32 minimum, uint32 maximum)
+int32 Player::DoRandomRoll(int32 minimum, int32 maximum)
 {
-    ASSERT(maximum <= 10000);
+    ASSERT(maximum <= 1000000);
 
-    uint32 roll = urand(minimum, maximum);
+    int32 roll = irand(minimum, maximum);
 
     WorldPackets::Misc::RandomRoll randomRoll;
     randomRoll.Min = minimum;
