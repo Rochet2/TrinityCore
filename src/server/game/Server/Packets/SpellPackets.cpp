@@ -521,6 +521,13 @@ WorldPacket const* SpellCooldown::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* ClearTarget::Write()
+{
+    _worldPacket << Guid;
+
+    return &_worldPacket;
+}
+
 WorldPacket const* PlaySpellVisualKit::Write()
 {
     _worldPacket << Unit;
@@ -533,6 +540,12 @@ void CancelCast::Read()
 {
     _worldPacket >> CastID;
     _worldPacket >> SpellID;
+}
+
+void OpenItem::Read()
+{
+    _worldPacket >> Slot;
+    _worldPacket >> PackSlot;
 }
 
 WorldPacket const* ResyncRunes::Write()

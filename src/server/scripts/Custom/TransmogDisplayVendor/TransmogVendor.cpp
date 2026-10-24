@@ -316,7 +316,7 @@ public:
                             if (!vendor)
                             {
                                 TC_LOG_DEBUG("network", "WORLD: SendListInventory - Unit (GUID: {}) not found or you can not interact with him.", creature->GetGUID().GetCounter());
-                                player->SendSellError(SELL_ERR_CANT_FIND_VENDOR, nullptr, ObjectGuid::Empty, 0);
+                                player->SendSellError(SELL_ERR_CANT_FIND_VENDOR, nullptr, ObjectGuid::Empty);
                                 return true;
                             }
 
