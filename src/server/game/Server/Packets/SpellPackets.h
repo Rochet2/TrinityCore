@@ -482,6 +482,16 @@ namespace WorldPackets
             uint8 Flags = 0;
         };
 
+        class ClearTarget final : public ServerPacket
+        {
+        public:
+            explicit ClearTarget() : ServerPacket(SMSG_CLEAR_TARGET, 8) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Guid;
+        };
+
         class PlaySpellVisualKit final : public ServerPacket
         {
         public:
@@ -502,6 +512,17 @@ namespace WorldPackets
 
             uint8 CastID = 0;
             uint32 SpellID = 0;
+        };
+
+        class OpenItem final : public ClientPacket
+        {
+        public:
+            explicit OpenItem(WorldPacket&& packet) : ClientPacket(CMSG_OPEN_ITEM, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 Slot = 0;
+            uint8 PackSlot = 0;
         };
 
         struct ResyncRune
