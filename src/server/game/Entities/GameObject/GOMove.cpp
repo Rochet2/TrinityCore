@@ -111,7 +111,7 @@ GameObject * GOMove::SpawnGameObject(Player* player, float x, float y, float z, 
     pos.m_positionY = y;
     pos.m_positionZ = z;
     pos.SetOrientation(o);
-    GameObject* object = GameObject::CreateGameObject(objectInfo->entry, map, pos, QuaternionData::fromEulerAnglesZYX(o, 0.0f, 0.0f), 255, GO_STATE_READY);
+    GameObject* object = GameObject::CreateGameObject(objectInfo->entry, map, pos, QuaternionData::fromEulerAnglesZYX(o, 0.0f, 0.0f), InitialPhaseShift(), 255, GO_STATE_READY);
     if (!object)
         return nullptr;
 
