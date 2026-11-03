@@ -100,11 +100,15 @@ enum DemonHunterSpells
     SPELL_DH_ENDURING_TORMENT_BUFF                 = 453314,
     SPELL_DH_ERADICATE_DAMAGE                      = 1225827,
     SPELL_DH_ERADICATE_DAMAGE_METAMORPHOSIS        = 1279200,
+    SPELL_DH_ERADICATE_ENABLER                     = 1239524,
+    SPELL_DH_ERADICATE_TALENT                      = 1226033,
     SPELL_DH_ESSENCE_BREAK_DEBUFF                  = 320338,
     SPELL_DH_EYE_BEAM                              = 198013,
     SPELL_DH_EYE_BEAM_DAMAGE                       = 198030,
     SPELL_DH_EYE_OF_LEOTHERAS_DMG                  = 206650,
     SPELL_DH_FEAST_OF_SOULS                        = 207697,
+    SPELL_DH_FEAST_OF_SOULS_DEVOURER_BUFF          = 1232310,
+    SPELL_DH_FEAST_OF_SOULS_DEVOURER_TALENT        = 1237270,
     SPELL_DH_FEAST_OF_SOULS_PERIODIC_HEAL          = 207693,
     SPELL_DH_FEED_THE_DEMON                        = 218612,
     SPELL_DH_FEL_BARRAGE                           = 211053,
@@ -131,6 +135,7 @@ enum DemonHunterSpells
     SPELL_DH_FIERY_BRAND_DEBUFF_RANK_2             = 207771,
     SPELL_DH_FIRST_BLOOD                           = 206416,
     SPELL_DH_FLAME_CRASH                           = 227322,
+    SPELL_DH_FOCUSED_RAY                           = 1240203,
     SPELL_DH_FRAILTY                               = 224509,
     SPELL_DH_FURIOUS_GAZE                          = 343311,
     SPELL_DH_FURIOUS_GAZE_BUFF                     = 343312,
@@ -183,11 +188,13 @@ enum DemonHunterSpells
     SPELL_DH_RAZOR_SPIKES                          = 210003,
     SPELL_DH_REAP                                  = 1226019,
     SPELL_DH_REAP_DAMAGE                           = 1225823,
+    SPELL_DH_REAP_ENERGIZE                         = 1261679,
     SPELL_DH_REPEAT_DECREE_CONDUIT                 = 339895,
     SPELL_DH_RESTLESS_HUNTER_TALENT                = 390142,
     SPELL_DH_RESTLESS_HUNTER_BUFF                  = 390212,
     SPELL_DH_RETALIATION_TALENT                    = 389729,
     SPELL_DH_RETALIATION_PROC                      = 391160,
+    SPELL_DH_SCYTHES_EMBRACE                       = 1246558,
     SPELL_DH_SEVER                                 = 235964,
     SPELL_DH_SHATTERED_RESTORATION                 = 389824,
     SPELL_DH_SHATTER_SOUL                          = 210038,
@@ -777,7 +784,7 @@ class spell_dh_critical_chaos : public AuraScript
     }
 };
 
-// 1226019 - Reap
+// 1245453 - Cull
 class spell_dh_cull : public SpellScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
@@ -1308,6 +1315,34 @@ class spell_dh_eradicate : public SpellScript
     }
 };
 
+// 1238488 - Moment of Craving (attached to 473728 - Void Ray)
+class spell_dh_eradicate_enabler : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DH_ERADICATE_TALENT, SPELL_DH_ERADICATE_ENABLER });
+    }
+
+    bool Load() override
+    {
+        return GetUnitOwner()->HasAura(SPELL_DH_ERADICATE_TALENT);
+    }
+
+    void HandleAfterRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/) const
+    {
+        if (GetTargetApplication()->GetRemoveMode() != AURA_REMOVE_BY_EXPIRE)
+            return;
+
+        Unit* target = GetTarget();
+        target->CastSpell(target, SPELL_DH_ERADICATE_ENABLER, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(spell_dh_eradicate_enabler::HandleAfterRemove, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
 // 258860 - Essence Break
 class spell_dh_essence_break : public SpellScript
 {
@@ -1385,6 +1420,34 @@ class spell_dh_feast_of_souls : public SpellScript
     void Register() override
     {
         AfterCast += SpellCastFn(spell_dh_feast_of_souls::HandleHeal);
+    }
+};
+
+// 1237270 - Feast of Souls (attached to 1223628 - Consume Soul)
+class spell_dh_feast_of_souls_devourer : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DH_FEAST_OF_SOULS_DEVOURER_TALENT, SPELL_DH_FEAST_OF_SOULS_DEVOURER_BUFF });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_DH_FEAST_OF_SOULS_DEVOURER_TALENT);
+    }
+
+    void HandleCharge(SpellEffIndex /*effIndex*/) const
+    {
+        Unit* caster = GetCaster();
+        caster->CastSpell(caster, SPELL_DH_FEAST_OF_SOULS_DEVOURER_BUFF, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_dh_feast_of_souls_devourer::HandleCharge, EFFECT_0, SPELL_EFFECT_ENERGIZE);
     }
 };
 
@@ -1532,6 +1595,45 @@ class spell_dh_fiery_brand : public SpellScript
     {
         OnEffectHitTarget += SpellEffectFn(spell_dh_fiery_brand::HandleDamage, EFFECT_1, SPELL_EFFECT_SCHOOL_DAMAGE);
     }
+};
+
+// 1240203 - Focused Ray (attached to 1213649 - Void Ray)
+class spell_dh_focused_ray : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_DH_FOCUSED_RAY, EFFECT_1 } });
+    }
+
+    bool Load() override
+    {
+        Aura const* focusedRay = GetCaster()->GetAura(SPELL_DH_FOCUSED_RAY);
+        if (!focusedRay)
+            return false;
+
+        AuraEffect const* damageBonus = focusedRay->GetEffect(EFFECT_0);
+        AuraEffect const* maxTargets = focusedRay->GetEffect(EFFECT_1);
+        if (!maxTargets || !damageBonus)
+            return false;
+
+        _damageBonus = damageBonus->GetAmount();
+        _maxTargets = maxTargets->GetAmountAsInt();
+        return true;
+    }
+
+    void HandleDamage(SpellEffectInfo const& effectInfo, Unit const* /*victim*/, int32 const& /*damage*/, int32 const& /*flatMod*/, float& pctMod) const
+    {
+        if (GetUnitTargetCountForEffect(effectInfo.EffectIndex) <= _maxTargets)
+            AddPct(pctMod, _damageBonus);
+    }
+
+    void Register() override
+    {
+        CalcDamage += SpellCalcDamageFn(spell_dh_focused_ray::HandleDamage);
+    }
+
+    SpellEffectValue _damageBonus = 0.0;
+    int64 _maxTargets = 0;
 };
 
 // Called by 198013 - Eye Beam
@@ -2016,6 +2118,33 @@ class spell_dh_retaliation : public AuraScript
     {
         AfterEffectApply += AuraEffectApplyFn(spell_dh_retaliation::HandleAfterApply, EFFECT_0, SPELL_AURA_MOD_PARRY_PERCENT, AURA_EFFECT_HANDLE_REAL_OR_REAPPLY_MASK);
         AfterEffectRemove += AuraEffectRemoveFn(spell_dh_retaliation::HandleAfterRemove, EFFECT_0, SPELL_AURA_MOD_PARRY_PERCENT, AURA_EFFECT_HANDLE_REAL_OR_REAPPLY_MASK);
+    }
+};
+
+// 1246558 - Scythe's Embrace (attached to 1226019 - Reap, 1225826 - Eradicate, 1245453 - Cull)
+class spell_dh_scythes_embrace : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DH_SCYTHES_EMBRACE, SPELL_DH_REAP_ENERGIZE });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_DH_SCYTHES_EMBRACE);
+    }
+
+    void HandleEnergize() const
+    {
+        GetCaster()->CastSpell(GetCaster(), SPELL_DH_REAP_ENERGIZE, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_dh_scythes_embrace::HandleEnergize);
     }
 };
 
@@ -2914,9 +3043,11 @@ void AddSC_demon_hunter_spell_scripts()
     RegisterSpellScript(spell_dh_enduring_torment);
     RegisterSpellScript(spell_dh_enduring_torment_buff);
     RegisterSpellScript(spell_dh_eradicate);
+    RegisterSpellScript(spell_dh_eradicate_enabler);
     RegisterSpellScript(spell_dh_essence_break);
     RegisterSpellScript(spell_dh_eye_beam);
     RegisterSpellScript(spell_dh_feast_of_souls);
+    RegisterSpellScript(spell_dh_feast_of_souls_devourer);
     RegisterSpellScript(spell_dh_fel_devastation);
     RegisterSpellScript(spell_dh_fel_flame_fortification);
     RegisterSpellScript(spell_dh_felblade);
@@ -2924,6 +3055,7 @@ void AddSC_demon_hunter_spell_scripts()
     RegisterSpellScript(spell_dh_felblade_cooldown_reset_proc);
     RegisterSpellScript(spell_dh_fiery_brand);
     RegisterSpellScript(spell_dh_first_blood);
+    RegisterSpellScript(spell_dh_focused_ray);
     RegisterSpellScript(spell_dh_furious_gaze);
     RegisterAreaTriggerAI(at_dh_glaive_tempest);
     RegisterSpellAndAuraScriptPair(spell_dh_glide, spell_dh_glide_AuraScript);
@@ -2940,6 +3072,7 @@ void AddSC_demon_hunter_spell_scripts()
     RegisterSpellScript(spell_dh_repeat_decree_conduit);
     RegisterSpellScript(spell_dh_restless_hunter);
     RegisterSpellScript(spell_dh_retaliation);
+    RegisterSpellScript(spell_dh_scythes_embrace);
     RegisterSpellScript(spell_dh_shattered_destiny);
     RegisterSpellScript(spell_dh_shattered_restoration);
     RegisterSpellScriptWithArgs(spell_dh_shattered_souls, "spell_dh_shattered_souls_havoc", SPELL_DH_SHATTERED_SOULS_HAVOC);
