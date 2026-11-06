@@ -297,6 +297,35 @@ enum DemonHunterSpellCategories
     SPELL_CATEGORY_DH_BLADE_DANCE   = 1640
 };
 
+struct spell_dh_shattered_souls_base_lesser
+{
+    static constexpr std::array<DemonHunterSpells, 2> DevourerSpells = { SPELL_DH_SHATTERED_SOUL_DEVOURER_LESSER_RIGHT, SPELL_DH_SHATTERED_SOUL_DEVOURER_LESSER_LEFT };
+    static constexpr std::array<DemonHunterSpells, 2> HavocSpells = { SPELL_DH_SHATTERED_SOUL_LESSER_RIGHT, SPELL_DH_SHATTERED_SOUL_LESSER_LEFT };
+    static constexpr std::array<DemonHunterSpells, 2> VengeanceSpells = { SPELL_DH_SHATTER_SOUL_VENGEANCE_FRONT_RIGHT, SPELL_DH_SHATTER_SOUL_VENGEANCE_BACK_RIGHT };
+
+    static bool Validate()
+    {
+        return SpellScriptBase::ValidateSpellInfo(DevourerSpells)
+            && SpellScriptBase::ValidateSpellInfo(HavocSpells)
+            && SpellScriptBase::ValidateSpellInfo(VengeanceSpells);
+    }
+
+    static void CreateFragments(Unit* source, Unit* dh, int32 count)
+    {
+        std::span<DemonHunterSpells const> spells = HavocSpells;
+        if (Player* player = dh->ToPlayer())
+        {
+            if (player->GetPrimarySpecialization() == ChrSpecialization::DemonHunterDevourer)
+                spells = DevourerSpells;
+            else if (player->GetPrimarySpecialization() == ChrSpecialization::DemonHunterVengeance)
+                spells = VengeanceSpells;
+        }
+
+        for (int32 i = 0; i < count; ++i)
+            source->CastSpell(dh, Trinity::Containers::SelectRandomContainerElement(spells), TRIGGERED_DONT_REPORT_CAST_ERROR);
+    }
+};
+
 // 206416 - First Blood
 class spell_dh_first_blood : public AuraScript
 {
@@ -1205,6 +1234,33 @@ class spell_dh_demon_spikes : public SpellScript
     }
 };
 
+// 205411 - Desperate Instincts
+class spell_dh_desperate_instincts : public AuraScript
+{
+    static void CalculateAmount(AuraScript const&, AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
+    {
+        amount = -1;
+    }
+
+    void HandleAbsorb(AuraEffect const* /*aurEff*/, DamageInfo const& dmgInfo, uint32& absorbAmount) const
+    {
+        AuraEffect const* healthLimit = GetEffect(EFFECT_0);
+        AuraEffect const* damageReduction = GetEffect(EFFECT_1);
+        if (!damageReduction || !healthLimit)
+            return;
+
+        Unit* target = GetTarget();
+        if (target->HealthBelowPct(healthLimit->GetAmount()))
+            absorbAmount = CalculatePct(dmgInfo.GetDamage(), damageReduction->GetAmount());
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_dh_desperate_instincts::CalculateAmount, EFFECT_3, SPELL_AURA_SCHOOL_ABSORB);
+        OnEffectAbsorb += AuraEffectAbsorbFn(spell_dh_desperate_instincts::HandleAbsorb, EFFECT_3);
+    }
+};
+
 // 1240201 - Devourer's Bite
 class spell_dh_devourers_bite : public AuraScript
 {
@@ -1221,35 +1277,6 @@ class spell_dh_devourers_bite : public AuraScript
     void Register() override
     {
         OnEffectProc += AuraEffectProcFn(spell_dh_devourers_bite::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
-    }
-};
-
-struct spell_dh_shattered_souls_base_lesser
-{
-    static constexpr std::array<DemonHunterSpells, 2> DevourerSpells = { SPELL_DH_SHATTERED_SOUL_DEVOURER_LESSER_RIGHT, SPELL_DH_SHATTERED_SOUL_DEVOURER_LESSER_LEFT };
-    static constexpr std::array<DemonHunterSpells, 2> HavocSpells = { SPELL_DH_SHATTERED_SOUL_LESSER_RIGHT, SPELL_DH_SHATTERED_SOUL_LESSER_LEFT };
-    static constexpr std::array<DemonHunterSpells, 2> VengeanceSpells = { SPELL_DH_SHATTER_SOUL_VENGEANCE_FRONT_RIGHT, SPELL_DH_SHATTER_SOUL_VENGEANCE_BACK_RIGHT };
-
-    static bool Validate()
-    {
-        return SpellScriptBase::ValidateSpellInfo(DevourerSpells)
-            && SpellScriptBase::ValidateSpellInfo(HavocSpells)
-            && SpellScriptBase::ValidateSpellInfo(VengeanceSpells);
-    }
-
-    static void CreateFragments(Unit* source, Unit* dh, int32 count)
-    {
-        std::span<DemonHunterSpells const> spells = HavocSpells;
-        if (Player* player = dh->ToPlayer())
-        {
-            if (player->GetPrimarySpecialization() == ChrSpecialization::DemonHunterDevourer)
-                spells = DevourerSpells;
-            else if (player->GetPrimarySpecialization() ==  ChrSpecialization::DemonHunterVengeance)
-                spells = VengeanceSpells;
-        }
-
-        for (int32 i = 0; i < count; ++i)
-            source->CastSpell(dh, Trinity::Containers::SelectRandomContainerElement(spells), TRIGGERED_DONT_REPORT_CAST_ERROR);
     }
 };
 
@@ -2573,6 +2600,11 @@ class spell_dh_shattered_souls_devourer : public AuraScript
         return eventInfo.GetSpellInfo()->IsAffected(SPELLFAMILY_DEMON_HUNTER, { 0x0, 0x0, 0x0, 0x40 });
     }
 
+    static bool CheckConsumeProc(AuraScript const&, AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
+    {
+        return eventInfo.GetSpellInfo()->IsAffected(SPELLFAMILY_DEMON_HUNTER, { 0x0, 0x0, 0x0, 0x2 });
+    }
+
     static void HandleProc(AuraScript const&, AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
     {
         spell_dh_shattered_souls_base_lesser::CreateFragments(eventInfo.GetActionTarget(), eventInfo.GetActor(), 1);
@@ -2602,12 +2634,19 @@ class spell_dh_shattered_souls_devourer : public AuraScript
         }
     }
 
+    static void HandleConsumeProc(AuraScript const&, AuraEffect const* aurEff, ProcEventInfo const& eventInfo)
+    {
+        spell_dh_shattered_souls_base_lesser::CreateFragments(eventInfo.GetActionTarget(), eventInfo.GetActor(), aurEff->GetAmountAsInt());
+    }
+
     void Register() override
     {
         DoCheckEffectProc += AuraCheckEffectProcFn(spell_dh_shattered_souls_devourer::CheckProc, EFFECT_0, SPELL_AURA_DUMMY);
         DoCheckEffectProc += AuraCheckEffectProcFn(spell_dh_shattered_souls_devourer::CheckReapSoulGatheringProc, EFFECT_1, SPELL_AURA_DUMMY);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_dh_shattered_souls_devourer::CheckConsumeProc, EFFECT_2, SPELL_AURA_DUMMY);
         OnEffectProc += AuraEffectProcFn(spell_dh_shattered_souls_devourer::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
         OnEffectProc += AuraEffectProcFn(spell_dh_shattered_souls_devourer::HandleSoulsGathering, EFFECT_1, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_dh_shattered_souls_devourer::HandleConsumeProc, EFFECT_2, SPELL_AURA_DUMMY);
     }
 };
 
@@ -3367,6 +3406,7 @@ void AddSC_demon_hunter_spell_scripts()
     RegisterSpellScript(spell_dh_demonic_appetite);
     RegisterSpellScript(spell_dh_demonic_appetite_energize);
     RegisterSpellScript(spell_dh_demon_spikes);
+    RegisterSpellScript(spell_dh_desperate_instincts);
     RegisterSpellScript(spell_dh_devourers_bite);
     RegisterSpellScriptWithArgs(spell_dh_elysian_decree, "spell_dh_elysian_decree", SPELL_DH_ELYSIAN_DECREE);
     RegisterAreaTriggerAI(at_dh_elysian_decree);
