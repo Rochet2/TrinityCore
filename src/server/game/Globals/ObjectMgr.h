@@ -54,6 +54,7 @@ class Vehicle;
 class Map;
 enum class GossipOptionFlags : int32;
 enum class GossipOptionNpc : uint8;
+enum class GossipOptionDefaultAction : uint8;
 enum class SummonPropertiesEffectValueType : uint8;
 struct AccessRequirement;
 struct DeclinedName;
@@ -764,6 +765,13 @@ struct GossipMenuItems
     ConditionsReference Conditions;
 };
 
+struct GossipMenuItemsAddon
+{
+    uint32                      MenuID;
+    uint32                      OrderIndex;
+    GossipOptionDefaultAction   DefaultAction;
+};
+
 struct GossipMenus
 {
     uint32              MenuID;
@@ -781,6 +789,7 @@ typedef std::multimap<uint32, GossipMenus> GossipMenusContainer;
 typedef std::pair<GossipMenusContainer::const_iterator, GossipMenusContainer::const_iterator> GossipMenusMapBounds;
 typedef std::pair<GossipMenusContainer::iterator, GossipMenusContainer::iterator> GossipMenusMapBoundsNonConst;
 typedef std::multimap<uint32, GossipMenuItems> GossipMenuItemsContainer;
+typedef std::multimap<uint32, GossipMenuItemsAddon> GossipMenuItemsAddonContainer;
 typedef std::unordered_map<uint32, GossipMenuAddon> GossipMenuAddonContainer;
 
 struct QuestPOIBlobPoint
@@ -1308,6 +1317,7 @@ class TC_GAME_API ObjectMgr
         void LoadGossipMenu();
         void LoadGossipMenuItems();
         void LoadGossipMenuAddon();
+        void LoadGossipMenuItemsAddon();
 
         void LoadVendors();
         void LoadTrainers();
@@ -1614,6 +1624,8 @@ class TC_GAME_API ObjectMgr
             return nullptr;
         }
 
+        GossipMenuItemsAddon const* GetGossipMenuItemAddon(uint32 menuId, uint32 orderIndex);
+
         // for wintergrasp only
         GraveyardContainer GraveyardStore;
 
@@ -1733,6 +1745,7 @@ class TC_GAME_API ObjectMgr
         GossipMenusContainer _gossipMenusStore;
         GossipMenuItemsContainer _gossipMenuItemsStore;
         GossipMenuAddonContainer _gossipMenuAddonStore;
+        GossipMenuItemsAddonContainer _gossipMenuItemsAddonStore;
         PointOfInterestContainer _pointsOfInterestStore;
 
         QuestPOIContainer _questPOIStore;
