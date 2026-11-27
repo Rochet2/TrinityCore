@@ -33,6 +33,8 @@ public:
     bool EnableTransmogInfo;
     uint32 TransmogNpcText;
 
+    bool UseRetailStyleLinks;
+
     // Use IsAllowed() and IsNotAllowed()
     // these are thread unsafe, but assumed to be data so it should be safe
     std::set<uint32> Allowed;
@@ -85,8 +87,8 @@ public:
     const char * GetSlotName(uint8 slot, WorldSession* session);
     std::string GetItemName(ItemTemplate const* itemTemplate, WorldSession* session);
     std::string GetItemName(Item const* itemTemplate, WorldSession* session);
-    std::string GetItemLink(Item* item, WorldSession* session);
-    std::string GetItemLink(uint32 entry, WorldSession* session);
+    std::string GetItemLink(Item* item, WorldSession* session, bool isGossipMenu = false);
+    std::string GetItemLink(uint32 entry, WorldSession* session, bool isGossipMenu = false);
     Item* GetEquippedItem(Player* player, uint8 slot);
     void UpdateItem(Player* player, Item* item);
 
